@@ -1,0 +1,20 @@
+{
+  "C1": {
+    "name": "양호 기능·양호 섭취형",
+    "guardian_label": "안정 관리군",
+    "risk_weight": 0,
+    "description": "일상생활 수행 능력과 식사 섭취가 양호한 유형"
+  },
+  "C2": {
+    "name": "섭취 저조·급식 불만족형",
+    "guardian_label": "식사 관심군",
+    "risk_weight": 10,
+    "description": "식사량이 적고 음식 맛·품질 만족도가 낮은 유형"
+  },
+  "C3": {
+    "name": "저작·연하곤란 고위험형",
+    "guardian_label": "집중 돌봄군",
+    "risk_weight": 20,
+    "description": "씹기·삼키기 어려움으로 조정식을 드시며 인지·신체기능이 낮은 유형"
+  }
+}

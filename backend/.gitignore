@@ -1,0 +1,21 @@
+# 환경변수 (절대 커밋 금지)
+.env
+.env.local
+
+# 가상환경
+venv/
+venv-win/
+.venv/
+
+# 파이썬 캐시
+__pycache__/
+*.py[cod]
+
+# 유형 모델: model.joblib 과 type_meta.json 은 배포에 필요하므로 커밋하고,
+# 학습 리포트(그림·엑셀)는 제외
+models/*/report/
+results/
+
+# OS
+.DS_Store
+Thumbs.db
