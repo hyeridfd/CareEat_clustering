@@ -10,7 +10,7 @@ from pydantic import BaseModel
 
 from care import engine, priority as prio, solution as sol, notify
 from care.data import fetch_all, fetch_surveys
-from dependencies import get_supabase, require_staff, get_kst_now
+from dependencies import create_token, get_supabase, require_staff, get_kst_now
 
 router = APIRouter()
 
@@ -213,6 +213,24 @@ def add_resident(req: ResidentIn, user: dict = Depends(require_staff)):
         else:
             raise
     return {"success": True, "elderly_id": eid}
+
+
+@router.post("/residents/{eid}/survey-token")
+def survey_token(eid: str, user: dict = Depends(require_staff)):
+    """담당자가 해당 어르신의 조사(설문) 화면을 바로 입력할 수 있는 토큰 발급."""
+    sb, home = get_supabase(), user["scope_home"]
+    r = _resident(sb, home, eid)
+    surveyor_id = user.get("staff_id") or f"{home}_staff"
+    if not sb.table("surveyors").select("id").eq("id", surveyor_id).execute().data:
+        row = {"id": surveyor_id, "nursing_home_id": home}
+        try:
+            sb.table("surveyors").insert(row).execute()
+        except Exception:  # name 등 필수 컬럼이 있는 스키마 대응
+            sb.table("surveyors").insert({**row, "name": user.get("staff_name") or surveyor_id}).execute()
+    token = create_token({"nursing_home_id": home, "surveyor_id": surveyor_id, "elderly_id": eid,
+                          "is_admin": False, "mode": "staff_survey"})
+    return {"token": token, "elderly_id": eid, "display_name": _display_name(r),
+            "nursing_home_id": home, "surveyor_id": surveyor_id}
 
 
 # ─────────────────────────── 평가 실행 ───────────────────────────

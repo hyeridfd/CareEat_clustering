@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../lib/api'
 import useAuthStore from '../lib/authStore'
+import { endSurvey, getSurveyTarget } from '../lib/surveySession'
 
 const SURVEYS = [
   { key: 'basic', label: '기초 조사표', icon: '📝', path: '/survey/basic', field: 'basic_survey_completed' },
@@ -13,6 +14,7 @@ const SURVEYS = [
 export default function DashboardPage() {
   const navigate = useNavigate()
   const { user, logout } = useAuthStore()
+  const target = getSurveyTarget()   // 담당자가 어르신 조사를 입력 중인 경우
   const [progress, setProgress] = useState(null)
   const [loading, setLoading] = useState(true)
 
@@ -43,19 +45,29 @@ export default function DashboardPage() {
           {/* 사용자 정보 */}
           <div className="flex items-start justify-between mb-5">
             <div>
-              <p className="text-blue-200 text-xs font-medium mb-1">설문 조사</p>
+              <p className="text-blue-200 text-xs font-medium mb-1">{target ? '어르신 조사 입력' : '설문 조사'}</p>
               <h1 className="text-white text-xl font-bold leading-tight">
-                {user?.nursing_home_name || user?.nursing_home_id}
+                {target ? `${target.display_name} 어르신` : (user?.nursing_home_name || user?.nursing_home_id)}
               </h1>
               <p className="text-blue-200 text-sm mt-0.5">
-                조사원 {user?.surveyor_id} · 어르신 {user?.elderly_id}
+                {target
+                  ? `${user?.nursing_home_name || user?.nursing_home_id} · ${target.elderly_id}`
+                  : `조사원 ${user?.surveyor_id} · 어르신 ${user?.elderly_id}`}
               </p>
             </div>
-            <button
-              onClick={() => { logout(); navigate('/login') }}
-              className="text-xs text-blue-200 border border-blue-300/40 px-3 py-1.5 rounded-full hover:bg-white/10 transition-colors mt-1">
-              로그아웃
-            </button>
+            {target ? (
+              <button
+                onClick={() => { endSurvey(); navigate('/care/records') }}
+                className="text-xs text-blue-200 border border-blue-300/40 px-3 py-1.5 rounded-full hover:bg-white/10 transition-colors mt-1">
+                조사 마치기
+              </button>
+            ) : (
+              <button
+                onClick={() => { logout(); navigate('/login') }}
+                className="text-xs text-blue-200 border border-blue-300/40 px-3 py-1.5 rounded-full hover:bg-white/10 transition-colors mt-1">
+                로그아웃
+              </button>
+            )}
           </div>
 
           {/* 진행률 바 */}
@@ -138,7 +150,9 @@ export default function DashboardPage() {
 
         {/* 하단 */}
         <div className="text-center pb-6">
-          <p className="text-xs text-blue-200/70">서울대학교 농생명공학부 · 글로벌 블루푸드 미래리더 양성 프로젝트</p>
+          <p className="text-xs text-blue-200/70">
+            {target ? '입력이 끝나면 「조사 마치기」를 눌러 돌봄 관리로 돌아가세요.' : 'Care-Eat · 서울대학교 정밀식의약솔루션 연구실'}
+          </p>
         </div>
       </div>
     </div>

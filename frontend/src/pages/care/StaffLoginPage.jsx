@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import api from '../../lib/api'
 import useAuthStore from '../../lib/authStore'
+import { endSurvey } from '../../lib/surveySession'
 import { Lab, LogoMark } from '../../components/brand/Brand'
 
 export default function StaffLoginPage() {
@@ -15,6 +16,7 @@ export default function StaffLoginPage() {
   const submit = async (e) => {
     e.preventDefault()
     setLoading(true); setError('')
+    endSurvey()
     try {
       const { data } = await api.post('/auth/staff-login', { staff_id: staffId.trim(), password })
       setAuth(data.token, {

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import api from '../lib/api'
 import useAuthStore from '../lib/authStore'
+import { endSurvey } from '../lib/surveySession'
 
 const NURSING_HOMES = [
   { id: 'NH001', name: '헤리티지 실버케어 분당', prefix: 'HS', surveyors: ['SRV01','SRV02','SRV03'] },
@@ -35,6 +36,7 @@ export default function LoginPage() {
     e.preventDefault()
     if (!elNum) { setError('어르신 번호를 입력해주세요.'); return }
     setLoading(true); setError('')
+    endSurvey()   // 담당자 조사 입력 세션이 남아 있으면 정리
     try {
       const res = await api.post('/auth/login', {
         nursing_home_id: selectedNH.id,

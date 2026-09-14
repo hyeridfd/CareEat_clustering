@@ -6,8 +6,11 @@ const api = axios.create({
 })
 
 // 요청마다 JWT 자동 첨부
+// 담당자가 어르신 조사를 직접 입력하는 동안에는 설문 API(/surveys/*)에만 조사용 토큰을 사용
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token')
+  const url = config.url || ''
+  const surveyToken = localStorage.getItem('surveyToken')
+  const token = (surveyToken && (url.startsWith('/surveys') || url.startsWith('surveys'))) ? surveyToken : localStorage.getItem('token')
   if (token) config.headers.Authorization = `Bearer ${token}`
   return config
 })

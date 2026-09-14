@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import api from '../../lib/api'
 import CareLayout, { Empty } from '../../components/care/CareLayout'
 import { TypeBadge, errMsg, fmtDate } from '../../components/care/CareUI'
+import { startSurvey } from '../../lib/surveySession'
 
 const STEPS = [
   { key: 'basic', label: '건강 프로파일', hint: '질환·기능·구강·인지' },
@@ -47,6 +48,17 @@ export default function RecordsPage() {
     const started = list.filter((r) => r.surveys.basic).length
     return { total: list.length, done, started, none: list.length - started }
   }, [data])
+
+  const openSurvey = async (r, e) => {
+    e.stopPropagation()
+    try {
+      const { data } = await api.post(`/care/residents/${r.elderly_id}/survey-token`)
+      startSurvey(data)
+      navigate('/dashboard')
+    } catch (err) {
+      setMsg({ kind: 'error', text: errMsg(err) })
+    }
+  }
 
   const addResident = async (e) => {
     e.preventDefault()
@@ -114,7 +126,8 @@ export default function RecordsPage() {
                 <th className="px-2 py-3">식사 섭취</th>
                 <th className="px-2 py-3">만족·선호</th>
                 <th className="px-2 py-3">최근 진단</th>
-                <th className="px-5 py-3 text-right">평가일</th>
+                <th className="px-2 py-3 text-right">평가일</th>
+                <th className="px-5 py-3 text-right">조사 입력</th>
               </tr>
             </thead>
             <tbody>
@@ -136,14 +149,19 @@ export default function RecordsPage() {
                   <td className="px-2 py-3">
                     {r.assessment ? <TypeBadge code={r.assessment.type_code} name={r.assessment.type_name} /> : <span className="text-xs text-slate-400">미평가</span>}
                   </td>
-                  <td className="px-5 py-3 text-right text-xs text-muted">{r.assessment ? fmtDate(r.assessment.created_at) : '-'}</td>
+                  <td className="px-2 py-3 text-right text-xs text-muted">{r.assessment ? fmtDate(r.assessment.created_at) : '-'}</td>
+                  <td className="px-5 py-3 text-right">
+                    <button onClick={(e) => openSurvey(r, e)} className="btn-secondary text-xs py-1.5 px-3">
+                      {r.surveys.basic ? '조사 이어하기' : '조사 입력'}
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
-      <p className="mt-4 text-xs text-muted">조사는 조사원용 설문 화면에서 입력합니다. 건강 프로파일이 있어야 진단(유형 분류)이 가능합니다.</p>
+      <p className="mt-4 text-xs text-muted">「조사 입력」을 누르면 그 어르신의 조사 화면으로 바로 들어갑니다. 건강 프로파일이 있어야 진단(유형 분류)이 가능합니다.</p>
     </CareLayout>
   )
 }
