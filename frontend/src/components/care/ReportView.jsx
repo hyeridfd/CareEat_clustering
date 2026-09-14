@@ -76,9 +76,9 @@ function CompareRow({ label, value, avg, min = 0, max = 100, unit = '' }) {
   const below = avg != null && value < avg
   return (
     <div className="py-3">
-      <div className="flex items-baseline justify-between gap-3 mb-2">
+      <div className="mb-2 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
         <span className="text-sm font-semibold text-navy-900">{label}</span>
-        <span className="flex items-baseline gap-2">
+        <span className="ml-auto flex flex-wrap items-baseline justify-end gap-x-2">
           <span className="text-[15px] font-extrabold tabular-nums text-navy-900">{value}{unit}</span>
           {avg != null && (
             <span className={`text-[11px] font-semibold tabular-nums ${below ? 'text-rose-600' : 'text-emerald-700'}`}>
@@ -90,11 +90,8 @@ function CompareRow({ label, value, avg, min = 0, max = 100, unit = '' }) {
       <div className="relative h-3.5 rounded-full bg-navy-50">
         <div className="absolute inset-y-0 left-0 rounded-full bg-navy-600" style={{ width: `${pct(value)}%` }} />
         {avg != null && (
-          <>
-            <span className="absolute -top-1 h-[22px] w-[2px] rounded bg-slate-500" style={{ left: `${pct(avg)}%` }} />
-            <span className="absolute -top-[18px] -translate-x-1/2 text-[9px] font-semibold text-slate-500 whitespace-nowrap"
-              style={{ left: `${pct(avg)}%` }}>시설 평균</span>
-          </>
+          <span className="absolute -top-1 h-[22px] w-[2px] rounded bg-slate-400" title={`시설 평균 ${avg}${unit}`}
+            style={{ left: `${pct(avg)}%` }} />
         )}
       </div>
     </div>
