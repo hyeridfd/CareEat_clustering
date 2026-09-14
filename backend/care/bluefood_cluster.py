@@ -197,6 +197,13 @@ def kmbi_row(r):
     return base / 100 * 100, np.nan
 
 
+def to_num(s):
+    """'165', '165cm', '165 cm', ' 165.0 ' 등 문자 섞인 값도 숫자로 변환 (빈 값은 NaN)."""
+    x = pd.Series(s).astype(str).str.replace(r"[^0-9.\-]", "", regex=True).str.strip()
+    x = x.replace({"": np.nan, ".": np.nan, "-": np.nan})
+    return pd.to_numeric(x, errors="coerce")
+
+
 def build_health(b):
     out = pd.DataFrame({"key": b["key"].values, "elderly_id": b["elderly_id"].values,
                         "nursing_home_id": b["nursing_home_id"].values})
@@ -204,7 +211,7 @@ def build_health(b):
     out["age"] = (year - pd.to_numeric(b["age"], errors="coerce")).values
     out["female"] = (b["gender"] == "여자").astype(float).values
     out["care_grade"] = b["care_grade"].map(CARE).values
-    out["education_level"] = b["education"].map(EDU).values
+    out["education_level"] = b["education"].astype(str).str.strip().map(EDU).values
 
     dis = b["diseases"].apply(parse_json_list)
     out["n_diseases"] = dis.apply(lambda L: len([d for d in L if d not in ("기타", "없음")])).values
@@ -212,17 +219,17 @@ def build_health(b):
                     ("dx_stroke", "뇌혈관"), ("dx_parkinson", "파킨슨"), ("dx_hypertension", "고혈압")]:
         out[col] = dis.apply(lambda L: float(any(kw in d for d in L))).values
 
-    h = pd.to_numeric(b["height"], errors="coerce")
-    w = pd.to_numeric(b["weight"], errors="coerce")
+    h = to_num(b["height"])
+    w = to_num(b["weight"])
     out["bmi"] = (w / (h / 100) ** 2).values
-    out["sbp"] = pd.to_numeric(b["systolic_bp"], errors="coerce").values
-    out["dbp"] = pd.to_numeric(b["diastolic_bp"], errors="coerce").values
+    out["sbp"] = to_num(b["systolic_bp"]).values
+    out["dbp"] = to_num(b["diastolic_bp"]).values
 
     g = lambda c: pd.to_numeric(b[c], errors="coerce").fillna(0)
     out["met_total"] = (g("vigorous_activity_days") * g("vigorous_activity_time") * 8.0
                         + g("moderate_activity_days") * g("moderate_activity_time") * 4.0
                         + g("walking_days") * g("walking_time") * 3.3).values
-    out["sitting_min"] = pd.to_numeric(b["sitting_time"], errors="coerce").values
+    out["sitting_min"] = to_num(b["sitting_time"]).values
 
     bmi = out["bmi"]
     bmi_cat = np.select([bmi < 19, bmi < 21, bmi < 23], [0, 1, 2], default=3).astype(float)

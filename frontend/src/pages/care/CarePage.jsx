@@ -72,7 +72,7 @@ export default function CarePage() {
       actions={
         <div className="flex items-center gap-3">
           <label className="flex items-center gap-1.5 text-xs text-muted">
-            <input type="checkbox" checked={force} onChange={(e) => setForce(e.target.checked)} /> 전체 재평가
+            <input type="checkbox" checked={force} onChange={(e) => setForce(e.target.checked)} /> 전체 재평가(설문 변경 없어도 다시 계산)
           </label>
           <button onClick={runAssess} disabled={running} className="btn-primary text-sm">
             {running ? '평가 중…' : '유형·우선순위 평가 실행'}

@@ -66,8 +66,8 @@ def build_features(basic_rows, nutrition_rows, satisfaction_rows):
     df = bc.build_dataset_frames(b, n, s)
     # 원값·부가 정보 (리포트용)
     bb = bc.dedupe_latest(b).set_index("key")
-    df["weight_kg"] = pd.to_numeric(bb["weight"], errors="coerce").reindex(df.index)
-    df["height_cm"] = pd.to_numeric(bb["height"], errors="coerce").reindex(df.index)
+    df["weight_kg"] = bc.to_num(bb["weight"]).reindex(df.index)
+    df["height_cm"] = bc.to_num(bb["height"]).reindex(df.index)
     df["diseases"] = bb["diseases"].apply(bc.parse_json_list).reindex(df.index)
     df["medications"] = bb["medications"].apply(bc.parse_json_list).reindex(df.index) if "medications" in bb.columns else None
     df["meal_form"] = bb["meal_type"].reindex(df.index) if "meal_type" in bb.columns else None
@@ -197,6 +197,17 @@ def classify_transition(model: TypeModel, current_code: str, prev: dict | None) 
     else:
         kind = "state_change"
     return {**base, "kind": kind}
+
+
+# 저장된 평가에 들어 있어야 하는 지표 키 (코드가 늘어나면 과거 평가는 '오래된 스키마'로 판정)
+FEATURE_KEYS = tuple(LOG_FEATURES + EXTRA_FEATURES + ["survey_start"] + KEY_FEATURES)
+
+
+def features_stale(prev_features) -> bool:
+    """이전 평가가 지금 코드가 저장하는 지표를 모두 갖고 있지 않으면 True (재평가 필요)."""
+    if not isinstance(prev_features, dict):
+        return True
+    return not set(FEATURE_KEYS).issubset(prev_features.keys())
 
 
 def features_record(row: pd.Series) -> dict:

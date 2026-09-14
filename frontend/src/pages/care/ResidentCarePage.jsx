@@ -29,6 +29,59 @@ function Indicator({ f, k, label, unit, tone, digits = 0 }) {
   )
 }
 
+function SurveyCheck({ elderlyId }) {
+  const [c, setC] = useState(null)
+  const [state, setState] = useState('idle')
+  const run = async () => {
+    setState('loading')
+    try {
+      const { data } = await api.get(`/care/residents/${elderlyId}/survey-check`)
+      setC(data); setState('done')
+    } catch { setState('error') }
+  }
+  const Row = ({ label, r }) => (
+    <div className="py-2 border-b border-gray-50 last:border-0">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-sm text-gray-700">{label}</span>
+        <span className={`text-xs font-semibold ${!r.exists ? 'text-rose-600' : r.missing.length ? 'text-amber-600' : 'text-emerald-600'}`}>
+          {!r.exists ? '미작성' : r.missing.length ? `${r.missing.length}개 항목 비어 있음` : '모두 입력됨'}
+        </span>
+      </div>
+      {r.missing.length > 0 && <p className="mt-1 text-[11px] text-gray-500">{r.missing.join(' · ')}</p>}
+      {r.groups?.length > 0 && (
+        <div className="mt-2 grid grid-cols-2 gap-1.5">
+          {r.groups.map((g) => (
+            <span key={g.name} className={`text-[11px] rounded px-2 py-1 ${g.filled === 0 ? 'bg-rose-50 text-rose-700' : g.filled < g.total ? 'bg-amber-50 text-amber-700' : 'bg-slate-50 text-gray-600'}`}>
+              {g.name} {g.filled}/{g.total}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+  return (
+    <Card title="설문 데이터 점검" right={<button onClick={run} className="text-xs font-semibold text-navy-600 hover:underline">{state === 'loading' ? '확인 중…' : '확인'}</button>}>
+      {state === 'idle' && <p className="text-xs text-gray-500">리포트에 <b>–</b> 또는 <b>미실시</b>로 보이는 항목이 있으면 여기서 설문 원본에 값이 들어 있는지 확인하세요.</p>}
+      {state === 'error' && <p className="text-xs text-red-600">확인에 실패했습니다.</p>}
+      {c && (
+        <div>
+          <Row label="기초 조사표" r={c.basic} />
+          <Row label="영양(섭취) 조사표" r={c.nutrition} />
+          <Row label="만족도 조사표" r={c.satisfaction} />
+          {c.assessment?.stale && (
+            <p className="mt-3 text-xs rounded-lg bg-amber-50 text-amber-800 px-3 py-2">
+              이 어르신의 평가는 예전 버전에서 계산된 것이라 키·혈압·학력 등 최근에 추가된 항목이 비어 있습니다. 위의 <b>이 어르신 재평가</b> 버튼을 누르면 채워집니다.
+            </p>
+          )}
+          {c.assessment && !c.assessment.stale && (
+            <p className="mt-3 text-[11px] text-gray-400">최근 평가 {fmtDate(c.assessment.created_at)} · 모델 {c.assessment.model_version}</p>
+          )}
+        </div>
+      )}
+    </Card>
+  )
+}
+
 function ListEditor({ items, onChange, placeholder }) {
   return (
     <div className="space-y-2">
@@ -104,6 +157,8 @@ export default function ResidentCarePage() {
   const trStyle = tr?.kind && TRANSITION[tr.kind]
   const consented = d.guardians.filter((g) => g.consent_health_info)
 
+  const reassess = () => act('assess', () => api.post('/care/assess', { elderly_ids: [elderlyId], force: true }, { timeout: 120000 }),
+    () => '최신 설문 기준으로 다시 평가했습니다.')
   const generate = () => act('gen', () => api.post(`/care/residents/${elderlyId}/solutions`, provider ? { provider } : {}, { timeout: 120000 }),
     (r) => `솔루션 초안을 만들었습니다 (${r.data.generator}). 검토 후 승인하세요.`)
   const save = () => act('save', () => api.put(`/care/solutions/${draft.id}`, {
@@ -147,7 +202,12 @@ export default function ResidentCarePage() {
     >
       <div className="mb-4 flex items-center justify-between gap-3">
         <Link to="/care" className="text-xs font-semibold text-navy-600 hover:underline">← 진단 목록</Link>
-        <Link to={`/care/residents/${elderlyId}/report`} className="btn-secondary text-xs py-1.5">상세 리포트 보기</Link>
+        <div className="flex items-center gap-2">
+          <button onClick={reassess} disabled={busy === 'assess'} className="btn-secondary text-xs py-1.5">
+            {busy === 'assess' ? '재평가 중…' : '이 어르신 재평가'}
+          </button>
+          <Link to={`/care/residents/${elderlyId}/report`} className="btn-secondary text-xs py-1.5">상세 리포트 보기</Link>
+        </div>
       </div>
 
       {msg && (
@@ -157,6 +217,7 @@ export default function ResidentCarePage() {
       <div className="grid lg:grid-cols-5 gap-5">
         {/* 왼쪽: 평가 */}
         <div className="lg:col-span-2 space-y-5">
+          <SurveyCheck elderlyId={elderlyId} />
           {!a ? (
             <Card title="평가 결과"><p className="text-sm text-gray-500">아직 평가되지 않았습니다. 목록 화면에서 평가를 실행하세요.</p></Card>
           ) : (

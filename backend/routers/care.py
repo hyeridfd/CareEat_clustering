@@ -283,6 +283,7 @@ def assess(req: AssessRequest, user: dict = Depends(require_staff)):
         upd_iso = upd.isoformat() if upd is not None and not (isinstance(upd, float)) and str(upd) != "NaT" else None
         if (not req.force and prev and prev["model_version"] == model.version
                 and prev.get("survey_updated_at") and upd_iso
+                and not engine.features_stale(prev.get("features"))
                 and datetime.fromisoformat(prev["survey_updated_at"]) >= datetime.fromisoformat(upd_iso)):
             skipped.append(eid)
             continue
@@ -333,6 +334,60 @@ def resident_detail(eid: str, user: dict = Depends(require_staff)):
             "type_info": type_info, "assessments": hist, "solutions": sols, "guardians": gs,
             "notifications": notes, "actions": acts}
 
+
+# ─────────────────────── 설문 데이터 점검 ───────────────────────
+# 리포트에서 '–' 또는 '미실시'로 보이는 항목이 (1) 설문에 값이 없어서인지
+# (2) 평가가 오래되어서인지 구분하기 위한 진단용 조회
+BASIC_CHECK = [("age", "출생연도"), ("gender", "성별"), ("care_grade", "장기요양등급"), ("education", "학력"),
+               ("height", "키"), ("weight", "체중"), ("systolic_bp", "수축기 혈압"), ("diastolic_bp", "이완기 혈압"),
+               ("diseases", "진단 질환"), ("sitting_time", "좌식시간"), ("chewing_difficulty", "저작곤란"),
+               ("swallowing_difficulty", "연하곤란"), ("meal_type", "식사형태"), ("eating_independence", "식사 자립도")]
+NUTRITION_CHECK = [("meal_portions", "배식량 기록"), ("plate_waste", "잔반 기록")]
+SAT_CHECK = [("overall_satisfaction", "전반 만족도"), ("portion_adequacy", "배식량 적정성"), ("food_quality", "음식 품질")]
+
+
+def _empty(v):
+    if v is None:
+        return True
+    if isinstance(v, str):
+        return v.strip() in ("", "[]", "{}", "null")
+    if isinstance(v, (list, dict)):
+        return len(v) == 0
+    return False
+
+
+def _check_row(row, fields):
+    if not row:
+        return {"exists": False, "updated_at": None, "missing": [l for _, l in fields], "groups": []}
+    return {"exists": True, "updated_at": row.get("updated_at"),
+            "missing": [l for f, l in fields if _empty(row.get(f))], "groups": []}
+
+
+@router.get("/residents/{eid}/survey-check")
+def survey_check(eid: str, user: dict = Depends(require_staff)):
+    sb, home = get_supabase(), user["scope_home"]
+    _resident(sb, home, eid)
+    b, n, s = fetch_surveys(sb, home, [eid])
+    b = b[0] if b else None
+    out = {"basic": _check_row(b, BASIC_CHECK),
+           "nutrition": _check_row(n[0] if n else None, NUTRITION_CHECK),
+           "satisfaction": _check_row(s[0] if s else None, SAT_CHECK)}
+    if b:
+        groups = [("인지 기능 (K-MMSE-2)", engine.bc.MMSE_ITEMS),
+                  ("우울 (GDS-SF)", [f"gds_{i}" for i in range(1, 16)]),
+                  ("일상생활 수행 (K-MBI)", list(engine.bc.KMBI_SCORES)),
+                  ("영양 (MNA-SF)", ["mna_bmi_category", "mna_appetite_change", "mna_weight_change",
+                                    "mna_mobility", "mna_stress_illness", "mna_neuropsychological_problem"])]
+        out["basic"]["groups"] = [{"name": nm, "filled": sum(0 if _empty(b.get(k)) else 1 for k in ks),
+                                   "total": len(ks)} for nm, ks in groups]
+    prev = sb.table("care_assessments").select("created_at,model_version,features").eq("elderly_id", eid) \
+             .order("created_at", desc=True).limit(1).execute().data
+    if prev:
+        out["assessment"] = {"created_at": prev[0]["created_at"], "model_version": prev[0]["model_version"],
+                             "stale": engine.features_stale(prev[0].get("features"))}
+    else:
+        out["assessment"] = None
+    return out
 
 # ─────────────────────────── 솔루션 ───────────────────────────
 
