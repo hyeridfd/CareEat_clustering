@@ -22,7 +22,7 @@ BORDERLINE_MAX = float(os.getenv("CARE_BORDERLINE_MAX", "0.15"))
 
 # 파이프라인이 읽는 기초조사표 컬럼 (행에 없으면 결측으로 채움)
 BASIC_COLS = (["elderly_id", "nursing_home_id", "created_at", "updated_at", "age", "gender", "care_grade",
-               "education", "diseases", "height", "weight", "systolic_bp", "diastolic_bp",
+               "education", "diseases", "medications", "height", "weight", "systolic_bp", "diastolic_bp",
                "vigorous_activity_days", "vigorous_activity_time", "moderate_activity_days",
                "moderate_activity_time", "walking_days", "walking_time", "sitting_time", "mna_bmi_category",
                "mna_appetite_change", "mna_weight_change", "mna_mobility", "mna_stress_illness",
@@ -34,12 +34,16 @@ SAT_COLS = ["elderly_id", "nursing_home_id", "updated_at", "overall_satisfaction
             "food_quality", "preferred_food_groups", "improvement_suggestions"]
 
 # 설명·솔루션·추이 비교에 쓰는 지표 (원값 저장)
-KEY_FEATURES = bc.cluster_vars() + ["age", "female", "care_grade", "n_diseases", "dx_dementia", "dx_diabetes",
+KEY_FEATURES = bc.cluster_vars() + ["age", "female", "care_grade", "education_level", "n_diseases", "dx_dementia", "dx_diabetes",
                                     "dx_depression", "dx_stroke", "dx_parkinson", "dx_hypertension", "mna_risk",
                                     "intake_kimchi", "intake_snack", "intake_g_day", "pref_seafood", "pref_meat",
                                     "pref_fruit", "pref_vegetable", "cmt_seasoning", "cmt_portion", "cmt_variety",
                                     "cmt_diabetic", "cmt_fruit", "cmt_texture_fishy", "has_nutrition",
-                                    "mmse_untested", "gds_untested", "weight_kg"]
+                                    "mmse_untested", "gds_untested", "weight_kg", "height_cm", "met_total", "sitting_min",
+                                    "sbp", "dbp", "n_food_groups", "intake_breakfast", "intake_lunch", "intake_dinner",
+                                    "n_days", "kmbi_mobility_wheelchair", "mna_risk"]
+# 숫자가 아닌 부가 정보 (리포트용)
+EXTRA_FEATURES = ["diseases", "medications", "improvement_text", "meal_form"]
 
 
 def _frame(rows, cols):
@@ -58,9 +62,14 @@ def build_features(basic_rows, nutrition_rows, satisfaction_rows):
     n = _frame(nutrition_rows, NUTRITION_COLS)
     s = _frame(satisfaction_rows, SAT_COLS)
     df = bc.build_dataset_frames(b, n, s)
-    # 체중 원값 (체중 감소 추이용)
+    # 원값·부가 정보 (리포트용)
     bb = bc.dedupe_latest(b).set_index("key")
     df["weight_kg"] = pd.to_numeric(bb["weight"], errors="coerce").reindex(df.index)
+    df["height_cm"] = pd.to_numeric(bb["height"], errors="coerce").reindex(df.index)
+    df["diseases"] = bb["diseases"].apply(bc.parse_json_list).reindex(df.index)
+    df["medications"] = bb["medications"].apply(bc.parse_json_list).reindex(df.index) if "medications" in bb.columns else None
+    df["meal_form"] = bb["meal_type"].reindex(df.index) if "meal_type" in bb.columns else None
+    df["survey_start"] = bb["created_at"].reindex(df.index) if "created_at" in bb.columns else None
     # 3개 조사표 중 가장 최근 저장 시각 (변경 없으면 재평가 생략 판단용)
     ts = []
     for t in (b, n, s):
@@ -190,6 +199,14 @@ def classify_transition(model: TypeModel, current_code: str, prev: dict | None) 
 
 def features_record(row: pd.Series) -> dict:
     rec = {}
+    for v in EXTRA_FEATURES + ["survey_start"]:
+        x = row.get(v)
+        if isinstance(x, list):
+            rec[v] = [str(i) for i in x]
+        elif x is None or (isinstance(x, float) and np.isnan(x)):
+            rec[v] = None
+        else:
+            rec[v] = str(x)
     for v in KEY_FEATURES:
         x = row.get(v)
         if x is None or (isinstance(x, float) and np.isnan(x)) or pd.isna(x):

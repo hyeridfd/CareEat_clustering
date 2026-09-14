@@ -145,7 +145,10 @@ export default function ResidentCarePage() {
         </div>
       }
     >
-      <Link to="/care" className="inline-block mb-4 text-xs font-semibold text-navy-600 hover:underline">← 진단 목록</Link>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <Link to="/care" className="text-xs font-semibold text-navy-600 hover:underline">← 진단 목록</Link>
+        <Link to={`/care/residents/${elderlyId}/report`} className="btn-secondary text-xs py-1.5">상세 리포트 보기</Link>
+      </div>
 
       {msg && (
         <p className={`mb-4 text-sm rounded-xl px-4 py-3 ${msg.kind === 'error' ? 'bg-red-50 text-red-700' : 'bg-navy-50 text-navy-800'}`}>{msg.text}</p>

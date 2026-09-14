@@ -8,6 +8,8 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 
+from care import engine
+from care.report import build_report
 from dependencies import get_supabase
 
 router = APIRouter()
@@ -23,19 +25,28 @@ def guardian_report(token: str):
     exp = datetime.fromisoformat(n["report_expires_at"].replace("Z", "+00:00"))
     if exp < datetime.now(timezone.utc):
         raise HTTPException(status_code=410, detail="열람 기간이 지났습니다. 시설에 문의해 주세요.")
-    s = sb.table("care_solutions").select("content,guardian_message,status").eq("id", n["solution_id"]).execute().data
-    if not s or s[0]["status"] not in ("approved", "sent"):
+    sol = sb.table("care_solutions").select("*").eq("id", n["solution_id"]).execute().data
+    if not sol or sol[0]["status"] not in ("approved", "sent"):
         raise HTTPException(status_code=404, detail="리포트를 찾을 수 없습니다.")
-    s = s[0]
-    v = n["variables"]
-    focus = []
-    for a in s["content"].get("staff_actions", []):
-        if a.get("category") and a["category"] not in focus and a["category"] != "재평가":
-            focus.append(a["category"])
-    return {"facility": v.get("시설명"), "resident": v.get("어르신"), "guardian": v.get("보호자"),
-            "assessed_on": v.get("평가일"), "care_group": v.get("관리구분"), "focus": focus,
-            "message": s["guardian_message"], "meal_guidance": s["content"].get("meal_guidance", [])[:4],
-            "expires_on": v.get("만료일")}
+    sol = sol[0]
+    a = sb.table("care_assessments").select("*").eq("id", sol["assessment_id"]).execute().data
+    a = a[0] if a else {}
+    type_meta = None
+    try:
+        m = engine.load_model(a.get("model_version"))
+        tinfo = m.type_info(a["type_code"])
+        type_meta = {m.code(i): m.type_info(m.code(i)) for i in range(m.k)}
+    except Exception:
+        tinfo = {"code": a.get("type_code"), "name": a.get("type_name"),
+                 "guardian_label": a.get("type_name"), "description": ""}
+    v = n["variables"] or {}
+    rep = build_report(sb, n["nursing_home_id"], n["elderly_id"], audience="guardian",
+                       assessment=a, solution=sol, facility_name=v.get("시설명"),
+                       type_info=tinfo, guardian_name=v.get("보호자"), type_meta=type_meta)
+    rep["expires_on"] = v.get("만료일")
+    if v.get("어르신"):
+        rep["resident"]["display_name"] = v["어르신"]
+    return rep
 
 
 # ─────────────────────────── 시설 가입 신청 (공개) ───────────────────────────

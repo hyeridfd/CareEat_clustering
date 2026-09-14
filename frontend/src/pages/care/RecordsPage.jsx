@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import api from '../../lib/api'
 import CareLayout, { Empty } from '../../components/care/CareLayout'
 import { TypeBadge, errMsg, fmtDate } from '../../components/care/CareUI'
@@ -147,7 +147,11 @@ export default function RecordsPage() {
                   </td>
                   <td className="px-2 py-3"><Dot done={r.surveys.satisfaction} /></td>
                   <td className="px-2 py-3">
-                    {r.assessment ? <TypeBadge code={r.assessment.type_code} name={r.assessment.type_name} /> : <span className="text-xs text-slate-400">미평가</span>}
+                    {r.assessment
+                      ? <span className="inline-flex items-center gap-2"><TypeBadge code={r.assessment.type_code} name={r.assessment.type_name} />
+                          <Link to={`/care/residents/${r.elderly_id}/report`} onClick={(e) => e.stopPropagation()} className="text-[11px] font-semibold text-navy-600 hover:underline">리포트</Link>
+                        </span>
+                      : <span className="text-xs text-slate-400">미평가</span>}
                   </td>
                   <td className="px-2 py-3 text-right text-xs text-muted">{r.assessment ? fmtDate(r.assessment.created_at) : '-'}</td>
                   <td className="px-5 py-3 text-right">

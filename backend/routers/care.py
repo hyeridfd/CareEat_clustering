@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from care import engine, priority as prio, solution as sol, notify
+from care.report import build_report
 from care.data import fetch_all, fetch_surveys
 from dependencies import create_token, get_supabase, require_staff, get_kst_now
 
@@ -213,6 +214,24 @@ def add_resident(req: ResidentIn, user: dict = Depends(require_staff)):
         else:
             raise
     return {"success": True, "elderly_id": eid}
+
+
+@router.get("/residents/{eid}/report")
+def resident_report(eid: str, user: dict = Depends(require_staff)):
+    """담당자용 상세 리포트 (척도 점수·우선순위 포함)"""
+    sb, home = get_supabase(), user["scope_home"]
+    _resident(sb, home, eid)
+    a = sb.table("care_assessments").select("*").eq("elderly_id", eid).order("created_at", desc=True).limit(1).execute().data
+    if not a:
+        raise HTTPException(status_code=404, detail="먼저 유형·우선순위 평가를 실행하세요.")
+    a = a[0]
+    s = sb.table("care_solutions").select("*").eq("elderly_id", eid).order("created_at", desc=True).limit(1).execute().data
+    try:
+        tinfo = engine.load_model(a["model_version"]).type_info(a["type_code"])
+    except Exception:
+        tinfo = {"code": a["type_code"], "name": a["type_name"], "guardian_label": a["type_name"], "description": ""}
+    return build_report(sb, home, eid, audience="staff", assessment=a,
+                        solution=(s[0] if s else None), type_info=tinfo)
 
 
 @router.post("/residents/{eid}/survey-token")

@@ -17,6 +17,7 @@ import SolutionsPage from './pages/care/SolutionsPage'
 import CommunicationPage from './pages/care/CommunicationPage'
 import SettingsPage from './pages/care/SettingsPage'
 import ResidentCarePage from './pages/care/ResidentCarePage'
+import ResidentReportPage from './pages/care/ResidentReportPage'
 import GuardianReportPage from './pages/care/GuardianReportPage'
 
 function PrivateRoute({ children }) {
@@ -63,6 +64,7 @@ export default function App() {
         <Route path="/care/connect" element={<StaffRoute><CommunicationPage /></StaffRoute>} />
         <Route path="/care/settings" element={<StaffRoute><SettingsPage /></StaffRoute>} />
         <Route path="/care/residents/:elderlyId" element={<StaffRoute><ResidentCarePage /></StaffRoute>} />
+        <Route path="/care/residents/:elderlyId/report" element={<StaffRoute><ResidentReportPage /></StaffRoute>} />
 
         {/* 운영 관리자 */}
         <Route path="/admin" element={<AdminRoute><AdminPage /></AdminRoute>} />

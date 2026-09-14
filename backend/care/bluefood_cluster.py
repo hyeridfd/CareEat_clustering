@@ -40,7 +40,8 @@ PROFILE_ONLY = [
     "age", "female", "care_grade", "education_level", "n_diseases",
     "dx_dementia", "dx_diabetes", "dx_depression", "dx_stroke", "dx_parkinson", "dx_hypertension",
     "met_total", "sitting_min", "sbp", "dbp", "mna_risk", "kmbi_mobility_wheelchair",
-    "intake_kimchi", "intake_snack", "served_g_day", "intake_g_day", "intake_day_sd",
+    "intake_kimchi", "intake_snack", "intake_breakfast", "intake_lunch", "intake_dinner",
+    "served_g_day", "intake_g_day", "intake_day_sd",
     "n_food_groups", "pref_seafood", "pref_meat", "pref_fruit", "pref_vegetable",
     "cmt_seasoning", "cmt_portion", "cmt_variety", "cmt_diabetic", "cmt_fruit", "cmt_texture_fishy",
     "has_nutrition", "mmse_untested", "gds_untested",
@@ -53,7 +54,8 @@ VAR_LABELS = {
     "texture_level": "식사형태 (0일반~3유동)", "eating_dependence": "식사 의존도 (0–2)",
     "intake_total": "전체 섭취율 (%)", "intake_rice": "밥/죽 섭취율 (%)", "intake_main": "주찬 섭취율 (%)",
     "intake_side": "부찬 섭취율 (%)", "intake_soup": "국/탕 섭취율 (%)", "intake_kimchi": "김치 섭취율 (%)",
-    "intake_snack": "간식 섭취율 (%)", "served_g_day": "배식량 (g/일)", "intake_g_day": "섭취량 (g/일)",
+    "intake_snack": "간식 섭취율 (%)", "intake_breakfast": "아침 섭취율 (%)", "intake_lunch": "점심 섭취율 (%)",
+    "intake_dinner": "저녁 섭취율 (%)", "served_g_day": "배식량 (g/일)", "intake_g_day": "섭취량 (g/일)",
     "intake_day_sd": "일간 섭취율 변동 (SD)",
     "sat_overall": "급식 전반 만족", "sat_portion": "양 적절성", "sat_quality": "맛·품질 만족",
     "age": "연령", "female": "여성", "care_grade": "장기요양등급", "education_level": "학력 (0무학~4대졸)",
@@ -284,6 +286,7 @@ def build_nutrition(n):
         mp = parse_json_obj(r.get("meal_portions"))
         pw = parse_json_obj(r.get("plate_waste"))
         served = Counter(); eaten = Counter()
+        meal_served = Counter(); meal_eaten = Counter()
         day_served = Counter(); day_eaten = Counter()
         snack_rates = []
         days = sorted(set(mp) | set(pw))
@@ -303,6 +306,7 @@ def build_nutrition(n):
                         continue
                     comp = COMPONENT.get(food, "other")
                     served[comp] += g; eaten[comp] += g * rate
+                    meal_served[meal] += g; meal_eaten[meal] += g * rate
                     day_served[d] += g; day_eaten[d] += g * rate
             for meal in ("간식1", "간식2"):
                 waste = pw.get(d, {}).get(meal, {})
@@ -325,6 +329,8 @@ def build_nutrition(n):
             rec["intake_snack"] = 100 * sum(g * x for g, x in snack_rates) / gs
         else:
             rec["intake_snack"] = np.nan
+        for meal, key in (("아침", "breakfast"), ("점심", "lunch"), ("저녁", "dinner")):
+            rec[f"intake_{key}"] = 100 * meal_eaten[meal] / meal_served[meal] if meal_served[meal] else np.nan
         nd = max(len(day_served), 1)
         rec["served_g_day"] = tot_s / nd if tot_s else np.nan
         rec["intake_g_day"] = tot_e / nd if tot_s else np.nan
@@ -332,7 +338,8 @@ def build_nutrition(n):
         rec["intake_day_sd"] = float(np.std(daily, ddof=1)) if len(daily) > 1 else np.nan
         rows.append(rec)
     cols = ["key", "n_days", "intake_total", "intake_rice", "intake_soup", "intake_main", "intake_side",
-            "intake_kimchi", "intake_snack", "served_g_day", "intake_g_day", "intake_day_sd"]
+            "intake_kimchi", "intake_snack", "intake_breakfast", "intake_lunch", "intake_dinner",
+            "served_g_day", "intake_g_day", "intake_day_sd"]
     return pd.DataFrame(rows, columns=cols)
 
 # =====================================================================
