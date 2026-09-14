@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../../lib/api'
-import useAuthStore from '../../lib/authStore'
+import CareLayout from '../../components/care/CareLayout'
 import { Card, LEVELS, LevelPill, ScoreBar, SOLUTION_STATUS, TRANSITION, TypeBadge, errMsg, fmtDate } from '../../components/care/CareUI'
 
 const LEVEL_KEYS = ['high', 'medium', 'low', 'unassessed']
@@ -21,7 +21,6 @@ function SurveyDots({ s }) {
 
 export default function CarePage() {
   const navigate = useNavigate()
-  const { user, logout } = useAuthStore()
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [running, setRunning] = useState(false)
@@ -67,24 +66,21 @@ export default function CarePage() {
   const types = data?.model?.types || []
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="bg-white border-b border-gray-200">
-        <div className="max-w-6xl mx-auto px-4 py-4 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-xs font-semibold text-blue-600">돌봄 관리</p>
-            <h1 className="text-lg font-bold text-gray-900">{data?.facility?.name || user?.nursing_home_name}</h1>
-          </div>
-          <div className="flex items-center gap-3 text-sm">
-            {data?.model?.version && (
-              <span className="hidden sm:inline text-xs text-gray-500 bg-gray-100 rounded-full px-2.5 py-1">유형 모델 {data.model.version}</span>
-            )}
-            <span className="text-gray-600">{user?.staff_name}님</span>
-            <button onClick={() => { logout(); navigate('/staff-login') }} className="text-gray-400 hover:text-red-600">로그아웃</button>
-          </div>
+    <CareLayout
+      title="진단"
+      subtitle="설문 데이터로 어르신 유형과 돌봄 우선순위를 계산합니다."
+      actions={
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-1.5 text-xs text-muted">
+            <input type="checkbox" checked={force} onChange={(e) => setForce(e.target.checked)} /> 전체 재평가
+          </label>
+          <button onClick={runAssess} disabled={running} className="btn-primary text-sm">
+            {running ? '평가 중…' : '유형·우선순위 평가 실행'}
+          </button>
         </div>
-      </header>
-
-      <main className="max-w-6xl mx-auto px-4 py-6 space-y-5">
+      }
+    >
+      <div className="space-y-5">
         {/* 등급별 현황 */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {LEVEL_KEYS.map((k) => {
@@ -103,23 +99,16 @@ export default function CarePage() {
           })}
         </div>
 
-        {/* 평가 실행 */}
+        {/* 안내 · 알림 */}
         <Card>
           <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="text-sm text-gray-600 max-w-xl">
-              설문 데이터로 어르신별 <b>유형</b>과 <b>돌봄 우선순위</b>를 계산합니다. 설문이 바뀐 어르신만 다시 평가하며, 이전 평가와 비교해 변화(체중·섭취·유형)를 반영합니다.
-            </div>
-            <div className="flex items-center gap-3">
-              <label className="flex items-center gap-1.5 text-xs text-gray-500">
-                <input type="checkbox" checked={force} onChange={(e) => setForce(e.target.checked)} /> 전체 재평가
-              </label>
-              <button onClick={runAssess} disabled={running} className="btn-primary text-sm">
-                {running ? '평가 중…' : '유형·우선순위 평가 실행'}
-              </button>
+            <div className="text-sm text-slate-600 max-w-2xl leading-6">
+              설문이 바뀐 어르신만 다시 평가하며, 이전 평가와 비교해 변화(체중·섭취·유형)를 반영합니다.
+              결과는 담당자가 확인한 뒤 솔루션으로 이어집니다.
             </div>
           </div>
           {notice && (
-            <p className={`mt-4 text-sm rounded-xl px-4 py-3 ${notice.kind === 'error' ? 'bg-red-50 text-red-700' : 'bg-blue-50 text-blue-800'}`}>{notice.text}</p>
+            <p className={`mt-4 text-sm rounded-xl px-4 py-3 ${notice.kind === 'error' ? 'bg-red-50 text-red-700' : 'bg-navy-50 text-navy-800'}`}>{notice.text}</p>
           )}
           {data?.model?.error && <p className="mt-4 text-sm rounded-xl px-4 py-3 bg-amber-50 text-amber-800">유형 모델 없음: {data.model.error}</p>}
         </Card>
@@ -159,7 +148,7 @@ export default function CarePage() {
                 const a = r.assessment
                 const tr = a?.transition?.kind && TRANSITION[a.transition.kind]
                 return (
-                  <tr key={r.elderly_id} onClick={() => navigate(`/care/${r.elderly_id}`)}
+                  <tr key={r.elderly_id} onClick={() => navigate(`/care/residents/${r.elderly_id}`)}
                     className="border-b border-gray-50 hover:bg-blue-50/40 cursor-pointer">
                     <td className="px-4 py-3 text-gray-400 tabular-nums">{i + 1}</td>
                     <td className="px-2 py-3">
@@ -194,8 +183,8 @@ export default function CarePage() {
             </tbody>
           </table>
         </div>
-        <p className="text-xs text-gray-400">우선순위 점수는 유형 위험도, 현재 상태(영양·섭취·삼킴 등), 직전 평가 대비 변화를 더한 값입니다. 최종 판단은 담당자가 합니다.</p>
-      </main>
-    </div>
+        <p className="text-xs text-muted">우선순위 점수는 유형 위험도, 현재 상태(영양·섭취·삼킴 등), 직전 평가 대비 변화를 더한 값입니다. 최종 판단은 담당자가 합니다.</p>
+      </div>
+    </CareLayout>
   )
 }

@@ -1,0 +1,122 @@
+import { Link } from 'react-router-dom'
+import pfmlLogo from '../../assets/pfml-logo.png'
+
+// Care-Eat 로고 마크: 숟가락(돌봄·식사) + 잎(건강)
+export function LogoMark({ className = 'w-9 h-9', tone = 'navy' }) {
+  const bg = tone === 'white' ? '#ffffff' : '#0a2e6e'
+  const fg = tone === 'white' ? '#0a2e6e' : '#ffffff'
+  const accent = tone === 'white' ? '#2979d4' : '#5aa5fb'
+  return (
+    <svg viewBox="0 0 40 40" className={className} aria-hidden="true">
+      <rect width="40" height="40" rx="11" fill={bg} />
+      <path d="M13 11v9a3.2 3.2 0 0 0 3.2 3.2V29" stroke={fg} strokeWidth="2.2" strokeLinecap="round" fill="none" />
+      <path d="M16.4 11v6M13 11v6" stroke={fg} strokeWidth="2.2" strokeLinecap="round" fill="none" />
+      <path d="M26.5 11c-1.9 0-3.2 2.4-3.2 6s1.3 5 3.2 5 3.2-1.4 3.2-5-1.3-6-3.2-6zM26.5 22v7"
+        stroke={accent} strokeWidth="2.2" strokeLinecap="round" fill="none" />
+    </svg>
+  )
+}
+
+export function Wordmark({ tone = 'navy', sub = true }) {
+  const text = tone === 'white' ? 'text-white' : 'text-navy-900'
+  const subText = tone === 'white' ? 'text-navy-100/80' : 'text-muted'
+  return (
+    <span className="flex items-center gap-2.5">
+      <LogoMark tone={tone} />
+      <span className="leading-tight">
+        <span className={`block text-[19px] font-extrabold tracking-tight ${text}`}>
+          Care<span className={tone === 'white' ? 'text-sky-300' : 'text-navy-500'}>-</span>Eat
+        </span>
+        {sub && <span className={`block text-[10px] font-medium ${subText}`}>요양시설 건강·식사 돌봄 플랫폼</span>}
+      </span>
+    </span>
+  )
+}
+
+export function BrandLink({ to = '/', tone = 'navy', sub = true }) {
+  return <Link to={to} className="inline-flex"><Wordmark tone={tone} sub={sub} /></Link>
+}
+
+// PFML 연구실 로고 (운영 주체 표기용). 어두운 배경에서는 흰색으로 반전해 사용
+export function PfmlLogo({ className = 'h-9', tone = 'navy' }) {
+  return (
+    <img
+      src={pfmlLogo}
+      alt="서울대학교 정밀식의약솔루션 연구실 PFML"
+      className={`${className} w-auto ${tone === 'white' ? 'brightness-0 invert opacity-95' : ''}`}
+    />
+  )
+}
+
+export function Lab({ className = '', tone = 'navy', logo = false }) {
+  const c = tone === 'white' ? 'text-navy-100/80' : 'text-muted'
+  if (logo) {
+    return (
+      <span className={`flex flex-col gap-2 ${className}`}>
+        <PfmlLogo tone={tone} className="h-10" />
+        <span className={`text-xs leading-relaxed ${c}`}>서울대학교 농생명공학부 정밀식의약솔루션 연구실</span>
+      </span>
+    )
+  }
+  return (
+    <span className={`text-xs leading-relaxed ${c} ${className}`}>
+      서울대학교 농생명공학부 정밀식의약솔루션 연구실 (PFML)
+    </span>
+  )
+}
+
+export function PublicFooter() {
+  return (
+    <footer className="bg-navy-900 text-navy-100">
+      <div className="max-w-6xl mx-auto px-5 py-12 grid gap-8 md:grid-cols-3">
+        <div>
+          <Wordmark tone="white" />
+          <p className="mt-4 text-sm text-navy-100/75 leading-relaxed max-w-xs">
+            어르신의 건강·식사 기록을 유형으로 진단하고, 돌봄 솔루션과 보호자 소통까지 잇는 요양시설 플랫폼입니다.
+          </p>
+        </div>
+        <div className="text-sm">
+          <p className="font-semibold text-white mb-3">서비스</p>
+          <ul className="space-y-2 text-navy-100/75">
+            <li><a href="/#record" className="hover:text-white">기록</a></li>
+            <li><a href="/#diagnose" className="hover:text-white">진단</a></li>
+            <li><a href="/#solution" className="hover:text-white">솔루션</a></li>
+            <li><a href="/#connect" className="hover:text-white">보호자 소통</a></li>
+          </ul>
+        </div>
+        <div className="text-sm">
+          <p className="font-semibold text-white mb-3">운영</p>
+          <PfmlLogo tone="white" className="h-9 mb-3" />
+          <Lab tone="white" />
+          <p className="mt-3 text-navy-100/75">글로벌 블루푸드 미래리더 양성 프로젝트</p>
+          <p className="mt-4 text-navy-100/60 text-xs">© {new Date().getFullYear()} PFML, Seoul National University.</p>
+        </div>
+      </div>
+    </footer>
+  )
+}
+
+export function PublicHeader({ active = '' }) {
+  const nav = [
+    { id: 'record', label: '기록' },
+    { id: 'diagnose', label: '진단' },
+    { id: 'solution', label: '솔루션' },
+    { id: 'connect', label: '보호자 소통' },
+  ]
+  return (
+    <header className="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-navy-100">
+      <div className="max-w-6xl mx-auto px-5 h-16 flex items-center justify-between gap-4">
+        <BrandLink sub={false} />
+        <nav className="hidden md:flex items-center gap-7 text-sm font-medium text-navy-900/80">
+          {nav.map((n) => (
+            <a key={n.id} href={`/#${n.id}`} className={`hover:text-navy-600 ${active === n.id ? 'text-navy-600' : ''}`}>{n.label}</a>
+          ))}
+        </nav>
+        <div className="flex items-center gap-2">
+          <Link to="/staff-login" className="btn-ghost text-sm">로그인</Link>
+          <Link to="/signup" className="btn-primary text-sm">시설 가입 신청</Link>
+        </div>
+      </div>
+    </header>
+  )
+}

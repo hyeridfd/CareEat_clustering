@@ -107,6 +107,114 @@ def overview(user: dict = Depends(require_staff)):
             "counts": counts, "residents": rows}
 
 
+# ─────────────────────────── 목록 (솔루션·알림·보호자) ───────────────────────────
+
+def _resident_names(sb, home):
+    return {r["id"]: _display_name(r) for r in fetch_all(sb, "elderly_residents", eq={"nursing_home_id": home})}
+
+
+@router.get("/solutions")
+def list_solutions(status: Optional[str] = None, user: dict = Depends(require_staff)):
+    sb, home = get_supabase(), user["scope_home"]
+    rows = fetch_all(sb, "care_solutions", eq={"nursing_home_id": home}, order="created_at", desc=True)
+    if status:
+        rows = [r for r in rows if r["status"] == status]
+    names = _resident_names(sb, home)
+    assess = {a["id"]: a for a in fetch_all(sb, "care_assessments", "id,type_code,type_name,priority_score,priority_level",
+                                            eq={"nursing_home_id": home})}
+    out = []
+    for r in rows[:200]:
+        a = assess.get(r["assessment_id"], {})
+        out.append({"id": r["id"], "elderly_id": r["elderly_id"], "display_name": names.get(r["elderly_id"], r["elderly_id"]),
+                    "status": r["status"], "generator": r["generator"], "created_at": r["created_at"],
+                    "approved_at": r.get("approved_at"), "summary": (r["content"] or {}).get("summary", ""),
+                    "guardian_message": r["guardian_message"], "flags": len(r.get("guardrail_flags") or []),
+                    "type_code": a.get("type_code"), "type_name": a.get("type_name"),
+                    "priority_score": a.get("priority_score"), "priority_level": a.get("priority_level")})
+    counts = {k: sum(1 for r in rows if r["status"] == k) for k in ("draft", "approved", "sent", "rejected")}
+    return {"counts": counts, "solutions": out}
+
+
+@router.get("/notifications")
+def list_notifications(user: dict = Depends(require_staff)):
+    sb, home = get_supabase(), user["scope_home"]
+    rows = fetch_all(sb, "care_notifications", eq={"nursing_home_id": home}, order="created_at", desc=True)[:200]
+    names = _resident_names(sb, home)
+    guardians = {g["id"]: g for g in fetch_all(sb, "guardians", eq={"nursing_home_id": home})}
+    out = []
+    for n in rows:
+        g = guardians.get(n["guardian_id"], {})
+        out.append({"id": n["id"], "elderly_id": n["elderly_id"], "display_name": names.get(n["elderly_id"], n["elderly_id"]),
+                    "guardian_name": g.get("name"), "phone": notify.mask_phone(g.get("phone", "")),
+                    "channel": n.get("channel"), "mode": n["mode"], "status": n["status"],
+                    "created_at": n["created_at"], "rendered_text": n["rendered_text"],
+                    "expires_at": n.get("report_expires_at"),
+                    "error": (n.get("provider_response") or {}).get("reason")})
+    stats = {"total": len(out), "sent": sum(1 for x in out if x["status"] == "sent"),
+             "failed": sum(1 for x in out if x["status"] == "failed"),
+             "previewed": sum(1 for x in out if x["status"] == "previewed")}
+    return {"stats": stats, "notifications": out}
+
+
+@router.get("/guardians")
+def list_guardians(user: dict = Depends(require_staff)):
+    sb, home = get_supabase(), user["scope_home"]
+    names = _resident_names(sb, home)
+    rows = [g for g in fetch_all(sb, "guardians", eq={"nursing_home_id": home}) if g.get("is_active") is not False]
+    return [{"id": g["id"], "elderly_id": g["elderly_id"], "display_name": names.get(g["elderly_id"], g["elderly_id"]),
+             "name": g["name"], "relation": g.get("relation"), "phone": notify.mask_phone(g["phone"]),
+             "consent_health_info": g.get("consent_health_info", False), "created_at": g.get("created_at")}
+            for g in rows]
+
+
+@router.get("/facility")
+def facility_info(user: dict = Depends(require_staff)):
+    sb, home = get_supabase(), user["scope_home"]
+    nh = sb.table("nursing_homes").select("*").eq("id", home).execute()
+    residents = fetch_all(sb, "elderly_residents", eq={"nursing_home_id": home})
+    staff = fetch_all(sb, "facility_staff", "id,name,role,is_active,created_at", eq={"nursing_home_id": home})
+    try:
+        model = _model_info(engine.load_model(engine.active_version(sb)))
+    except Exception as e:
+        model = {"error": str(e)}
+    return {"facility": (nh.data[0] if nh.data else {"id": home}), "resident_count": len(residents),
+            "staff": staff, "model": model,
+            "me": {"staff_id": user.get("staff_id"), "name": user.get("staff_name"), "role": user.get("staff_role")}}
+
+
+class ResidentIn(BaseModel):
+    name: str
+    elderly_id: Optional[str] = None
+    meal_form: Optional[str] = None
+
+
+@router.post("/residents")
+def add_resident(req: ResidentIn, user: dict = Depends(require_staff)):
+    sb, home = get_supabase(), user["scope_home"]
+    existing = fetch_all(sb, "elderly_residents", "id", eq={"nursing_home_id": home})
+    eid = (req.elderly_id or "").strip()
+    if not eid:
+        seq = len(existing) + 1
+        used = {r["id"] for r in existing}
+        while f"{home}-{seq:03d}" in used:
+            seq += 1
+        eid = f"{home}-{seq:03d}"
+    if sb.table("elderly_residents").select("id").eq("id", eid).execute().data:
+        raise HTTPException(status_code=409, detail=f"이미 있는 어르신 ID입니다: {eid}")
+    row = {"id": eid, "nursing_home_id": home, "name": req.name.strip()}
+    if req.meal_form:
+        row["meal_form"] = req.meal_form
+    try:
+        sb.table("elderly_residents").insert(row).execute()
+    except Exception as e:  # name 컬럼이 없는 기존 스키마 대응
+        if "name" in str(e):
+            row.pop("name", None)
+            sb.table("elderly_residents").insert(row).execute()
+        else:
+            raise
+    return {"success": True, "elderly_id": eid}
+
+
 # ─────────────────────────── 평가 실행 ───────────────────────────
 
 class AssessRequest(BaseModel):

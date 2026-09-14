@@ -1,5 +1,9 @@
 from typing import Optional
 from fastapi import APIRouter, Depends
+import re
+import secrets
+from datetime import datetime, timezone
+
 from dependencies import get_supabase, require_admin, hash_password
 from fastapi import HTTPException
 from pydantic import BaseModel
@@ -123,4 +127,78 @@ def activate_model(version: str, user: dict = Depends(require_admin)):
         raise HTTPException(status_code=404, detail="모델 버전이 없습니다.")
     sb.table("type_models").update({"is_active": False}).neq("version", version).execute()
     sb.table("type_models").update({"is_active": True}).eq("version", version).execute()
+    return {"success": True}
+
+
+# ─────────────────────────── 시설 가입 신청 심사 ───────────────────────────
+
+class ApplicationReview(BaseModel):
+    staff_id: Optional[str] = None          # 발급할 담당자 ID (미지정 시 희망 ID 사용)
+    nursing_home_id: Optional[str] = None   # 기존 시설에 붙일 경우
+    password: Optional[str] = None          # 미지정 시 임시 비밀번호 자동 생성
+    note: Optional[str] = None
+
+
+def _next_home_id(sb) -> str:
+    rows = sb.table("nursing_homes").select("id").execute().data or []
+    nums = [int(m.group(1)) for r in rows if (m := re.fullmatch(r"NH(\d+)", str(r["id"])))]
+    return f"NH{(max(nums) + 1 if nums else 1):03d}"
+
+
+@router.get("/facility-applications")
+def list_applications(status: Optional[str] = None, user: dict = Depends(require_admin)):
+    q = get_supabase().table("facility_applications").select("*").order("created_at", desc=True)
+    if status:
+        q = q.eq("status", status)
+    return q.execute().data
+
+
+@router.post("/facility-applications/{app_id}/approve")
+def approve_application(app_id: str, req: ApplicationReview, user: dict = Depends(require_admin)):
+    sb = get_supabase()
+    got = sb.table("facility_applications").select("*").eq("id", app_id).execute()
+    if not got.data:
+        raise HTTPException(status_code=404, detail="신청을 찾을 수 없습니다.")
+    app = got.data[0]
+    if app["status"] == "approved":
+        raise HTTPException(status_code=400, detail="이미 승인된 신청입니다.")
+
+    home_id = req.nursing_home_id or app.get("nursing_home_id") or _next_home_id(sb)
+    if not sb.table("nursing_homes").select("id").eq("id", home_id).execute().data:
+        sb.table("nursing_homes").insert({"id": home_id, "name": app["facility_name"]}).execute()
+
+    staff_id = (req.staff_id or app.get("desired_staff_id") or f"{home_id.lower()}_admin").strip().lower()
+    if not re.fullmatch(r"[a-z0-9_]{4,30}", staff_id):
+        raise HTTPException(status_code=400, detail="담당자 ID는 영문 소문자·숫자·밑줄 4~30자여야 합니다.")
+    if sb.table("facility_staff").select("id").eq("id", staff_id).execute().data:
+        raise HTTPException(status_code=409, detail=f"이미 있는 담당자 ID입니다: {staff_id}")
+
+    password = req.password or ("care" + secrets.token_hex(4))
+    if len(password) < 8:
+        raise HTTPException(status_code=400, detail="비밀번호는 8자 이상이어야 합니다.")
+    sb.table("facility_staff").insert({
+        "id": staff_id, "nursing_home_id": home_id, "name": app["manager_name"],
+        "role": "manager", "is_active": True, "password_hash": hash_password(password),
+    }).execute()
+
+    sb.table("facility_applications").update({
+        "status": "approved", "nursing_home_id": home_id, "staff_id": staff_id,
+        "review_note": req.note, "reviewed_by": "admin",
+        "reviewed_at": datetime.now(timezone.utc).isoformat(),
+    }).eq("id", app_id).execute()
+
+    # 비밀번호는 이 응답에서만 확인할 수 있으니 담당자에게 안전하게 전달하세요.
+    return {"success": True, "nursing_home_id": home_id, "staff_id": staff_id, "password": password,
+            "manager_phone": app["manager_phone"], "facility_name": app["facility_name"]}
+
+
+@router.post("/facility-applications/{app_id}/reject")
+def reject_application(app_id: str, req: ApplicationReview, user: dict = Depends(require_admin)):
+    sb = get_supabase()
+    if not sb.table("facility_applications").select("id").eq("id", app_id).execute().data:
+        raise HTTPException(status_code=404, detail="신청을 찾을 수 없습니다.")
+    sb.table("facility_applications").update({
+        "status": "rejected", "review_note": req.note, "reviewed_by": "admin",
+        "reviewed_at": datetime.now(timezone.utc).isoformat(),
+    }).eq("id", app_id).execute()
     return {"success": True}

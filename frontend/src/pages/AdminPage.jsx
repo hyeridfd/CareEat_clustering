@@ -3,8 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import api from '../lib/api'
 import useAuthStore from '../lib/authStore'
 import StaffAdmin from '../components/care/StaffAdmin'
+import FacilityApplications from '../components/care/FacilityApplications'
 
-const TABS = ['요양원', '조사원', '어르신', '설문 진행 현황', '담당자 계정']
+const TABS = ['가입 신청', '요양원', '조사원', '어르신', '설문 진행 현황', '담당자 계정']
 
 function StatCard({ label, value, total, color = 'blue' }) {
   const pct = total ? Math.round((value / total) * 100) : 0
@@ -74,9 +75,9 @@ export default function AdminPage() {
   const { stats } = progress
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-navy-50/40">
       <header className="bg-white shadow-sm px-4 py-3 flex items-center justify-between">
-        <h1 className="text-lg font-bold text-gray-900">🔐 관리자 대시보드</h1>
+        <h1 className="text-lg font-extrabold tracking-tight text-navy-900">Care-Eat 운영 관리자</h1>
         <button onClick={() => { logout(); navigate('/login') }} className="text-sm text-gray-500 hover:text-red-600">로그아웃</button>
       </header>
 
@@ -100,7 +101,7 @@ export default function AdminPage() {
                 key={t}
                 onClick={() => setTab(i)}
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  tab === i ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  tab === i ? 'bg-navy-900 text-white' : 'bg-white border border-navy-100 text-navy-700 hover:border-navy-300'
                 }`}
               >{t}</button>
             ))}
@@ -110,11 +111,12 @@ export default function AdminPage() {
             <p className="text-sm text-gray-400 py-4">불러오는 중...</p>
           ) : (
             <>
-              {tab === 0 && <DataTable data={nursingHomes} emptyMsg="등록된 요양원이 없습니다." />}
-              {tab === 1 && <DataTable data={surveyors} emptyMsg="등록된 조사원이 없습니다." />}
-              {tab === 2 && <DataTable data={elderly} emptyMsg="등록된 어르신이 없습니다." />}
-              {tab === 3 && <DataTable data={progress.rows} emptyMsg="설문 진행 현황이 없습니다." />}
-              {tab === 4 && <StaffAdmin nursingHomes={nursingHomes} />}
+              {tab === 0 && <FacilityApplications />}
+              {tab === 1 && <DataTable data={nursingHomes} emptyMsg="등록된 요양원이 없습니다." />}
+              {tab === 2 && <DataTable data={surveyors} emptyMsg="등록된 조사원이 없습니다." />}
+              {tab === 3 && <DataTable data={elderly} emptyMsg="등록된 어르신이 없습니다." />}
+              {tab === 4 && <DataTable data={progress.rows} emptyMsg="설문 진행 현황이 없습니다." />}
+              {tab === 5 && <StaffAdmin nursingHomes={nursingHomes} />}
             </>
           )}
         </div>

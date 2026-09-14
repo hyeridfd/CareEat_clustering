@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import api from '../../lib/api'
 import useAuthStore from '../../lib/authStore'
+import { Lab, LogoMark } from '../../components/brand/Brand'
 
 export default function StaffLoginPage() {
   const navigate = useNavigate()
@@ -29,34 +30,61 @@ export default function StaffLoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-5"
-      style={{ background: 'linear-gradient(160deg, #0a2e6e 0%, #1151b8 45%, #2979d4 100%)' }}>
-      <div className="w-full max-w-sm">
-        <div className="text-center mb-6">
-          <p className="text-blue-200 text-xs font-semibold tracking-widest mb-2">CARE MANAGEMENT</p>
-          <h1 className="text-2xl font-bold text-white">요양원 돌봄 관리</h1>
-          <p className="text-blue-100 text-sm mt-2">유형 · 돌봄 우선순위 · 보호자 알림</p>
+    <div className="min-h-screen lg:grid lg:grid-cols-2">
+      {/* 좌: 브랜드 */}
+      <div className="relative hidden lg:flex flex-col justify-between bg-navy-grad text-white p-12 overflow-hidden">
+        <div aria-hidden className="absolute inset-0 opacity-[0.13]"
+          style={{ backgroundImage: 'radial-gradient(circle at 30% 20%, #fff 1px, transparent 1px)', backgroundSize: '26px 26px' }} />
+        <Link to="/" className="relative flex items-center gap-3">
+          <LogoMark className="w-10 h-10" tone="white" />
+          <span className="text-xl font-extrabold tracking-tight">Care<span className="text-sky-300">-</span>Eat</span>
+        </Link>
+        <div className="relative max-w-md">
+          <h2 className="text-3xl font-extrabold leading-snug">
+            오늘 누구를<br />먼저 챙겨야 할까요?
+          </h2>
+          <p className="mt-5 text-navy-100/80 leading-7">
+            어르신의 건강·식사 기록을 유형으로 진단하고, 돌봄 계획과 보호자 안내까지 한 화면에서 이어 갑니다.
+          </p>
         </div>
-        <form onSubmit={submit} className="rounded-3xl bg-white p-6 shadow-2xl space-y-4">
-          <div>
-            <label className="text-xs font-semibold text-gray-500 mb-1.5 block">담당자 ID</label>
-            <input className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-              value={staffId} onChange={(e) => setStaffId(e.target.value)} autoComplete="username" required />
+        <Lab tone="white" logo className="relative" />
+      </div>
+
+      {/* 우: 로그인 */}
+      <div className="flex items-center justify-center px-5 py-16 bg-white">
+        <div className="w-full max-w-sm">
+          <div className="lg:hidden mb-8 flex justify-center">
+            <Link to="/" className="flex items-center gap-2.5">
+              <LogoMark className="w-10 h-10" />
+              <span className="text-xl font-extrabold tracking-tight text-navy-900">Care<span className="text-navy-500">-</span>Eat</span>
+            </Link>
           </div>
-          <div>
-            <label className="text-xs font-semibold text-gray-500 mb-1.5 block">비밀번호</label>
-            <input type="password" className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-              value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
+          <h1 className="text-2xl font-extrabold tracking-tight text-navy-900">요양시설 담당자 로그인</h1>
+          <p className="mt-2 text-sm text-muted">돌봄 관리 화면으로 들어갑니다.</p>
+
+          <form onSubmit={submit} className="mt-8 space-y-4">
+            <div>
+              <label className="form-label">담당자 ID</label>
+              <input className="form-input" value={staffId} onChange={(e) => setStaffId(e.target.value)} autoComplete="username" required />
+            </div>
+            <div>
+              <label className="form-label">비밀번호</label>
+              <input type="password" className="form-input" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
+            </div>
+            {error && <p className="text-sm rounded-xl bg-red-50 text-red-700 px-4 py-3">{error}</p>}
+            <button disabled={loading} className="btn-primary w-full py-3 rounded-xl">{loading ? '로그인 중…' : '로그인'}</button>
+          </form>
+
+          <div className="mt-8 rounded-2xl bg-navy-50/70 px-5 py-4 text-sm">
+            <p className="font-semibold text-navy-900">계정이 없으신가요?</p>
+            <p className="mt-1 text-muted leading-6">시설 가입을 신청하시면 확인 후 계정을 보내 드립니다.</p>
+            <Link to="/signup" className="mt-3 inline-flex btn-secondary text-sm">시설 가입 신청</Link>
           </div>
-          {error && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-3">{error}</p>}
-          <button disabled={loading} className="w-full py-3.5 rounded-xl text-white font-bold text-sm disabled:opacity-60"
-            style={{ background: 'linear-gradient(135deg, #1151b8 0%, #2979d4 100%)' }}>
-            {loading ? '로그인 중...' : '로그인'}
-          </button>
-          <p className="text-xs text-gray-400 text-center">계정은 관리자에게 발급받으세요.</p>
-        </form>
-        <div className="text-center mt-4">
-          <Link to="/login" className="text-sm text-blue-100 hover:text-white">← 설문 조사 로그인으로</Link>
+
+          <div className="mt-6 flex justify-between text-xs text-muted">
+            <Link to="/" className="hover:text-navy-700">← 서비스 소개</Link>
+            <Link to="/login" className="hover:text-navy-700">조사원 설문 로그인</Link>
+          </div>
         </div>
       </div>
     </div>

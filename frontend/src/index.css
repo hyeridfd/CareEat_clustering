@@ -8,50 +8,94 @@
   font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply text-ink bg-white antialiased;
+}
+
 @layer components {
+  /* ── 버튼 ── */
   .btn {
-    @apply px-4 py-2 rounded-lg font-medium transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl font-semibold transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed;
   }
   .btn-primary {
-    @apply btn bg-blue-600 text-white hover:bg-blue-700;
+    @apply btn text-white shadow-sm bg-navy-600 hover:bg-navy-700 active:scale-[0.99];
   }
   .btn-secondary {
-    @apply btn bg-gray-100 text-gray-700 hover:bg-gray-200;
+    @apply btn bg-navy-50 text-navy-700 hover:bg-navy-100;
+  }
+  .btn-ghost {
+    @apply btn text-muted hover:text-navy-700 hover:bg-navy-50;
   }
   .btn-danger {
     @apply btn bg-red-600 text-white hover:bg-red-700;
   }
-  .card {
-    @apply bg-white rounded-xl shadow-sm border border-gray-200 p-6;
+  .btn-lg {
+    @apply px-6 py-3.5 text-base rounded-2xl;
   }
+
+  /* ── 카드 · 표면 ── */
+  .card {
+    @apply bg-white rounded-2xl border border-navy-100 shadow-card p-6;
+  }
+  .surface {
+    @apply bg-white rounded-2xl border border-navy-100 shadow-card;
+  }
+
+  /* ── 폼 ── */
   .form-label {
-    @apply block text-sm font-medium text-gray-700 mb-1;
+    @apply block text-sm font-semibold text-navy-900 mb-1.5;
   }
   .form-input {
-    @apply w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent;
+    @apply w-full border border-navy-200 rounded-xl px-3.5 py-2.5 text-sm text-ink placeholder:text-slate-400 bg-white
+           focus:outline-none focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500 transition;
   }
   .form-select {
     @apply form-input bg-white;
   }
+  .form-hint {
+    @apply mt-1 text-xs text-muted;
+  }
   .radio-option {
     @apply flex items-center gap-2 cursor-pointer;
   }
+
+  /* ── 설문 화면(기존) 호환 ── */
   .section-title {
-    @apply text-lg font-semibold text-gray-800 mb-4 pb-2 border-b border-gray-200;
+    @apply text-lg font-bold text-navy-900 mb-4 pb-2 border-b border-navy-100;
   }
   .question-label {
-    @apply block text-sm font-medium text-gray-700 mb-2;
+    @apply block text-sm font-medium text-navy-900 mb-2;
   }
   .progress-bar {
-    @apply w-full bg-gray-200 rounded-full h-2;
+    @apply w-full bg-navy-100 rounded-full h-2;
   }
   .progress-fill {
-    @apply bg-blue-600 h-2 rounded-full transition-all duration-300;
+    @apply bg-navy-600 h-2 rounded-full transition-all duration-300;
+  }
+
+  /* ── 배지 ── */
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold;
   }
   .badge-complete {
-    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800;
+    @apply badge bg-emerald-50 text-emerald-700;
   }
   .badge-incomplete {
-    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800;
+    @apply badge bg-amber-50 text-amber-700;
+  }
+  .badge-brand {
+    @apply badge bg-navy-50 text-navy-700;
+  }
+  .badge-soon {
+    @apply badge bg-slate-100 text-slate-500;
+  }
+
+  /* ── 섹션 라벨 ── */
+  .eyebrow {
+    @apply text-xs font-bold tracking-[0.14em] uppercase text-navy-500;
   }
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import api from '../../lib/api'
+import CareLayout from '../../components/care/CareLayout'
 import { Card, LevelPill, ScoreBar, SOLUTION_STATUS, TRANSITION, TypeBadge, errMsg, fmtDate } from '../../components/care/CareUI'
 
 const INDICATORS = [
@@ -93,8 +94,8 @@ export default function ResidentCarePage() {
     }
   }
 
-  if (err) return <div className="p-8 text-red-600">{err} <Link to="/care" className="text-blue-600 ml-2">목록으로</Link></div>
-  if (!d) return <div className="p-8 text-gray-400">불러오는 중…</div>
+  if (err) return <CareLayout title="어르신"><p className="surface p-6 text-red-700">{err} <Link to="/care" className="text-navy-600 ml-2 underline">목록으로</Link></p></CareLayout>
+  if (!d) return <CareLayout title="어르신"><div className="surface p-12 text-center text-muted">불러오는 중…</div></CareLayout>
 
   const a = d.assessments[0]
   const f = a?.features || {}
@@ -132,28 +133,25 @@ export default function ResidentCarePage() {
   const editable = draft && sol && sol.status !== 'sent'
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="bg-white border-b border-gray-200">
-        <div className="max-w-6xl mx-auto px-4 py-4">
-          <Link to="/care" className="text-xs text-blue-600 hover:underline">← 어르신 목록</Link>
-          <div className="mt-2 flex flex-wrap items-center gap-3">
-            <h1 className="text-xl font-bold text-gray-900">{d.resident.display_name}</h1>
-            {a && <TypeBadge code={a.type_code} name={a.type_name} size="lg" />}
-            {a && <LevelPill level={a.priority_level} />}
-            {trStyle && <span className={`text-xs rounded px-2 py-0.5 ${trStyle.cls}`}>{trStyle.label} {tr.prev_type} → {a.type_code}</span>}
-            {a?.is_borderline && <span className="text-xs rounded px-2 py-0.5 bg-violet-50 text-violet-700">경계 사례</span>}
-          </div>
-          {a && <p className="text-xs text-gray-400 mt-1">평가 {fmtDate(a.created_at)} · 모델 {a.model_version}</p>}
+    <CareLayout
+      title={d.resident.display_name}
+      subtitle={a ? `평가 ${fmtDate(a.created_at)} · 모델 ${a.model_version}` : '아직 평가되지 않았습니다'}
+      actions={
+        <div className="flex flex-wrap items-center gap-2">
+          {a && <TypeBadge code={a.type_code} name={a.type_name} size="lg" />}
+          {a && <LevelPill level={a.priority_level} />}
+          {trStyle && <span className={`badge ${trStyle.cls}`}>{trStyle.label} {tr.prev_type} → {a.type_code}</span>}
+          {a?.is_borderline && <span className="badge bg-violet-50 text-violet-700">경계 사례</span>}
         </div>
-      </header>
+      }
+    >
+      <Link to="/care" className="inline-block mb-4 text-xs font-semibold text-navy-600 hover:underline">← 진단 목록</Link>
 
       {msg && (
-        <div className="max-w-6xl mx-auto px-4 pt-4">
-          <p className={`text-sm rounded-xl px-4 py-3 ${msg.kind === 'error' ? 'bg-red-50 text-red-700' : 'bg-blue-50 text-blue-800'}`}>{msg.text}</p>
-        </div>
+        <p className={`mb-4 text-sm rounded-xl px-4 py-3 ${msg.kind === 'error' ? 'bg-red-50 text-red-700' : 'bg-navy-50 text-navy-800'}`}>{msg.text}</p>
       )}
 
-      <main className="max-w-6xl mx-auto px-4 py-5 grid lg:grid-cols-5 gap-5">
+      <div className="grid lg:grid-cols-5 gap-5">
         {/* 왼쪽: 평가 */}
         <div className="lg:col-span-2 space-y-5">
           {!a ? (
@@ -376,7 +374,7 @@ export default function ResidentCarePage() {
             </ul>
           </Card>
         </div>
-      </main>
-    </div>
+      </div>
+    </CareLayout>
   )
 }

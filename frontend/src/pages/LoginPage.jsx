@@ -83,6 +83,9 @@ export default function LoginPage() {
 
         <div className="flex-1 flex flex-col items-center justify-center px-5 pt-12 pb-6">
           <div className="text-center mb-6">
+            <Link to="/" className="inline-flex items-center gap-2 mb-4 text-sky-200 hover:text-white text-sm font-bold tracking-tight">
+              Care<span className="text-white/60">-</span>Eat
+            </Link>
             <h1 className="text-2xl font-bold text-white tracking-tight leading-snug mb-3">
               요양원 입소 고령자 대상<br />건강 프로파일 분석 및 선호도 조사
             </h1>
@@ -176,7 +179,7 @@ export default function LoginPage() {
             <Link to="/staff-login"
               className="mt-3 w-full px-5 py-3.5 rounded-2xl text-sm text-blue-100 font-medium flex justify-between items-center"
               style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)' }}>
-              <span className="flex items-center gap-2"><span className="text-base">🏥</span> 요양원 담당자 로그인 (돌봄 관리)</span>
+              <span className="flex items-center gap-2"><span className="text-base">🏥</span> 요양시설 담당자 로그인 (Care-Eat 돌봄 관리)</span>
               <span className="text-blue-200 text-xs">→</span>
             </Link>
 

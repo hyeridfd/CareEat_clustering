@@ -1,6 +1,8 @@
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Navigate, Route, Routes } from 'react-router-dom'
 import ScrollToTop from './lib/ScrollToTop'
 import useAuthStore from './lib/authStore'
+import LandingPage from './pages/LandingPage'
+import SignupPage from './pages/SignupPage'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
 import AdminPage from './pages/AdminPage'
@@ -10,6 +12,10 @@ import SatisfactionSurveyPage from './pages/surveys/SatisfactionSurveyPage'
 import BluefoodSurveyPage from './pages/surveys/BluefoodSurveyPage'
 import StaffLoginPage from './pages/care/StaffLoginPage'
 import CarePage from './pages/care/CarePage'
+import RecordsPage from './pages/care/RecordsPage'
+import SolutionsPage from './pages/care/SolutionsPage'
+import CommunicationPage from './pages/care/CommunicationPage'
+import SettingsPage from './pages/care/SettingsPage'
 import ResidentCarePage from './pages/care/ResidentCarePage'
 import GuardianReportPage from './pages/care/GuardianReportPage'
 
@@ -34,21 +40,35 @@ function StaffRoute({ children }) {
 export default function App() {
   return (
     <>
-    <ScrollToTop />
-    <Routes>
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/dashboard" element={<PrivateRoute><DashboardPage /></PrivateRoute>} />
-      <Route path="/admin" element={<AdminRoute><AdminPage /></AdminRoute>} />
-      <Route path="/survey/basic" element={<PrivateRoute><BasicSurveyPage /></PrivateRoute>} />
-      <Route path="/survey/nutrition" element={<PrivateRoute><NutritionSurveyPage /></PrivateRoute>} />
-      <Route path="/survey/satisfaction" element={<PrivateRoute><SatisfactionSurveyPage /></PrivateRoute>} />
-      <Route path="/survey/bluefood" element={<PrivateRoute><BluefoodSurveyPage /></PrivateRoute>} />
-      <Route path="/staff-login" element={<StaffLoginPage />} />
-      <Route path="/care" element={<StaffRoute><CarePage /></StaffRoute>} />
-      <Route path="/care/:elderlyId" element={<StaffRoute><ResidentCarePage /></StaffRoute>} />
-      <Route path="/report/:token" element={<GuardianReportPage />} />
-      <Route path="*" element={<Navigate to="/login" replace />} />
-    </Routes>
+      <ScrollToTop />
+      <Routes>
+        {/* 공개 */}
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/signup" element={<SignupPage />} />
+        <Route path="/report/:token" element={<GuardianReportPage />} />
+
+        {/* 조사원 설문 */}
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/dashboard" element={<PrivateRoute><DashboardPage /></PrivateRoute>} />
+        <Route path="/survey/basic" element={<PrivateRoute><BasicSurveyPage /></PrivateRoute>} />
+        <Route path="/survey/nutrition" element={<PrivateRoute><NutritionSurveyPage /></PrivateRoute>} />
+        <Route path="/survey/satisfaction" element={<PrivateRoute><SatisfactionSurveyPage /></PrivateRoute>} />
+        <Route path="/survey/bluefood" element={<PrivateRoute><BluefoodSurveyPage /></PrivateRoute>} />
+
+        {/* 요양시설 담당자 */}
+        <Route path="/staff-login" element={<StaffLoginPage />} />
+        <Route path="/care" element={<StaffRoute><CarePage /></StaffRoute>} />
+        <Route path="/care/records" element={<StaffRoute><RecordsPage /></StaffRoute>} />
+        <Route path="/care/solutions" element={<StaffRoute><SolutionsPage /></StaffRoute>} />
+        <Route path="/care/connect" element={<StaffRoute><CommunicationPage /></StaffRoute>} />
+        <Route path="/care/settings" element={<StaffRoute><SettingsPage /></StaffRoute>} />
+        <Route path="/care/residents/:elderlyId" element={<StaffRoute><ResidentCarePage /></StaffRoute>} />
+
+        {/* 운영 관리자 */}
+        <Route path="/admin" element={<AdminRoute><AdminPage /></AdminRoute>} />
+
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
     </>
   )
 }
