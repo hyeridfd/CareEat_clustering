@@ -276,6 +276,7 @@ SNACK_DEFAULT_PORTIONS = {
     5: {"간식1": {"간식": 125}, "간식2": {"간식": 124.9}},
 }
 MAIN_MEALS = ("아침", "점심", "저녁")
+MEAL_ORDER = {"아침": 0, "간식1": 1, "점심": 2, "간식2": 3, "저녁": 4}
 COMPONENT = {"밥/죽": "rice", "국/탕": "soup", "주찬": "main", "부찬1": "side", "부찬2": "side",
              "김치1": "kimchi", "김치2": "kimchi"}
 
@@ -288,6 +289,7 @@ def build_nutrition(n):
         served = Counter(); eaten = Counter()
         meal_served = Counter(); meal_eaten = Counter()
         day_served = Counter(); day_eaten = Counter()
+        log = {}          # 일자×끼니 식사 기록 (리포트 식단표용)
         snack_rates = []
         days = sorted(set(mp) | set(pw))
         for d in days:
@@ -308,6 +310,10 @@ def build_nutrition(n):
                     served[comp] += g; eaten[comp] += g * rate
                     meal_served[meal] += g; meal_eaten[meal] += g * rate
                     day_served[d] += g; day_eaten[d] += g * rate
+                    cell = log.setdefault((dnum, meal), {"served": 0.0, "eaten": 0.0, "items": []})
+                    cell["served"] += g; cell["eaten"] += g * rate
+                    cell["items"].append({"slot": food, "name": None, "g": round(float(g), 1),
+                                          "rate": round(100 * rate)})
             for meal in ("간식1", "간식2"):
                 waste = pw.get(d, {}).get(meal, {})
                 defaults = SNACK_DEFAULT_PORTIONS.get(dnum, {}).get(meal, {})
@@ -316,9 +322,14 @@ def build_nutrition(n):
                     if wv == "추후섭취":
                         continue
                     try:
-                        snack_rates.append((g, 1 - float(wv) / 4))
+                        rate = 1 - float(wv) / 4
                     except (TypeError, ValueError):
-                        pass
+                        continue
+                    snack_rates.append((g, rate))
+                    cell = log.setdefault((dnum, meal), {"served": 0.0, "eaten": 0.0, "items": []})
+                    cell["served"] += g; cell["eaten"] += g * rate
+                    cell["items"].append({"slot": food, "name": None, "g": round(float(g), 1),
+                                          "rate": round(100 * rate)})
         tot_s = sum(served.values()); tot_e = sum(eaten.values())
         rec = {"key": r["key"], "n_days": len(days)}
         rec["intake_total"] = 100 * tot_e / tot_s if tot_s else np.nan
@@ -336,8 +347,11 @@ def build_nutrition(n):
         rec["intake_g_day"] = tot_e / nd if tot_s else np.nan
         daily = [100 * day_eaten[d] / day_served[d] for d in day_served if day_served[d]]
         rec["intake_day_sd"] = float(np.std(daily, ddof=1)) if len(daily) > 1 else np.nan
+        rec["meal_log"] = [{"day": dn, "meal": ml, "rate": round(100 * c["eaten"] / c["served"]) if c["served"] else None,
+                            "served_g": round(c["served"], 1), "items": c["items"]}
+                           for (dn, ml), c in sorted(log.items(), key=lambda kv: (kv[0][0], MEAL_ORDER.get(kv[0][1], 9)))]
         rows.append(rec)
-    cols = ["key", "n_days", "intake_total", "intake_rice", "intake_soup", "intake_main", "intake_side",
+    cols = ["key", "n_days", "meal_log", "intake_total", "intake_rice", "intake_soup", "intake_main", "intake_side",
             "intake_kimchi", "intake_snack", "intake_breakfast", "intake_lunch", "intake_dinner",
             "served_g_day", "intake_g_day", "intake_day_sd"]
     return pd.DataFrame(rows, columns=cols)

@@ -109,7 +109,7 @@ def build_report(sb, home: str, eid: str, audience: str = "guardian",
     # ── 상태 단계 (보호자·담당자 공통, 점수는 담당자만) ──
     def status(key, kind, label, value, scale=None, note=None):
         b = _band(kind, value)
-        item = {"key": key, "label": label, **b, "note": note}
+        item = {"key": key, "title": label, "band": b["label"], "tone": b["tone"], "note": note}
         if staff and value is not None:
             item["value"] = _round(value, 1)
             item["scale"] = scale
@@ -144,6 +144,7 @@ def build_report(sb, home: str, eid: str, audience: str = "guardian",
         "components": [{"label": l, "value": _round(_n(f, k))} for l, k in comps],
         "prev_total": _round(_n(prev, "intake_total")),
         "has_nutrition": _n(f, "has_nutrition") == 1,
+        "log": f.get("meal_log") or [],
     }
     low_meals = [m["label"] for m in intake["meals"] if m["value"] is not None and m["value"] < 70]
     intake["low_meals"] = low_meals
@@ -159,14 +160,11 @@ def build_report(sb, home: str, eid: str, audience: str = "guardian",
 
     # ── 시설 평균 대비 ──
     comparison = []
-    rows = ([("영양 상태 (MNA-SF)", "mna_sf", "점", 0, 14),
-             ("일상생활 수행 (K-MBI)", "kmbi_pct", "%", 0, 100),
-             ("전체 식사 섭취율", "intake_total", "%", 0, 100),
-             ("급식 만족", "sat_overall", "점", 1, 5),
-             ("체질량지수 (BMI)", "bmi", "", 14, 32)]
-            if staff else
-            [("식사 섭취율", "intake_total", "%", 0, 100),
-             ("체질량지수", "bmi", "", 14, 32)])
+    rows = [("영양 상태 (MNA-SF)" if staff else "영양 상태", "mna_sf", "점", 0, 14),
+            ("일상생활 수행 (K-MBI)" if staff else "일상생활 수행", "kmbi_pct", "%", 0, 100),
+            ("전체 식사 섭취율", "intake_total", "%", 0, 100),
+            ("급식 만족", "sat_overall", "점", 1, 5),
+            ("체질량지수 (BMI)" if staff else "체질량지수", "bmi", "", 14, 32)]
     for label, key, unit, lo, hi in rows:
         self_v, avg = _n(f, key), peer_avg(key)
         if self_v is None:

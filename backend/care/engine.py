@@ -44,6 +44,8 @@ KEY_FEATURES = bc.cluster_vars() + ["age", "female", "care_grade", "education_le
                                     "n_days", "kmbi_mobility_wheelchair", "mna_risk"]
 # 숫자가 아닌 부가 정보 (리포트용)
 EXTRA_FEATURES = ["diseases", "medications", "improvement_text", "meal_form"]
+# 리포트 식단표용 (일자×끼니 기록)
+LOG_FEATURES = ["meal_log"]
 
 
 def _frame(rows, cols):
@@ -199,6 +201,9 @@ def classify_transition(model: TypeModel, current_code: str, prev: dict | None) 
 
 def features_record(row: pd.Series) -> dict:
     rec = {}
+    for v in LOG_FEATURES:
+        x = row.get(v)
+        rec[v] = x if isinstance(x, list) else None
     for v in EXTRA_FEATURES + ["survey_start"]:
         x = row.get(v)
         if isinstance(x, list):
