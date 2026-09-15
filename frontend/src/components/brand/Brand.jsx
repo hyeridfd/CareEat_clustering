@@ -1,20 +1,28 @@
 import { Link } from 'react-router-dom'
 import pfmlLogo from '../../assets/pfml-logo.png'
+import careEatMark from '../../assets/care-eat-mark.png'
 
-// Care-Eat 로고 마크: 숟가락(돌봄·식사) + 잎(건강)
+// Care-Eat 로고 마크: 손과 포크가 맞잡은 하트
+// 로고 자체가 남색을 쓰므로 어두운 배경에서는 흰 타일 위에 올린다.
 export function LogoMark({ className = 'w-9 h-9', tone = 'navy' }) {
-  const bg = tone === 'white' ? '#ffffff' : '#0a2e6e'
-  const fg = tone === 'white' ? '#0a2e6e' : '#ffffff'
-  const accent = tone === 'white' ? '#2979d4' : '#5aa5fb'
-  return (
-    <svg viewBox="0 0 40 40" className={className} aria-hidden="true">
-      <rect width="40" height="40" rx="11" fill={bg} />
-      <path d="M13 11v9a3.2 3.2 0 0 0 3.2 3.2V29" stroke={fg} strokeWidth="2.2" strokeLinecap="round" fill="none" />
-      <path d="M16.4 11v6M13 11v6" stroke={fg} strokeWidth="2.2" strokeLinecap="round" fill="none" />
-      <path d="M26.5 11c-1.9 0-3.2 2.4-3.2 6s1.3 5 3.2 5 3.2-1.4 3.2-5-1.3-6-3.2-6zM26.5 22v7"
-        stroke={accent} strokeWidth="2.2" strokeLinecap="round" fill="none" />
-    </svg>
+  const img = (
+    <img
+      src={careEatMark}
+      alt=""
+      aria-hidden
+      width={256}
+      height={256}
+      className={tone === 'white' ? 'h-[82%] w-[82%] object-contain' : 'h-full w-full object-contain'}
+    />
   )
+  if (tone === 'white') {
+    return (
+      <span className={`${className} shrink-0 flex items-center justify-center rounded-xl bg-white`}>
+        {img}
+      </span>
+    )
+  }
+  return <span className={`${className} shrink-0 inline-flex`}>{img}</span>
 }
 
 export function Wordmark({ tone = 'navy', sub = true }) {
