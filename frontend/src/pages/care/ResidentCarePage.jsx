@@ -18,7 +18,7 @@ const INDICATORS = [
 ]
 const TONE = { bad: 'text-rose-600', warn: 'text-amber-600', ok: 'text-gray-900' }
 const TEXTURE = ['일반식', '다진식', '갈은식', '유동식']
-const TABS = [['profile', 'PROFILE'], ['care', '돌봄'], ['history', 'HISTORY']]
+const TABS = [['profile', 'PROFILE'], ['care', 'CARE'], ['history', 'HISTORY']]
 const PROVIDERS = [['', '기본 설정'], ['openai', 'OpenAI'], ['anthropic', 'Claude'], ['rules', '규칙 기반']]
 
 function Indicator({ f, k, label, unit, tone, digits = 0 }) {
