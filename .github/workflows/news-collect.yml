@@ -1,0 +1,38 @@
+name: 뉴스 브리핑 수집
+
+# 매일 07:45 KST (= 22:45 UTC 전날). Actions 는 UTC 로 돈다.
+# GitHub 의 예약 실행은 혼잡하면 몇 분 밀릴 수 있어 여유를 두고 잡았다.
+on:
+  schedule:
+    - cron: '45 22 * * *'
+  workflow_dispatch:          # 저장소 Actions 탭에서 수동 실행 (첫 실행·테스트용)
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 백엔드 깨우기
+        # Render 무료 플랜은 놀면 잠들기 때문에 먼저 깨운 뒤 수집을 호출한다.
+        run: |
+          for i in 1 2 3 4 5 6; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 "$API/health" || echo 000)
+            echo "시도 $i: $code"
+            [ "$code" = "200" ] && exit 0
+            sleep 15
+          done
+          echo "백엔드가 응답하지 않습니다"; exit 1
+        env:
+          API: ${{ secrets.API_BASE_URL }}
+
+      - name: 수집 실행
+        run: |
+          code=$(curl -s -o body.json -w '%{http_code}' --max-time 600 -X POST \
+            -H "X-Cron-Secret: $SECRET" \
+            "$API/api/news/collect?hours=24")
+          echo "HTTP $code"
+          cat body.json
+          echo
+          [ "$code" = "200" ] || exit 1
+        env:
+          API: ${{ secrets.API_BASE_URL }}
+          SECRET: ${{ secrets.NEWS_CRON_SECRET }}
