@@ -52,12 +52,25 @@ export default function NewsPage() {
     load(null)
   }, [])
 
+  // 검색 23회 + 요약 1회라 몇 분 걸린다. axios 기본 타임아웃(15초)으로는 항상 끊긴다.
+  const COLLECT_TIMEOUT = 10 * 60 * 1000
+
+  const collectError = (e) => {
+    if (e?.code === 'ECONNABORTED') {
+      return '시간이 초과됐습니다. 서버에서는 계속 진행 중일 수 있으니 잠시 후 새로고침해 보세요.'
+    }
+    if (!e?.response) {
+      return '서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.'
+    }
+    return errMsg(e, `수집에 실패했습니다. (HTTP ${e.response.status})`)
+  }
+
   const runCollect = () => {
     setBusy(true); setErr('')
-    api.post('/news/collect')
+    api.post('/news/collect', null, { timeout: COLLECT_TIMEOUT })
       .then(() => api.get('/news/dates').then((r) => setDates(r.data.dates || [])))
       .then(() => load(null))
-      .catch((e) => setErr(errMsg(e, '수집에 실패했습니다.')))
+      .catch((e) => setErr(collectError(e)))
       .finally(() => setBusy(false))
   }
 
@@ -74,7 +87,7 @@ export default function NewsPage() {
       subtitle="노인·돌봄·고령친화식품·정책 뉴스를 매일 아침 모아 요약합니다."
       actions={canCollect && (
         <button onClick={runCollect} disabled={busy} className="btn-secondary disabled:opacity-50">
-          {busy ? '수집 중…' : '지금 수집'}
+          {busy ? '수집 중… (3~5분)' : '지금 수집'}
         </button>
       )}
     >

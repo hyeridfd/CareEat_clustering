@@ -6,6 +6,8 @@
   · 조회 — 로그인한 담당자·관리자 모두 열람
   · 수집 — 관리자 토큰, 또는 X-Cron-Secret 헤더(GitHub Actions 예약 실행)
 """
+import logging
+import time
 from datetime import datetime, timedelta
 from typing import Optional
 from zoneinfo import ZoneInfo
@@ -19,6 +21,7 @@ from news import summarize as ns
 
 router = APIRouter()
 KST = ZoneInfo("Asia/Seoul")
+log = logging.getLogger("uvicorn.error")
 
 
 # ─────────────────────────── 권한 ───────────────────────────
@@ -114,17 +117,24 @@ def run_collect(hours: int = Query(24, ge=1, le=168),
     """기사를 모아 요약하고 그날의 브리핑을 저장한다. 같은 날짜로 다시 돌리면 덮어쓴다."""
     actor = _authorize_collect(authorization, x_cron_secret)
     sb = get_supabase()
+    t0 = time.monotonic()
+    log.info("[뉴스] 수집 시작 (요청자 %s, 최근 %d시간)", actor, hours)
 
     try:
         articles, errors = nc.collect(hours=hours)
     except Exception as e:                                  # noqa: BLE001
+        log.error("[뉴스] 수집 실패: %s", e)
         raise HTTPException(status_code=502, detail=f"뉴스 수집 실패: {e}")
+    log.info("[뉴스] 수집 완료 %d건 (%.1f초, 오류 %d건)", len(articles), time.monotonic() - t0, len(errors))
 
     if not articles:
         raise HTTPException(status_code=404,
                             detail="수집된 기사가 없습니다. " + (f"오류: {errors[:2]}" if errors else ""))
 
+    t1 = time.monotonic()
     summarized, briefing, generator = ns.summarize(articles)
+    log.info("[뉴스] 요약 완료 %d건, 브리핑 %d줄 (%.1f초, %s)",
+             len(summarized), len(briefing), time.monotonic() - t1, generator)
     today = _today()
 
     # 기사가 brief_date 를 참조하므로 브리핑 행을 먼저 만든다.
@@ -146,6 +156,7 @@ def run_collect(hours: int = Query(24, ge=1, le=168),
     if len(rows) != len(summarized):
         sb.table("news_briefings").update({"article_count": len(rows)}).eq("brief_date", today).execute()
 
+    log.info("[뉴스] 저장 완료 %s — %d건 (전체 %.1f초)", today, len(rows), time.monotonic() - t0)
     return {"date": today, "collected": len(articles), "saved": len(rows),
             "briefing_lines": len(briefing), "generator": generator,
             "errors": errors[:5], "actor": actor}
