@@ -4,6 +4,7 @@ import api from '../../lib/api'
 import useAuthStore from '../../lib/authStore'
 import { endSurvey } from '../../lib/surveySession'
 import { Lab, LogoMark } from '../../components/brand/Brand'
+import heroCare from '../../assets/hero-care.jpg'
 
 export default function StaffLoginPage() {
   const navigate = useNavigate()
@@ -21,8 +22,7 @@ export default function StaffLoginPage() {
       const { data } = await api.post('/auth/staff-login', { staff_id: staffId.trim(), password })
       setAuth(data.token, {
         role: 'staff', staff_id: data.staff_id, staff_name: data.staff_name,
-        staff_role: data.staff_role, nursing_home_id: data.nursing_home_id,
-        nursing_home_name: data.nursing_home_name,
+        nursing_home_id: data.nursing_home_id, nursing_home_name: data.nursing_home_name,
       })
       navigate('/care')
     } catch (err) {
@@ -36,6 +36,19 @@ export default function StaffLoginPage() {
     <div className="min-h-screen lg:grid lg:grid-cols-2">
       {/* 좌: 브랜드 */}
       <div className="relative hidden lg:flex flex-col justify-between bg-navy-grad text-white p-12 overflow-hidden">
+        {/* 배경 사진 — 어르신이 오른쪽에 오도록 잡고, 왼쪽 글자 자리는 네이비로 덮는다 */}
+        <img
+          src={heroCare}
+          alt=""
+          aria-hidden
+          className="absolute inset-0 h-full w-full object-cover opacity-[0.55]"
+          style={{ objectPosition: '60% 50%' }}
+        />
+        <div aria-hidden className="absolute inset-0" style={{
+          background:
+            'linear-gradient(95deg, rgba(7,32,77,0.97) 0%, rgba(7,32,77,0.90) 30%, rgba(7,32,77,0.58) 60%, rgba(10,46,110,0.28) 100%),' +
+            'linear-gradient(to top, rgba(7,32,77,0.88) 0%, rgba(7,32,77,0) 34%)',
+        }} />
         <div aria-hidden className="absolute inset-0 opacity-[0.13]"
           style={{ backgroundImage: 'radial-gradient(circle at 30% 20%, #fff 1px, transparent 1px)', backgroundSize: '26px 26px' }} />
         <Link to="/" className="relative flex items-center gap-3">
