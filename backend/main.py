@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 
 load_dotenv()  # 라우터·모듈이 환경변수를 읽기 전에 .env 먼저 로드
 
-from routers import auth, surveys, admin, care, public, news  # noqa: E402
+from routers import auth, surveys, admin, care, public, news, ehr  # noqa: E402
 
 app = FastAPI(title="요양원 설문조사 API", version="1.0.0")
 
@@ -40,6 +40,7 @@ app.include_router(admin.router, prefix="/api/admin", tags=["관리자"])
 app.include_router(care.router, prefix="/api/care", tags=["돌봄 관리"])
 app.include_router(public.router, prefix="/api/public", tags=["보호자 리포트"])
 app.include_router(news.router, prefix="/api/news", tags=["뉴스 브리핑"])
+app.include_router(ehr.router, prefix="/api/ehr", tags=["어르신 기록"])
 
 @app.get("/")
 def root():

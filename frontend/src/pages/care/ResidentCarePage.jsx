@@ -3,6 +3,8 @@ import { Link, useParams } from 'react-router-dom'
 import api from '../../lib/api'
 import CareLayout from '../../components/care/CareLayout'
 import { Card, LevelPill, ScoreBar, SOLUTION_STATUS, TRANSITION, TypeBadge, errMsg, fmtDate } from '../../components/care/CareUI'
+import ResidentProfileTab from './ResidentProfileTab'
+import ResidentHistoryTab from './ResidentHistoryTab'
 
 const INDICATORS = [
   ['mna_sf', 'MNA-SF', '점 / 14', (v) => (v <= 7 ? 'bad' : v <= 11 ? 'warn' : 'ok')],
@@ -16,6 +18,7 @@ const INDICATORS = [
 ]
 const TONE = { bad: 'text-rose-600', warn: 'text-amber-600', ok: 'text-gray-900' }
 const TEXTURE = ['일반식', '다진식', '갈은식', '유동식']
+const TABS = [['profile', 'PROFILE'], ['care', '돌봄'], ['history', 'HISTORY']]
 const PROVIDERS = [['', '기본 설정'], ['openai', 'OpenAI'], ['anthropic', 'Claude'], ['rules', '규칙 기반']]
 
 function Indicator({ f, k, label, unit, tone, digits = 0 }) {
@@ -115,6 +118,7 @@ function KakaoPreview({ r }) {
 export default function ResidentCarePage() {
   const { elderlyId } = useParams()
   const [d, setD] = useState(null)
+  const [tab, setTab] = useState('profile')
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState('')
   const [provider, setProvider] = useState('')
@@ -209,6 +213,23 @@ export default function ResidentCarePage() {
           <Link to={`/care/residents/${elderlyId}/report`} className="btn-secondary text-xs py-1.5">상세 리포트 보기</Link>
         </div>
       </div>
+
+      <div className="flex gap-1 mb-5 border-b border-navy-100">
+        {TABS.map(([k, label]) => (
+          <button key={k} onClick={() => setTab(k)}
+            className={`px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px transition ${
+              tab === k ? 'border-navy-700 text-navy-900' : 'border-transparent text-muted hover:text-navy-700'}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'profile' && (
+        <ResidentProfileTab elderlyId={elderlyId} residentName={d.resident.display_name} />
+      )}
+      {tab === 'history' && <ResidentHistoryTab elderlyId={elderlyId} />}
+
+      {tab === 'care' && (<>
 
       {msg && (
         <p className={`mb-4 text-sm rounded-xl px-4 py-3 ${msg.kind === 'error' ? 'bg-red-50 text-red-700' : 'bg-navy-50 text-navy-800'}`}>{msg.text}</p>
@@ -439,6 +460,8 @@ export default function ResidentCarePage() {
           </Card>
         </div>
       </div>
+
+      </>)}
     </CareLayout>
   )
 }
