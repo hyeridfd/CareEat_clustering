@@ -38,12 +38,16 @@ export function BrandLink({ to = '/', tone = 'navy', sub = true }) {
 }
 
 // PFML 연구실 로고 (운영 주체 표기용). 어두운 배경에서는 흰색으로 반전해 사용
+// flex 컨테이너 안에서는 align-items 기본값(stretch) 때문에 img 가 가로로 늘어난다.
+// self-start 로 늘어남을 막고, object-contain 으로 어떤 경우에도 비율을 지킨다.
 export function PfmlLogo({ className = 'h-9', tone = 'navy' }) {
   return (
     <img
       src={pfmlLogo}
       alt="서울대학교 정밀식의약솔루션 연구실 PFML"
-      className={`${className} w-auto ${tone === 'white' ? 'brightness-0 invert opacity-95' : ''}`}
+      width={480}
+      height={208}
+      className={`${className} w-auto max-w-full shrink-0 self-start object-contain ${tone === 'white' ? 'brightness-0 invert opacity-95' : ''}`}
     />
   )
 }
@@ -52,8 +56,8 @@ export function Lab({ className = '', tone = 'navy', logo = false }) {
   const c = tone === 'white' ? 'text-navy-100/80' : 'text-muted'
   if (logo) {
     return (
-      <span className={`flex flex-col gap-2 ${className}`}>
-        <PfmlLogo tone={tone} className="h-10" />
+      <span className={`flex flex-col items-start gap-2 ${className}`}>
+        <PfmlLogo tone={tone} className="h-12" />
         <span className={`text-xs leading-relaxed ${c}`}>서울대학교 농생명공학부 정밀식의약솔루션 연구실</span>
       </span>
     )
