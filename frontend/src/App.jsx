@@ -14,6 +14,7 @@ import StaffLoginPage from './pages/care/StaffLoginPage'
 import CarePage from './pages/care/CarePage'
 import RecordsPage from './pages/care/RecordsPage'
 import SolutionsPage from './pages/care/SolutionsPage'
+import NewsPage from './pages/care/NewsPage'
 import CommunicationPage from './pages/care/CommunicationPage'
 import SettingsPage from './pages/care/SettingsPage'
 import ResidentCarePage from './pages/care/ResidentCarePage'
@@ -61,6 +62,7 @@ export default function App() {
         <Route path="/care" element={<StaffRoute><CarePage /></StaffRoute>} />
         <Route path="/care/records" element={<StaffRoute><RecordsPage /></StaffRoute>} />
         <Route path="/care/solutions" element={<StaffRoute><SolutionsPage /></StaffRoute>} />
+        <Route path="/care/news" element={<StaffRoute><NewsPage /></StaffRoute>} />
         <Route path="/care/connect" element={<StaffRoute><CommunicationPage /></StaffRoute>} />
         <Route path="/care/settings" element={<StaffRoute><SettingsPage /></StaffRoute>} />
         <Route path="/care/residents/:elderlyId" element={<StaffRoute><ResidentCarePage /></StaffRoute>} />

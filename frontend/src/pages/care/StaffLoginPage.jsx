@@ -21,7 +21,8 @@ export default function StaffLoginPage() {
       const { data } = await api.post('/auth/staff-login', { staff_id: staffId.trim(), password })
       setAuth(data.token, {
         role: 'staff', staff_id: data.staff_id, staff_name: data.staff_name,
-        nursing_home_id: data.nursing_home_id, nursing_home_name: data.nursing_home_name,
+        staff_role: data.staff_role, nursing_home_id: data.nursing_home_id,
+        nursing_home_name: data.nursing_home_name,
       })
       navigate('/care')
     } catch (err) {

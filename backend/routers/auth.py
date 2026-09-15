@@ -82,5 +82,5 @@ def staff_login(req: StaffLoginRequest):
                           "staff_role": st.get("role", "staff"), "nursing_home_id": st["nursing_home_id"],
                           "is_admin": False})
     return {"token": token, "staff_id": st["id"], "staff_name": st["name"], "role": "staff",
-            "nursing_home_id": st["nursing_home_id"],
+            "staff_role": st.get("role", "staff"), "nursing_home_id": st["nursing_home_id"],
             "nursing_home_name": nh.data[0]["name"] if nh.data else st["nursing_home_id"]}
