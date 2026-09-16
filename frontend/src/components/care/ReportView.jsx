@@ -223,7 +223,16 @@ function Stars({ value }) {
   )
 }
 
-export default function ReportView({ r }) {
+export default function ReportView({ r: raw }) {
+  // 응답에서 한 덩어리라도 빠지면 화면 전체가 하얗게 죽는다.
+  // 보호자가 링크로 여는 화면이라 특히 위험해서, 없는 부분은 빈 값으로 채워 둔다.
+  const r = {
+    ...raw,
+    resident: raw.resident || {},
+    anthropometry: raw.anthropometry || {},
+    intake: raw.intake || {},
+    statuses: raw.statuses || [],
+  }
   const staff = r.audience === 'staff'
   const res = r.resident
   const sol = r.solution || {}
