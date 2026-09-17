@@ -7,6 +7,7 @@
 """
 from __future__ import annotations
 
+import copy
 from statistics import mean
 
 from .data import fetch_all
@@ -145,13 +146,24 @@ def build_report(sb, home: str, eid: str, audience: str = "guardian",
         "components": [{"label": l, "value": _round(_n(f, k))} for l, k in comps],
         "prev_total": _round(_n(prev, "intake_total")),
         "has_nutrition": _n(f, "has_nutrition") == 1,
-        "log": f.get("meal_log") or [],
+        "log": [],
     }
+
+    # ── 식사 기록 + 섭취 영양소 ──
+    # 예전 평가에는 메뉴명·영양소가 없으므로, 없으면 여기서 즉시 계산해 채운다.
+    meal_log = copy.deepcopy(f.get("meal_log") or [])
+    nsum = f.get("nutrition") if isinstance(f.get("nutrition"), dict) else None
+    if meal_log and (nsum is None or not any(it.get("name") for c in meal_log for it in (c.get("items") or []))):
+        try:
+            meal_log, live = nutri.enrich_meal_log(meal_log, res.get("meal_form"), eid)
+            nsum = nsum or live
+        except Exception:
+            pass
+    intake["log"] = meal_log
     low_meals = [m["label"] for m in intake["meals"] if m["value"] is not None and m["value"] < 70]
     intake["low_meals"] = low_meals
 
     # ── 섭취 영양소 (식단표 × 배식량 × 목측법) ──
-    nsum = f.get("nutrition") if isinstance(f.get("nutrition"), dict) else None
     nutrition_out = None
     if nsum:
         gender = resident.get("gender")

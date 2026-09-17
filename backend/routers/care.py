@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """돌봄 관리 API — 유형·우선순위 평가, 솔루션, 보호자, 알림, 수행 기록 (요양원 담당자 전용)"""
 from typing import Optional
+import copy
 import json
 from datetime import datetime, timezone
 
@@ -335,6 +336,12 @@ def resident_detail(eid: str, user: dict = Depends(require_staff)):
     if hist:
         f = hist[0].get("features") or {}
         nsum = f.get("nutrition") if isinstance(f.get("nutrition"), dict) else None
+        if nsum is None and f.get("meal_log"):
+            # 예전 평가에는 영양소가 없으므로 즉시 계산한다
+            try:
+                _, nsum = engine.nutri.enrich_meal_log(copy.deepcopy(f["meal_log"]), r.get("meal_form"), eid)
+            except Exception:
+                nsum = None
         if nsum:
             gender = "여자" if f.get("female") == 1 else "남자"
             fld = nutri.fields()
