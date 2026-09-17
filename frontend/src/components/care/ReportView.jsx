@@ -381,9 +381,31 @@ function Stars({ value }) {
   )
 }
 
+/* 리포트 탭 (인쇄 시에는 전체가 펼쳐진다) */
+function TabBar({ tabs, active, onChange }) {
+  if (tabs.length < 2) return null
+  return (
+    <div className="sticky top-0 z-20 -mx-1 px-1 py-2 bg-navy-50/80 backdrop-blur print:hidden">
+      <div className="flex gap-1.5 rounded-2xl bg-white ring-1 ring-navy-100 p-1.5 overflow-x-auto">
+        {tabs.map((t) => {
+          const on = t.key === active
+          return (
+            <button key={t.key} type="button" onClick={() => onChange(t.key)}
+              className={`flex-1 min-w-[104px] rounded-xl px-3 py-2 text-center transition ${on ? 'bg-navy-900 text-white shadow-sm' : 'text-navy-900/70 hover:bg-navy-50'}`}>
+              <span className="block text-[13px] font-extrabold tracking-wide">{t.label}</span>
+              <span className={`block text-[10px] ${on ? 'text-navy-100/80' : 'text-muted'}`}>{t.ko}</span>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 export default function ReportView({ r }) {
   const staff = r.audience === 'staff'
   const [pickedMeal, setPickedMeal] = useState(null)
+  const [tab, setTab] = useState('profile')
   const res = r.resident
   const sol = r.solution || {}
   const SCALE_MAX = { 'MNA-SF 0–14': 14, 'K-MMSE-2 0–30': 30, 'K-MBI %': 100, 'GDS-SF 0–15': 15,
@@ -391,6 +413,14 @@ export default function ReportView({ r }) {
   const statuses = (r.statuses || []).map((s) => ({ ...s, label: s.title || s.label, scaleMax: SCALE_MAX[s.scale] }))
   const alerts = (r.statuses || []).filter((s) => s.tone === 'bad').length
   const watch = (r.statuses || []).filter((s) => s.tone === 'warn').length
+
+  const hasHistory = staff && (r.priority || (r.history || []).length > 0)
+  const tabs = [
+    { key: 'profile', label: 'PROFILE', ko: '기본 · 건강' },
+    { key: 'care', label: 'CARE', ko: '식사 · 영양 · 돌봄' },
+    ...(hasHistory ? [{ key: 'history', label: 'HISTORY', ko: '우선순위 · 이력' }] : []),
+  ]
+  const pane = (k) => `space-y-5 ${tab === k ? '' : 'hidden print:block print:space-y-5'}`
 
   return (
     <div className="space-y-5">
@@ -431,6 +461,10 @@ export default function ReportView({ r }) {
         </div>
       </section>
 
+      <TabBar tabs={tabs} active={tab} onChange={(k) => { setTab(k); window.scrollTo({ top: 0, behavior: 'smooth' }) }} />
+
+      {/* ── PROFILE ── */}
+      <div className={pane('profile')}>
       {/* 한눈에 보기 */}
       <Section title="한눈에 보기" sub={staff ? '카드 아래는 사용한 평가 도구와 점수입니다.' : '어르신의 현재 상태를 단계로 정리했습니다.'}>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
@@ -505,7 +539,10 @@ export default function ReportView({ r }) {
             tone={r.intake.band?.tone === 'none' ? null : r.intake.band?.tone} />
         </div>
       </Section>
+      </div>
 
+      {/* ── CARE ── */}
+      <div className={pane('care')}>
       {/* 식사 기록 */}
       <Section no="05" title="실제로 드신 양"
         sub={r.intake.days ? `${r.intake.days}일 동안 끼니마다 남긴 양을 기록해 계산했습니다.` : '식사 기록을 바탕으로 계산했습니다.'}>
@@ -626,6 +663,10 @@ export default function ReportView({ r }) {
         {!sol.actions?.length && !sol.guardian_message && <p className="text-sm text-muted">아직 만들어진 돌봄 계획이 없습니다.</p>}
       </Section>
 
+      </div>
+
+      {/* ── HISTORY ── */}
+      <div className={hasHistory ? pane('history') : 'hidden'}>
       {/* 담당자 전용 */}
       {staff && r.priority?.factors?.length > 0 && (
         <Section title="돌봄 우선순위 근거" sub="유형 위험도, 현재 상태, 직전 평가 대비 변화를 더한 값입니다.">
@@ -664,6 +705,8 @@ export default function ReportView({ r }) {
           </div>
         </Section>
       )}
+
+      </div>
 
       {/* 안내 */}
       <section className="rounded-2xl border border-navy-100 bg-navy-50/40 p-6">
