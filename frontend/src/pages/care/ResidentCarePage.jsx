@@ -3,6 +3,9 @@ import { Link, useParams } from 'react-router-dom'
 import api from '../../lib/api'
 import CareLayout from '../../components/care/CareLayout'
 import { Card, LevelPill, ScoreBar, SOLUTION_STATUS, TRANSITION, TypeBadge, errMsg, fmtDate } from '../../components/care/CareUI'
+import Avatar from '../../components/care/Avatar'
+import ResidentProfileTab from './ResidentProfileTab'
+import ResidentHistoryTab from './ResidentHistoryTab'
 
 const INDICATORS = [
   ['mna_sf', 'MNA-SF', '점 / 14', (v) => (v <= 7 ? 'bad' : v <= 11 ? 'warn' : 'ok')],
@@ -82,6 +85,29 @@ function SurveyCheck({ elderlyId }) {
   )
 }
 
+const RESIDENT_TABS = [
+  { key: 'profile', label: 'PROFILE', ko: '어르신 정보' },
+  { key: 'care', label: 'CARE', ko: '평가 · 솔루션' },
+  { key: 'history', label: 'HISTORY', ko: '타임라인' },
+]
+
+function ResidentTabs({ active, onChange }) {
+  return (
+    <div className="mb-5 flex gap-1.5 rounded-2xl bg-white ring-1 ring-gray-200 p-1.5">
+      {RESIDENT_TABS.map((t) => {
+        const on = t.key === active
+        return (
+          <button key={t.key} type="button" onClick={() => onChange(t.key)}
+            className={`flex-1 rounded-xl px-3 py-2 text-center transition ${on ? 'bg-navy-900 text-white shadow-sm' : 'text-navy-900/70 hover:bg-navy-50'}`}>
+            <span className="block text-[13px] font-extrabold tracking-wide">{t.label}</span>
+            <span className={`block text-[10px] ${on ? 'text-navy-100/80' : 'text-gray-400'}`}>{t.ko}</span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 function NutritionCard({ n }) {
   if (!n?.targets?.length) return null
   const tone = (b) => (b === 'bad' ? 'bg-rose-500' : b === 'warn' ? 'bg-amber-500' : 'bg-emerald-500')
@@ -157,6 +183,7 @@ export default function ResidentCarePage() {
   const [d, setD] = useState(null)
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState('')
+  const [tab, setTab] = useState('profile')
   const [provider, setProvider] = useState('')
   const [draft, setDraft] = useState(null)
   const [msg, setMsg] = useState(null)
@@ -254,7 +281,20 @@ export default function ResidentCarePage() {
         <p className={`mb-4 text-sm rounded-xl px-4 py-3 ${msg.kind === 'error' ? 'bg-red-50 text-red-700' : 'bg-navy-50 text-navy-800'}`}>{msg.text}</p>
       )}
 
-      <div className="grid lg:grid-cols-5 gap-5">
+      <div className="mb-4 flex items-center gap-3">
+        <Avatar name={d.resident.display_name} id={elderlyId} size="md" />
+        <div className="min-w-0">
+          <p className="text-base font-extrabold text-gray-900 leading-tight">{d.resident.display_name}</p>
+          <p className="text-xs text-gray-400">{elderlyId}{a ? ` · 최근 평가 ${fmtDate(a.created_at)}` : ''}</p>
+        </div>
+      </div>
+
+      <ResidentTabs active={tab} onChange={setTab} />
+
+      {tab === 'profile' && <ResidentProfileTab elderlyId={elderlyId} residentName={d.resident.display_name} />}
+      {tab === 'history' && <ResidentHistoryTab elderlyId={elderlyId} />}
+
+      <div className={`grid lg:grid-cols-5 gap-5 ${tab === 'care' ? '' : 'hidden'}`}>
         {/* 왼쪽: 평가 */}
         <div className="lg:col-span-2 space-y-5">
           <SurveyCheck elderlyId={elderlyId} />
