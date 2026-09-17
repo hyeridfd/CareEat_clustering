@@ -16,6 +16,7 @@ import numpy as np
 import pandas as pd
 
 from . import bluefood_cluster as bc
+from . import nutrition as nutri
 
 MODEL_DIR = Path(os.getenv("CARE_MODEL_DIR", Path(__file__).resolve().parent.parent / "models"))
 BORDERLINE_MAX = float(os.getenv("CARE_BORDERLINE_MAX", "0.15"))
@@ -46,6 +47,8 @@ KEY_FEATURES = bc.cluster_vars() + ["age", "female", "care_grade", "education_le
 EXTRA_FEATURES = ["diseases", "medications", "improvement_text", "meal_form"]
 # 리포트 식단표용 (일자×끼니 기록)
 LOG_FEATURES = ["meal_log"]
+# 리포트·솔루션용 영양소 요약 (dict)
+DICT_FEATURES = ["nutrition"]
 
 
 def _frame(rows, cols):
@@ -56,8 +59,11 @@ def _frame(rows, cols):
     return df
 
 
-def build_features(basic_rows, nutrition_rows, satisfaction_rows):
-    """Supabase 행(dict 리스트) 3종 → 대상자별 특징 DataFrame (index = 'NH|ID')."""
+def build_features(basic_rows, nutrition_rows, satisfaction_rows, meal_forms=None):
+    """Supabase 행(dict 리스트) 3종 → 대상자별 특징 DataFrame (index = 'NH|ID').
+
+    meal_forms: {elderly_id: 식사형태} — 섭취 영양소 계산에 쓴다 (없으면 '일반밥/일반찬').
+    """
     b = _frame(basic_rows, BASIC_COLS)
     if b.empty:
         return pd.DataFrame()
@@ -80,7 +86,25 @@ def build_features(basic_rows, nutrition_rows, satisfaction_rows):
             ts.append(tt.groupby("key")["_ts"].max())
     latest = pd.concat(ts, axis=1).max(axis=1) if ts else pd.Series(dtype="datetime64[ns, UTC]")
     df["survey_updated_at"] = latest.reindex(df.index)
+    _attach_nutrition(df, meal_forms or {})
     return df
+
+
+def _attach_nutrition(df, meal_forms):
+    """식단표·배식량·목측법으로 끼니별 섭취 영양소를 계산해 meal_log 와 nutrition 에 담는다."""
+    logs, summaries = [], []
+    for _, row in df.iterrows():
+        eid = row.get("elderly_id")
+        log = row.get("meal_log")
+        form = meal_forms.get(eid) or "일반밥/일반찬"
+        try:
+            log, summary = nutri.enrich_meal_log(log, form, eid)
+        except Exception:
+            summary = None
+        logs.append(log if isinstance(log, list) else None)
+        summaries.append(summary)
+    df["meal_log"] = pd.Series(logs, index=df.index)
+    df["nutrition"] = pd.Series(summaries, index=df.index)
 
 
 # ─────────────────────────── 모델 로드 ───────────────────────────
@@ -200,7 +224,7 @@ def classify_transition(model: TypeModel, current_code: str, prev: dict | None) 
 
 
 # 저장된 평가에 들어 있어야 하는 지표 키 (코드가 늘어나면 과거 평가는 '오래된 스키마'로 판정)
-FEATURE_KEYS = tuple(LOG_FEATURES + EXTRA_FEATURES + ["survey_start"] + KEY_FEATURES)
+FEATURE_KEYS = tuple(DICT_FEATURES + LOG_FEATURES + EXTRA_FEATURES + ["survey_start"] + KEY_FEATURES)
 
 
 def features_stale(prev_features) -> bool:
@@ -212,6 +236,9 @@ def features_stale(prev_features) -> bool:
 
 def features_record(row: pd.Series) -> dict:
     rec = {}
+    for v in DICT_FEATURES:
+        x = row.get(v)
+        rec[v] = x if isinstance(x, dict) else None
     for v in LOG_FEATURES:
         x = row.get(v)
         rec[v] = x if isinstance(x, list) else None

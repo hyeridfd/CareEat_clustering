@@ -8,7 +8,7 @@ import numpy as np
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from care import engine, priority as prio, solution as sol, notify
+from care import engine, priority as prio, solution as sol, notify, nutrition as nutri
 from care.report import build_report
 from care.data import fetch_all, fetch_surveys
 from dependencies import create_token, get_supabase, require_staff, get_kst_now
@@ -267,7 +267,8 @@ def assess(req: AssessRequest, user: dict = Depends(require_staff)):
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"유형 모델을 불러올 수 없습니다: {e}")
     b, n, s = fetch_surveys(sb, home, req.elderly_ids)
-    df = engine.build_features(b, n, s)
+    forms = {r["id"]: r.get("meal_form") for r in fetch_all(sb, "elderly_residents", eq={"nursing_home_id": home})}
+    df = engine.build_features(b, n, s, meal_forms=forms)
     if df.empty:
         raise HTTPException(status_code=400, detail="평가할 기초조사 데이터가 없습니다.")
     res = model.assign(df)
@@ -330,9 +331,21 @@ def resident_detail(eid: str, user: dict = Depends(require_staff)):
             type_info = engine.load_model(hist[0]["model_version"]).type_info(hist[0]["type_code"])
         except Exception:
             type_info = {"code": hist[0]["type_code"], "name": hist[0]["type_name"]}
+    nutrition = None
+    if hist:
+        f = hist[0].get("features") or {}
+        nsum = f.get("nutrition") if isinstance(f.get("nutrition"), dict) else None
+        if nsum:
+            gender = "여자" if f.get("female") == 1 else "남자"
+            fld = nutri.fields()
+            keys = ["energy", "protein", "fiber", "ca", "na", "k"]
+            nutrition = {"avg_day": nsum.get("avg_day") or {}, "n_days": nsum.get("n_days"),
+                         "meals": nsum.get("meals") or [], "days": nsum.get("days") or [],
+                         "fields": [{"key": k, **fld[k]} for k in keys if k in fld],
+                         "targets": nutri.compare_targets(nsum.get("avg_day"), gender)}
     return {"resident": {"elderly_id": r["id"], "display_name": _display_name(r)},
             "type_info": type_info, "assessments": hist, "solutions": sols, "guardians": gs,
-            "notifications": notes, "actions": acts}
+            "notifications": notes, "actions": acts, "nutrition": nutrition}
 
 
 # ─────────────────────── 설문 데이터 점검 ───────────────────────

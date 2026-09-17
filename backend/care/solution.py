@@ -18,6 +18,7 @@ from pathlib import Path
 import httpx
 
 from . import care_rules
+from . import nutrition as nutri
 from .priority import LEVEL_LABEL
 
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
@@ -28,23 +29,25 @@ log = logging.getLogger("uvicorn.error")
 
 
 def _key(name: str):
-    """backend/.env 를 호출할 때마다 다시 읽어 우선 사용, 없으면 시스템 환경변수."""
-    v = None
-    if ENV_FILE.exists():
+    """환경변수에 없으면 backend/.env 를 다시 읽어 확인 (서버 재시작 없이 .env 수정 반영)."""
+    v = os.getenv(name)
+    if not v and ENV_FILE.exists():
         try:
             from dotenv import dotenv_values
             v = (dotenv_values(ENV_FILE).get(name) or "").strip() or None
+            if v:
+                os.environ[name] = v
         except Exception:
-            v = None
-    return v or os.getenv(name) or None
+            pass
+    return v
 
 
 def llm_status():
-    return {"default_provider": _key("LLM_PROVIDER") or "none", "env_file": str(ENV_FILE),
+    return {"default_provider": os.getenv("LLM_PROVIDER", "none"), "env_file": str(ENV_FILE),
             "env_file_exists": ENV_FILE.exists(), "openai_key": bool(_key("OPENAI_API_KEY")),
             "anthropic_key": bool(_key("ANTHROPIC_API_KEY")),
-            "openai_model": (_key("OPENAI_MODEL") or OPENAI_MODEL),
-            "anthropic_model": (_key("ANTHROPIC_MODEL") or ANTHROPIC_MODEL), "pid": os.getpid()}
+            "openai_model": os.getenv("OPENAI_MODEL", OPENAI_MODEL),
+            "anthropic_model": os.getenv("ANTHROPIC_MODEL", ANTHROPIC_MODEL), "pid": os.getpid()}
 
 BANNED = [
     (re.compile(r"\d+(\.\d+)?\s?(mg|㎎|mcg|IU|iu|단위|g\s?/\s?회|mL|ml|㎖|정|알|캡슐)"), "용량 표현"),
@@ -71,6 +74,7 @@ SYSTEM_PROMPT = """당신은 요양원 식사·영양 돌봄 코디네이터를 
 1. 조치는 반드시 후보 조치 목록 안에서만 고르고, 각 조치에 해당 rule_id 를 적습니다. 목록에 없는 새로운 의학적 조치를 만들지 않습니다.
 2. 약 이름·용량, 진단, 처방, 치료 효과를 단정하는 표현을 쓰지 않습니다. 의료적 판단이 필요하면 '의료진과 상의'로 안내합니다.
 3. 후보 문장을 어르신의 지표·선호에 맞게 구체화하고, 중요도 순으로 정렬합니다(최대 6개).
+3-1. '실제 섭취 영양소(하루 평균)'가 주어지면 그 수치를 근거로 씁니다. 기준 대비 80% 미만인 영양소는 무엇을 늘릴지, 나트륨이 기준을 넘으면 무엇을 줄일지 식사 지침에 구체적으로 적습니다. 특정 끼니가 유난히 적으면 그 끼니를 짚습니다. 영양제·보충제 제품명이나 용량은 쓰지 않습니다.
 4. guardian_message 는 보호자가 읽는 3~5문장의 쉬운 존댓말입니다. 점수·척도명(MNA, GDS 등)·유형 코드를 쓰지 않고, 불안을 주지 않되 사실대로 씁니다. 350자 이내.
 5. 반드시 아래 JSON 한 개만 출력합니다.
 
@@ -80,6 +84,41 @@ SYSTEM_PROMPT = """당신은 요양원 식사·영양 돌봄 코디네이터를 
  "monitoring": ["관찰·재평가 항목", "..."],
  "cautions": ["담당자가 주의할 점"],
  "guardian_message": "보호자 안내 문장"}"""
+
+
+
+def nutrition_summary(features: dict):
+    """features 의 섭취 영양소 요약 → (하루 평균, 기준 대비 %, 가장 낮은 끼니)"""
+    n = features.get("nutrition")
+    if not isinstance(n, dict) or not n.get("avg_day"):
+        return None, {}, None
+    gender = "여자" if features.get("female") == 1 else "남자"
+    pct = {t["key"]: t["pct"] for t in nutri.compare_targets(n.get("avg_day"), gender)}
+    meals = [m for m in (n.get("meals") or []) if m.get("energy") is not None]
+    low = None
+    if len(meals) >= 2:
+        lo = min(meals, key=lambda m: m["energy"])
+        avg = sum(m["energy"] for m in meals) / len(meals)
+        if avg and lo["energy"] < avg * 0.7:
+            low = lo["meal"]
+    return n, pct, low
+
+
+def nutrition_ctx(features: dict):
+    n, pct, low = nutrition_summary(features)
+    if not n:
+        return None
+    fld = nutri.fields()
+    keys = ["energy", "protein", "fiber", "ca", "na", "k", "fe", "vd"]
+    avg = n.get("avg_day") or {}
+    out = {fld[k]["label"]: f"{avg[k]} {fld[k]['unit']}" + (f" (기준 대비 {pct[k]}%)" if k in pct else "")
+           for k in keys if k in avg and k in fld}
+    if n.get("meals"):
+        out["끼니별 에너지(kcal)"] = {m["meal"]: m.get("energy") for m in n["meals"]}
+    if low:
+        out["특히 적게 드시는 끼니"] = low
+    out["_계산"] = "식단표 1인 레시피 × 실제 배식량 × 목측법 섭취율. 간식 제외."
+    return out
 
 
 def build_context(features: dict, type_info: dict, priority: dict, candidates: list, transition: dict):
@@ -92,6 +131,7 @@ def build_context(features: dict, type_info: dict, priority: dict, candidates: l
                         for x in priority["factors"]]},
         "유형 변화": transition.get("kind"),
         "주요 지표": ind,
+        "실제 섭취 영양소(하루 평균)": nutrition_ctx(features),
         "급식 개선 의견": (features.get("improvement_text") or "")[:200],
         "후보 조치 목록": [{"rule_id": c["id"], "category": c["category"], "staff": c["staff"], "meal": c["meal"],
                        "monitor": c["monitor"]} for c in candidates],
@@ -134,13 +174,13 @@ def call_openai(ctx: dict) -> tuple[dict, str]:
         raise RuntimeError(f"OPENAI_API_KEY 미설정 (확인한 파일: {ENV_FILE})")
     r = httpx.post("https://api.openai.com/v1/chat/completions",
                    headers={"Authorization": f"Bearer {key}"},
-                   json={"model": (_key("OPENAI_MODEL") or OPENAI_MODEL), "temperature": 0.2,
+                   json={"model": os.getenv("OPENAI_MODEL", OPENAI_MODEL), "temperature": 0.2,
                          "response_format": {"type": "json_object"},
                          "messages": [{"role": "system", "content": SYSTEM_PROMPT},
                                       {"role": "user", "content": json.dumps(ctx, ensure_ascii=False)}]},
                    timeout=TIMEOUT)
     r.raise_for_status()
-    return _extract_json(r.json()["choices"][0]["message"]["content"]), f"openai:{(_key('OPENAI_MODEL') or OPENAI_MODEL)}"
+    return _extract_json(r.json()["choices"][0]["message"]["content"]), f"openai:{os.getenv('OPENAI_MODEL', OPENAI_MODEL)}"
 
 
 def call_anthropic(ctx: dict) -> tuple[dict, str]:
@@ -149,13 +189,13 @@ def call_anthropic(ctx: dict) -> tuple[dict, str]:
         raise RuntimeError(f"ANTHROPIC_API_KEY 미설정 (확인한 파일: {ENV_FILE})")
     r = httpx.post("https://api.anthropic.com/v1/messages",
                    headers={"x-api-key": key, "anthropic-version": "2023-06-01"},
-                   json={"model": (_key("ANTHROPIC_MODEL") or ANTHROPIC_MODEL), "max_tokens": 2000, "temperature": 0.2,
+                   json={"model": os.getenv("ANTHROPIC_MODEL", ANTHROPIC_MODEL), "max_tokens": 2000, "temperature": 0.2,
                          "system": SYSTEM_PROMPT,
                          "messages": [{"role": "user", "content": json.dumps(ctx, ensure_ascii=False)}]},
                    timeout=TIMEOUT)
     r.raise_for_status()
     text = "".join(b.get("text", "") for b in r.json().get("content", []) if b.get("type") == "text")
-    return _extract_json(text), f"anthropic:{(_key('ANTHROPIC_MODEL') or ANTHROPIC_MODEL)}"
+    return _extract_json(text), f"anthropic:{os.getenv('ANTHROPIC_MODEL', ANTHROPIC_MODEL)}"
 
 
 # ─────────────────────────── 가드레일 ───────────────────────────
@@ -213,11 +253,12 @@ def validate(out: dict, candidates: list, fallback: dict):
 
 
 def generate(features, type_info, priority, transition, is_borderline, provider: str | None = None):
+    _n, npct, low_meal = nutrition_summary(features)
     ctx_rules = {"factor_codes": {x["code"] for x in priority["factors"]}, "is_borderline": is_borderline,
-                 "priority_level": priority["level"]}
+                 "priority_level": priority["level"], "nutrition_pct": npct, "low_meal": low_meal}
     candidates = care_rules.select(features, ctx_rules)
     fallback = rules_solution(type_info, priority, candidates)
-    provider = (provider or _key("LLM_PROVIDER") or "none").lower()
+    provider = (provider or os.getenv("LLM_PROVIDER", "none")).lower()
     if provider in ("", "none", "rules"):
         return fallback, "rules", [], candidates
     ctx = build_context(features, type_info, priority, candidates, transition)

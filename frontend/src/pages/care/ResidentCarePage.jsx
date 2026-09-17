@@ -3,8 +3,6 @@ import { Link, useParams } from 'react-router-dom'
 import api from '../../lib/api'
 import CareLayout from '../../components/care/CareLayout'
 import { Card, LevelPill, ScoreBar, SOLUTION_STATUS, TRANSITION, TypeBadge, errMsg, fmtDate } from '../../components/care/CareUI'
-import ResidentProfileTab from './ResidentProfileTab'
-import ResidentHistoryTab from './ResidentHistoryTab'
 
 const INDICATORS = [
   ['mna_sf', 'MNA-SF', '점 / 14', (v) => (v <= 7 ? 'bad' : v <= 11 ? 'warn' : 'ok')],
@@ -18,7 +16,6 @@ const INDICATORS = [
 ]
 const TONE = { bad: 'text-rose-600', warn: 'text-amber-600', ok: 'text-gray-900' }
 const TEXTURE = ['일반식', '다진식', '갈은식', '유동식']
-const TABS = [['profile', 'PROFILE'], ['care', 'CARE'], ['history', 'HISTORY']]
 const PROVIDERS = [['', '기본 설정'], ['openai', 'OpenAI'], ['anthropic', 'Claude'], ['rules', '규칙 기반']]
 
 function Indicator({ f, k, label, unit, tone, digits = 0 }) {
@@ -85,6 +82,46 @@ function SurveyCheck({ elderlyId }) {
   )
 }
 
+function NutritionCard({ n }) {
+  if (!n?.targets?.length) return null
+  const tone = (b) => (b === 'bad' ? 'bg-rose-500' : b === 'warn' ? 'bg-amber-500' : 'bg-emerald-500')
+  const txt = (b) => (b === 'bad' ? 'text-rose-600' : b === 'warn' ? 'text-amber-700' : 'text-emerald-700')
+  const show = n.targets.filter((t) => ['energy', 'protein', 'fiber', 'ca', 'na', 'k'].includes(t.key))
+  return (
+    <Card title="섭취 영양소" right={<span className="text-xs text-gray-400">하루 평균 · {n.n_days || 0}일</span>}>
+      <div className="space-y-2.5">
+        {show.map((t) => (
+          <div key={t.key} className="flex items-center gap-2.5">
+            <span className="w-16 shrink-0 text-xs text-gray-600">{t.label}</span>
+            <div className="relative h-2.5 flex-1 min-w-0 rounded-full bg-gray-100">
+              <div className={`absolute inset-y-0 left-0 rounded-full ${tone(t.band)}`}
+                style={{ width: `${Math.max(2, Math.min(100, t.pct))}%` }} />
+            </div>
+            <span className="w-28 shrink-0 text-right text-[11px] tabular-nums text-gray-500">
+              <b className="text-gray-900">{t.value}</b> / {t.target} {t.unit}
+            </span>
+            <span className={`w-10 shrink-0 text-right text-xs font-bold tabular-nums ${txt(t.band)}`}>{t.pct}%</span>
+          </div>
+        ))}
+      </div>
+      <p className="mt-3 text-[11px] text-gray-400">
+        식단표 · 배식량 · 목측법 잔반으로 계산한 실제 섭취량입니다. 기준은 2020 한국인 영양소 섭취기준(65세 이상), 나트륨은 이하 관리 기준입니다.
+      </p>
+      {n.meals?.length > 0 && (
+        <div className="mt-4 grid grid-cols-3 gap-2">
+          {n.meals.map((m) => (
+            <div key={m.meal} className="rounded-xl bg-slate-50 px-3 py-2 text-center">
+              <p className="text-[11px] text-gray-500">{m.meal}</p>
+              <p className="text-sm font-bold tabular-nums text-gray-900">{Math.round(m.energy || 0)}<span className="text-[10px] font-normal text-gray-400"> kcal</span></p>
+              <p className="text-[10px] text-gray-500 tabular-nums">단백질 {Number(m.protein || 0).toFixed(1)}g</p>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  )
+}
+
 function ListEditor({ items, onChange, placeholder }) {
   return (
     <div className="space-y-2">
@@ -118,7 +155,6 @@ function KakaoPreview({ r }) {
 export default function ResidentCarePage() {
   const { elderlyId } = useParams()
   const [d, setD] = useState(null)
-  const [tab, setTab] = useState('profile')
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState('')
   const [provider, setProvider] = useState('')
@@ -214,23 +250,6 @@ export default function ResidentCarePage() {
         </div>
       </div>
 
-      <div className="flex gap-1 mb-5 border-b border-navy-100">
-        {TABS.map(([k, label]) => (
-          <button key={k} onClick={() => setTab(k)}
-            className={`px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px transition ${
-              tab === k ? 'border-navy-700 text-navy-900' : 'border-transparent text-muted hover:text-navy-700'}`}>
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {tab === 'profile' && (
-        <ResidentProfileTab elderlyId={elderlyId} residentName={d.resident.display_name} />
-      )}
-      {tab === 'history' && <ResidentHistoryTab elderlyId={elderlyId} />}
-
-      {tab === 'care' && (<>
-
       {msg && (
         <p className={`mb-4 text-sm rounded-xl px-4 py-3 ${msg.kind === 'error' ? 'bg-red-50 text-red-700' : 'bg-navy-50 text-navy-800'}`}>{msg.text}</p>
       )}
@@ -293,6 +312,8 @@ export default function ResidentCarePage() {
                 </div>
               </Card>
 
+              <NutritionCard n={d.nutrition} />
+
               <Card title="평가 이력">
                 <table className="w-full text-sm">
                   <tbody>
@@ -301,6 +322,9 @@ export default function ResidentCarePage() {
                         <td className="py-2 text-xs text-gray-500">{fmtDate(h.created_at)}</td>
                         <td className="py-2"><TypeBadge code={h.type_code} /></td>
                         <td className="py-2 text-right tabular-nums font-semibold">{Math.round(h.priority_score)}</td>
+                        <td className="py-2 pl-2 text-right text-[11px] tabular-nums text-gray-500">
+                          {h.features?.nutrition?.avg_day?.energy != null ? `${Math.round(h.features.nutrition.avg_day.energy)}kcal` : ''}
+                        </td>
                         <td className="py-2 pl-2 text-right text-[11px] text-gray-400">{TRANSITION[h.transition?.kind]?.label || ''}</td>
                       </tr>
                     ))}
@@ -460,8 +484,6 @@ export default function ResidentCarePage() {
           </Card>
         </div>
       </div>
-
-      </>)}
     </CareLayout>
   )
 }

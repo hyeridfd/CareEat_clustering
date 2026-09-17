@@ -119,15 +119,17 @@ def parse_json_list(x):
 
 
 def parse_json_obj(x):
-    if isinstance(x, dict):
-        return x
-    if not isinstance(x, str) or not x.strip():
-        return {}
-    try:
-        v = json.loads(x)
-        return v if isinstance(v, dict) else {}
-    except json.JSONDecodeError:
-        return {}
+    """dict, JSON 문자열, 문자열로 한 번 더 감싸인 JSON 모두 받아 dict 로 돌려준다."""
+    for _ in range(3):
+        if isinstance(x, dict):
+            return x
+        if not isinstance(x, str) or not x.strip():
+            return {}
+        try:
+            x = json.loads(x)
+        except json.JSONDecodeError:
+            return {}
+    return x if isinstance(x, dict) else {}
 
 
 def to_bool(x):

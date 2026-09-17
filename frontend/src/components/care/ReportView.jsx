@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { PfmlLogo } from '../brand/Brand'
 
 // 유형 색 (대비 검증 통과 팔레트)
@@ -100,17 +101,21 @@ function CompareRow({ label, value, avg, min = 0, max = 100, unit = '' }) {
 
 /* 세로 막대 (px 높이 고정) */
 function RateBars({ items, height = 132 }) {
-  const shown = items.filter((x) => x.value != null)
-  if (shown.length === 0) return <p className="text-sm text-muted py-6">기록된 식사 데이터가 없습니다.</p>
+  const list = items || []
+  if (!list.length || list.every((x) => x.value == null)) return <p className="text-sm text-muted py-6">기록된 식사 데이터가 없습니다.</p>
   return (
     <div className="flex items-end gap-2.5" style={{ height: height + 46 }}>
-      {shown.map((x) => {
-        const t = rateTone(x.value)
+      {list.map((x) => {
+        const miss = x.value == null
         return (
           <div key={x.label} className="flex-1 flex flex-col items-center justify-end gap-1.5 min-w-0">
-            <span className={`text-[11px] font-extrabold tabular-nums ${x.value < 50 ? 'text-rose-600' : x.value < 75 ? 'text-amber-700' : 'text-navy-900'}`}>{x.value}%</span>
-            <div className="w-full rounded-t-[4px]" style={{ height: `${Math.max(5, (x.value / 100) * height)}px`, background: x.value < 50 ? '#e11d48' : x.value < 75 ? '#d97706' : '#1151b8' }} />
-            <span className="text-[11px] text-muted truncate w-full text-center">{x.label}</span>
+            <span className={`text-[11px] font-extrabold tabular-nums ${miss ? 'text-slate-300' : x.value < 50 ? 'text-rose-600' : x.value < 75 ? 'text-amber-700' : 'text-navy-900'}`}>
+              {miss ? '–' : `${x.value}%`}
+            </span>
+            <div className="w-full max-w-[72px] rounded-t-[4px]"
+              style={{ height: `${miss ? 5 : Math.max(5, (x.value / 100) * height)}px`,
+                background: miss ? '#e2e8f0' : x.value < 50 ? '#e11d48' : x.value < 75 ? '#d97706' : '#1151b8' }} />
+            <span className={`text-[11px] truncate w-full text-center ${miss ? 'text-slate-300' : 'text-muted'}`}>{x.label}</span>
           </div>
         )
       })}
@@ -118,8 +123,8 @@ function RateBars({ items, height = 132 }) {
   )
 }
 
-/* 식사 기록표: 일자 × 끼니 */
-function MealTable({ log }) {
+/* 식사 기록표: 일자 × 끼니 (칸을 누르면 그 끼니 메뉴와 영양소가 열린다) */
+function MealTable({ log, selected, onSelect }) {
   if (!log?.length) {
     return (
       <p className="text-sm leading-6 text-muted">
@@ -129,6 +134,7 @@ function MealTable({ log }) {
   }
   const days = [...new Set(log.map((x) => x.day))].sort((a, b) => a - b)
   const cell = (d, m) => log.find((x) => x.day === d && x.meal === m)
+  const isOn = (c) => selected && selected.day === c.day && selected.meal === c.meal
   return (
     <div className="overflow-x-auto -mx-2 px-2">
       <table className="w-full min-w-[560px] border-separate" style={{ borderSpacing: '6px' }}>
@@ -146,17 +152,23 @@ function MealTable({ log }) {
                 const c = cell(d, m)
                 if (!c) return <td key={m} className="rounded-xl bg-slate-50 text-center text-[11px] text-slate-300 py-3">–</td>
                 const t = rateTone(c.rate)
+                const on = isOn(c)
                 return (
-                  <td key={m} className={`rounded-xl ring-1 px-2 py-2.5 text-center align-top ${t.chip}`}
-                    title={c.items.map((i) => `${i.name || i.slot} ${i.rate}%`).join('\n')}>
-                    <p className="text-sm font-extrabold tabular-nums leading-none">{c.rate}%</p>
-                    <p className="mt-1 text-[10px] opacity-70">{t.word}</p>
-                    <div className="mt-1.5 flex flex-wrap justify-center gap-0.5">
-                      {c.items.slice(0, 6).map((i, k) => (
-                        <span key={k} className="w-1.5 h-1.5 rounded-full"
-                          style={{ background: i.rate >= 75 ? '#1151b8' : i.rate >= 50 ? '#d97706' : '#e11d48', opacity: 0.85 }} />
-                      ))}
-                    </div>
+                  <td key={m} className="p-0 align-top">
+                    <button type="button" onClick={() => onSelect && onSelect(on ? null : c)}
+                      className={`w-full rounded-xl ring-1 px-2 py-2.5 text-center transition ${t.chip} ${on ? 'ring-2 ring-navy-600 shadow-sm' : 'hover:brightness-95'}`}>
+                      <p className="text-sm font-extrabold tabular-nums leading-none">{c.rate}%</p>
+                      <p className="mt-1 text-[10px] opacity-70">{t.word}</p>
+                      {c.nut?.energy != null && (
+                        <p className="mt-1 text-[10px] font-semibold tabular-nums opacity-80">{Math.round(c.nut.energy)} kcal</p>
+                      )}
+                      <div className="mt-1.5 flex flex-wrap justify-center gap-0.5">
+                        {c.items.slice(0, 6).map((i, k) => (
+                          <span key={k} className="w-1.5 h-1.5 rounded-full"
+                            style={{ background: i.rate >= 75 ? '#1151b8' : i.rate >= 50 ? '#d97706' : '#e11d48', opacity: 0.85 }} />
+                        ))}
+                      </div>
+                    </button>
                   </td>
                 )
               })}
@@ -168,8 +180,154 @@ function MealTable({ log }) {
         <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-emerald-400" /> 75% 이상</span>
         <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-amber-400" /> 50–75%</span>
         <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-rose-400" /> 50% 미만</span>
-        <span>· 점 하나가 반찬 한 가지입니다. 칸에 마우스를 올리면 자세히 보입니다.</span>
+        <span>· 점 하나가 반찬 한 가지입니다. 칸을 누르면 그 끼니 메뉴와 영양소가 열립니다.</span>
       </div>
+    </div>
+  )
+}
+
+/* 선택한 끼니의 메뉴와 섭취 영양소 */
+function MealDetail({ cell }) {
+  if (!cell) {
+    return (
+      <p className="mt-4 text-xs text-muted rounded-xl bg-slate-50 px-4 py-3">
+        위 표에서 칸을 누르면 그 끼니에 무엇이 나왔고 얼마나 드셨는지, 영양소가 얼마나 들어갔는지 볼 수 있습니다.
+      </p>
+    )
+  }
+  const n = cell.nut || {}
+  const sums = [['에너지', n.energy, 'kcal', 0], ['단백질', n.protein, 'g', 1], ['탄수화물', n.carb, 'g', 1],
+                ['지방', n.fat, 'g', 1], ['식이섬유', n.fiber, 'g', 1], ['나트륨', n.na, 'mg', 0],
+                ['칼슘', n.ca, 'mg', 0]].filter((x) => x[1] != null)
+  return (
+    <div className="mt-4 rounded-2xl ring-1 ring-navy-100 bg-white p-4 md:p-5">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <p className="text-sm font-extrabold text-navy-900">{cell.day}일차 {MEAL_LABEL[cell.meal]} 식단</p>
+        <p className="text-xs text-muted">이 끼니 섭취율 <b className="text-navy-900">{cell.rate}%</b></p>
+      </div>
+      <div className="mt-3 overflow-x-auto -mx-1 px-1">
+        <table className="w-full min-w-[420px] text-sm">
+          <thead>
+            <tr className="text-left text-[11px] text-muted border-b border-navy-100">
+              <th className="py-2">구분</th><th className="py-2">메뉴</th>
+              <th className="py-2 text-right">배식량</th><th className="py-2 text-right">드신 비율</th>
+              <th className="py-2 text-right">에너지</th><th className="py-2 text-right">단백질</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(cell.items || []).map((it, i) => (
+              <tr key={i} className="border-b border-navy-50 last:border-0">
+                <td className="py-2 text-xs text-muted whitespace-nowrap">{it.slot}</td>
+                <td className="py-2 font-semibold text-navy-900">{it.name || '—'}</td>
+                <td className="py-2 text-right tabular-nums text-gray-600">{it.g} g</td>
+                <td className={`py-2 text-right tabular-nums font-semibold ${it.rate >= 75 ? 'text-navy-900' : it.rate >= 50 ? 'text-amber-700' : 'text-rose-600'}`}>{it.rate}%</td>
+                <td className="py-2 text-right tabular-nums text-gray-600">{it.nut?.energy != null ? `${Math.round(it.nut.energy)}` : '–'}</td>
+                <td className="py-2 text-right tabular-nums text-gray-600">{it.nut?.protein != null ? it.nut.protein.toFixed(1) : '–'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {sums.length > 0 && (
+        <div className="mt-4 grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+          {sums.map(([l, v, u, d]) => (
+            <div key={l} className="rounded-xl bg-navy-50/70 px-3 py-2">
+              <p className="text-[10px] text-muted">{l}</p>
+              <p className="text-sm font-extrabold tabular-nums text-navy-900">{Number(v).toFixed(d)}<span className="ml-0.5 text-[10px] font-normal text-muted">{u}</span></p>
+            </div>
+          ))}
+        </div>
+      )}
+      <p className="mt-3 text-[11px] text-muted">식단표의 1인 레시피를 배식량과 남긴 양(목측법)으로 환산한 값입니다. 간식은 성분 자료가 없어 빠져 있습니다.</p>
+    </div>
+  )
+}
+
+/* 섭취 영양소: 1일 평균 · 권장 대비 · 끼니별 · 일자별 */
+function NutritionBlock({ n, staff }) {
+  const fields = n.fields || []
+  const fmt = (v, f) => (v == null ? '–' : Number(v).toFixed(f?.digits ?? 1))
+  return (
+    <>
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        {fields.slice(0, 4).map((f) => (
+          <div key={f.key} className="rounded-2xl bg-navy-50/70 px-4 py-3">
+            <p className="text-[11px] text-muted">하루 평균 {f.label}</p>
+            <p className="mt-1 text-xl font-extrabold tabular-nums text-navy-900">
+              {fmt(n.avg_day?.[f.key], f)}<span className="ml-1 text-[11px] font-normal text-muted">{f.unit}</span>
+            </p>
+          </div>
+        ))}
+      </div>
+
+      {n.targets?.length > 0 && (
+        <div className="mt-7">
+          <p className="text-xs font-bold text-navy-900 mb-1">권장 섭취 기준 대비</p>
+          <p className="text-[11px] text-muted mb-3">
+            2020 한국인 영양소 섭취기준(65세 이상) 대비 하루 평균 섭취량입니다. 나트륨은 적을수록 좋습니다.
+          </p>
+          <div className="space-y-2.5">
+            {n.targets.map((t) => (
+              <div key={t.key} className="flex items-center gap-3">
+                <span className="w-20 shrink-0 text-xs text-gray-700">{t.label}</span>
+                <div className="relative h-3 flex-1 rounded-full bg-navy-50 min-w-0">
+                  <div className={`absolute inset-y-0 left-0 rounded-full ${TONE[t.band].bar}`}
+                    style={{ width: `${Math.max(2, Math.min(100, t.pct))}%` }} />
+                  <span className="absolute inset-y-0 w-px bg-slate-400" style={{ left: '100%' }} />
+                </div>
+                <span className="w-32 shrink-0 text-right text-[11px] tabular-nums text-muted">
+                  <b className="text-navy-900">{t.value}</b> / {t.target} {t.unit}
+                </span>
+                <span className={`w-12 shrink-0 text-right text-xs font-bold tabular-nums ${t.band === 'bad' ? 'text-rose-600' : t.band === 'warn' ? 'text-amber-700' : 'text-emerald-700'}`}>{t.pct}%</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="mt-8 grid lg:grid-cols-2 gap-6">
+        <div>
+          <p className="text-xs font-bold text-navy-900 mb-3">끼니별 평균</p>
+          <NutTable rows={(n.meals || []).map((m) => ({ label: MEAL_LABEL[m.meal] || m.meal, ...m }))} fields={fields} />
+        </div>
+        <div>
+          <p className="text-xs font-bold text-navy-900 mb-3">일자별 섭취</p>
+          <NutTable rows={(n.days || []).map((d) => ({ label: `${d.day}일차`, ...d }))} fields={fields}
+            footer={staff ? { label: '하루 평균', ...(n.avg_day || {}) } : null} />
+        </div>
+      </div>
+    </>
+  )
+}
+
+function NutTable({ rows, fields, footer }) {
+  if (!rows?.length) return <p className="text-sm text-muted py-4">기록이 없습니다.</p>
+  const cols = fields.slice(0, 5)
+  const cell = (r, f) => (r[f.key] == null ? '–' : Number(r[f.key]).toFixed(f.digits ?? 1))
+  return (
+    <div className="overflow-x-auto -mx-1 px-1">
+      <table className="w-full min-w-[360px] text-sm">
+        <thead>
+          <tr className="text-left text-[11px] text-muted border-b border-navy-100">
+            <th className="py-2">구분</th>
+            {cols.map((f) => <th key={f.key} className="py-2 text-right">{f.label}<span className="font-normal"> ({f.unit})</span></th>)}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i} className="border-b border-navy-50 last:border-0">
+              <td className="py-2 font-semibold text-navy-900 whitespace-nowrap">{r.label}</td>
+              {cols.map((f) => <td key={f.key} className="py-2 text-right tabular-nums text-gray-700">{cell(r, f)}</td>)}
+            </tr>
+          ))}
+          {footer && (
+            <tr className="bg-navy-50/60">
+              <td className="py-2 font-bold text-navy-900">{footer.label}</td>
+              {cols.map((f) => <td key={f.key} className="py-2 text-right tabular-nums font-bold text-navy-900">{cell(footer, f)}</td>)}
+            </tr>
+          )}
+        </tbody>
+      </table>
     </div>
   )
 }
@@ -223,17 +381,9 @@ function Stars({ value }) {
   )
 }
 
-export default function ReportView({ r: raw }) {
-  // 응답에서 한 덩어리라도 빠지면 화면 전체가 하얗게 죽는다.
-  // 보호자가 링크로 여는 화면이라 특히 위험해서, 없는 부분은 빈 값으로 채워 둔다.
-  const r = {
-    ...raw,
-    resident: raw.resident || {},
-    anthropometry: raw.anthropometry || {},
-    intake: raw.intake || {},
-    statuses: raw.statuses || [],
-  }
+export default function ReportView({ r }) {
   const staff = r.audience === 'staff'
+  const [pickedMeal, setPickedMeal] = useState(null)
   const res = r.resident
   const sol = r.solution || {}
   const SCALE_MAX = { 'MNA-SF 0–14': 14, 'K-MMSE-2 0–30': 30, 'K-MBI %': 100, 'GDS-SF 0–15': 15,
@@ -364,14 +514,17 @@ export default function ReportView({ r: raw }) {
         )}
 
         <p className="text-xs font-bold text-navy-900 mb-3">날짜별 식사 기록</p>
-        <MealTable log={r.intake.log} />
+        <MealTable log={r.intake.log} selected={pickedMeal} onSelect={setPickedMeal} />
+        <MealDetail cell={pickedMeal} />
 
         <div className="mt-8 grid md:grid-cols-2 gap-8">
           <div>
             <p className="text-xs font-bold text-navy-900 mb-3">끼니별 평균</p>
             <RateBars items={r.intake.meals} />
             <p className="mt-2 text-xs text-muted">
-              {r.intake.low_meals?.length ? `${r.intake.low_meals.join(', ')}에 특히 적게 드셨습니다.` : '끼니별로 고르게 드시고 있습니다.'}
+              {r.intake.meals.some((m) => m.value == null)
+                ? `${r.intake.meals.filter((m) => m.value == null).map((m) => m.label).join('·')} 기록이 아직 없습니다.`
+                : r.intake.low_meals?.length ? `${r.intake.low_meals.join(', ')}에 특히 적게 드셨습니다.` : '끼니별로 고르게 드시고 있습니다.'}
             </p>
           </div>
           <div>
@@ -390,11 +543,18 @@ export default function ReportView({ r: raw }) {
             </span>
           </p>
         )}
-        <p className="mt-3 text-xs text-muted">영양소(에너지·단백질 등) 충족률은 식품 영양성분 연계 후 제공될 예정입니다.</p>
       </Section>
 
+      {/* 섭취 영양소 */}
+      {r.nutrition && (
+        <Section no="06" title="섭취 영양소"
+          sub={`식단표의 메뉴·배식량과 남기신 양을 합쳐 계산한 ${r.nutrition.n_days || ''}일간 섭취량입니다.`}>
+          <NutritionBlock n={r.nutrition} staff={staff} />
+        </Section>
+      )}
+
       {/* 만족·선호 */}
-      <Section no="06" title="급식 만족도와 음식 선호">
+      <Section no={r.nutrition ? '07' : '06'} title="급식 만족도와 음식 선호">
         <div className="grid md:grid-cols-3 gap-3">
           {[['전반 만족', r.satisfaction.overall], ['양 적절성', r.satisfaction.portion], ['맛·품질', r.satisfaction.quality]].map(([l, v]) => (
             <div key={l} className="rounded-2xl bg-navy-50/60 px-4 py-3.5">

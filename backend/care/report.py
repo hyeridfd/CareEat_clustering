@@ -10,6 +10,7 @@ from __future__ import annotations
 from statistics import mean
 
 from .data import fetch_all
+from . import nutrition as nutri
 
 GENDER = {1.0: "여성", 0.0: "남성"}
 CARE_GRADE = {1: "1등급", 2: "2등급", 3: "3등급", 4: "4등급 이상"}
@@ -149,6 +150,25 @@ def build_report(sb, home: str, eid: str, audience: str = "guardian",
     low_meals = [m["label"] for m in intake["meals"] if m["value"] is not None and m["value"] < 70]
     intake["low_meals"] = low_meals
 
+    # ── 섭취 영양소 (식단표 × 배식량 × 목측법) ──
+    nsum = f.get("nutrition") if isinstance(f.get("nutrition"), dict) else None
+    nutrition_out = None
+    if nsum:
+        gender = resident.get("gender")
+        fld = nutri.fields()
+        keys = ["energy", "protein", "fat", "carb", "fiber", "na", "ca", "fe", "k", "vc", "vd", "b12"]
+        if not staff:
+            keys = ["energy", "protein", "fiber", "ca", "na"]
+        nutrition_out = {
+            "fields": [{"key": k, **fld[k]} for k in keys if k in fld],
+            "avg_day": nsum.get("avg_day") or {},
+            "days": nsum.get("days") or [],
+            "meals": nsum.get("meals") or [],
+            "n_days": nsum.get("n_days"),
+            "targets": [t for t in nutri.compare_targets(nsum.get("avg_day"), gender)
+                        if staff or t["key"] in keys],
+        }
+
     # ── 급식 만족·선호 ──
     prefs = [l for l, k in (("생선·해산물", "pref_seafood"), ("고기류", "pref_meat"), ("과일", "pref_fruit"),
                             ("채소·나물", "pref_vegetable")) if _n(f, k) == 1]
@@ -199,6 +219,7 @@ def build_report(sb, home: str, eid: str, audience: str = "guardian",
         "statuses": statuses,
         "anthropometry": anthro,
         "intake": intake,
+        "nutrition": nutrition_out,
         "satisfaction": satisfaction,
         "comparison": comparison,
         "solution": solution_out,

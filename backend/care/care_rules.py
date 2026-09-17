@@ -17,6 +17,21 @@ def _flag(f, k):
     return _v(f, k) == 1
 
 
+def _pct(c, k):
+    """권장 섭취 기준 대비 % (ctx['nutrition_pct'] 에서 읽는다)."""
+    return (c.get("nutrition_pct") or {}).get(k)
+
+
+def _below(c, k, cut):
+    v = _pct(c, k)
+    return v is not None and v < cut
+
+
+def _above(c, k, cut):
+    v = _pct(c, k)
+    return v is not None and v > cut
+
+
 RULES = [
     dict(id="R_SWALLOW", category="식사 형태·안전",
          when=lambda f, c: _flag(f, "swallowing_difficulty"),
@@ -114,6 +129,42 @@ RULES = [
          meal="선호 메뉴와 식사 형태를 다시 점검합니다.",
          monitor="1주간 섭취량을 매일 기록합니다.",
          guardian="최근 식사량이 줄어 컨디션을 살피며 식사를 조정하고 있습니다."),
+    dict(id="R_NUT_ENERGY", category="영양(섭취량)",
+         when=lambda f, c: _below(c, "energy", 75),
+         staff="실제 섭취 열량이 권장량의 3/4에 못 미쳐 영양사와 식사 계획을 다시 검토합니다. 끼니별 섭취 기록에서 어느 끼니가 특히 적은지 확인합니다.",
+         meal="적은 양으로도 열량이 높아지도록 조리법을 조정하고(들기름·달걀·두부 등), 끼니 사이 간식을 추가하는 방안을 검토합니다.",
+         monitor="체중을 주 1회 측정하고 2주 뒤 섭취 열량을 다시 계산합니다.",
+         guardian="드신 양을 계산해 보니 필요량보다 적으셔서, 조금씩 자주 드실 수 있도록 식사와 간식을 조정하고 있습니다."),
+    dict(id="R_NUT_PROTEIN", category="영양(섭취량)",
+         when=lambda f, c: _below(c, "protein", 80),
+         staff="단백질 섭취가 권장량에 못 미쳐 식사 시 주찬을 먼저 권하고, 남기는 이유(질감·맛·양)를 확인합니다.",
+         meal="두부, 달걀찜, 부드러운 생선살, 다진 고기처럼 드시기 쉬운 단백질 반찬을 늘립니다.",
+         monitor="주찬 잔반을 끼니마다 기록해 2주 뒤 비교합니다.",
+         guardian="근력 유지에 필요한 단백질 반찬을 더 드실 수 있도록 메뉴를 조정하고 있습니다."),
+    dict(id="R_NUT_CALCIUM", category="영양(섭취량)",
+         when=lambda f, c: _below(c, "ca", 70),
+         staff="칼슘 섭취가 낮아 유제품·두부·뼈째 먹는 생선 등 급원 식품의 제공 빈도를 영양사와 검토합니다.",
+         meal="간식으로 우유·두유·요구르트를 제공하는 방안을 검토합니다.",
+         monitor="간식 섭취 여부를 기록합니다.",
+         guardian="뼈 건강에 필요한 칼슘이 부족하지 않도록 유제품 간식 등을 늘려 드리고 있습니다."),
+    dict(id="R_NUT_FIBER", category="영양(섭취량)",
+         when=lambda f, c: _below(c, "fiber", 70),
+         staff="식이섬유 섭취가 낮아 배변 상태를 함께 확인합니다.",
+         meal="부드럽게 익힌 채소·나물과 과일을 끼니마다 제공하고, 필요 시 다진 형태로 드립니다.",
+         monitor="배변 횟수와 복부 불편감을 기록합니다.",
+         guardian="변비가 생기지 않도록 채소와 과일을 부드럽게 조리해 함께 드리고 있습니다."),
+    dict(id="R_NUT_SODIUM", category="영양(섭취량)",
+         when=lambda f, c: _above(c, "na", 130),
+         staff="나트륨 섭취가 기준보다 높아 국·찌개 국물 제공량과 김치·젓갈류 반찬 배식량을 영양사와 조정합니다. 고혈압·신장 관련 지병이 있으면 의료진과 상의합니다.",
+         meal="국은 건더기 위주로 담고 국물 양을 줄입니다. 절임·젓갈 반찬은 소량만 제공합니다.",
+         monitor="혈압을 주 1회 측정하고 부종 여부를 관찰합니다.",
+         guardian="짠 음식이 많지 않도록 국물 양과 절임 반찬을 조절해 드리고 있습니다."),
+    dict(id="R_NUT_MEAL_GAP", category="영양(섭취량)",
+         when=lambda f, c: c.get("low_meal") is not None,
+         staff="특정 끼니의 섭취 열량이 뚜렷하게 낮아 그 시간대의 컨디션·식사 도움·메뉴를 점검합니다.",
+         meal="해당 끼니에는 좋아하시는 메뉴를 배치하고 식사 도움을 늘립니다.",
+         monitor="해당 끼니의 섭취량을 1주간 매일 기록합니다.",
+         guardian="특정 끼니에 덜 드시는 편이라 그 시간대 식사를 더 살펴 드리고 있습니다."),
     dict(id="R_REASSESS", category="재평가",
          when=lambda f, c: c.get("is_borderline") or _v(f, "has_nutrition") == 0 or _flag(f, "mmse_untested"),
          staff="유형 판정이 경계에 있거나 일부 조사가 비어 있어, 누락 항목(잔반 조사·인지 검사 등)을 보완해 재평가합니다.",
