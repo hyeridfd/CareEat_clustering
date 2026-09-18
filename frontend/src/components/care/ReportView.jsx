@@ -67,6 +67,7 @@ function StatusCard({ s, staff }) {
           <p className="mt-1.5 text-[10px] opacity-70">{s.scale} · {s.value}</p>
         </>
       )}
+      {staff && s.note && <p className="mt-1 text-[10px] opacity-60">{s.note}</p>}
     </div>
   )
 }

@@ -64,7 +64,9 @@ def compute(features: dict, prev_features: dict | None, type_info: dict, transit
         add("depressive", "우울 척도 높음 (GDS-SF ≥ 8)", 8, round(gds, 1))
     kmbi = _v(f, "kmbi_pct")
     if kmbi is not None and kmbi < 40:
-        add("adl_low", "일상생활 수행 크게 저하 (K-MBI < 40%)", 5, round(kmbi))
+        raw, mx = _v(f, "kmbi_score"), _v(f, "kmbi_max")
+        detail = f"{round(kmbi)}% (원점수 {round(raw)}/{round(mx)}점)" if raw is not None and mx else round(kmbi)
+        add("adl_low", "일상생활 수행 크게 저하 (K-MBI < 40%)", 5, detail)
 
     # 최근 변화 (직전 평가 지표 대비)
     p = prev_features or {}

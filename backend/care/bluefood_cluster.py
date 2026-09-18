@@ -173,6 +173,11 @@ EDU = {"무학": 0, "초등학교 졸업": 1, "중학교 졸업": 2, "고등학�
 
 
 def kmbi_row(r):
+    """K-MBI 점수 → (100점 환산 %, 휠체어 사용, 원점수, 만점)
+
+    보행(15점) 대신 의자차(5점)로 평가한 어르신은 만점이 90점이라,
+    다른 어르신과 비교할 수 있도록 100점으로 환산한다. 원점수도 함께 돌려준다.
+    """
     def sc(item):
         v = r.get(item)
         if pd.isna(v) or v == "":
@@ -184,19 +189,21 @@ def kmbi_row(r):
     base_items = [i for i in KMBI_SCORES if i not in ("kmbi_9", "kmbi_10")]
     base_vals = [sc(i) for i in base_items]
     if all(v is None for v in base_vals):
-        return np.nan, np.nan
+        return np.nan, np.nan, np.nan, np.nan
     base = sum(v or 0 for v in base_vals)
     walk_idx = r.get("kmbi_9")
     wheel_idx = r.get("kmbi_10")
     walk_applicable = not pd.isna(walk_idx) and int(float(walk_idx)) >= 1
     wheel_applicable = not pd.isna(wheel_idx) and int(float(wheel_idx)) >= 1
     if walk_applicable and (sc("kmbi_9") or 0) > 0:
-        return (base + sc("kmbi_9")) / 100 * 100, 0.0
+        raw = base + sc("kmbi_9")
+        return raw / 100 * 100, 0.0, raw, 100
     if wheel_applicable:
-        return (base + (sc("kmbi_10") or 0)) / 90 * 100, 1.0
+        raw = base + (sc("kmbi_10") or 0)
+        return raw / 90 * 100, 1.0, raw, 90
     if walk_applicable:
-        return base / 100 * 100, 0.0
-    return base / 100 * 100, np.nan
+        return base / 100 * 100, 0.0, base, 100
+    return base / 100 * 100, np.nan, base, 100
 
 
 def to_num(s):
@@ -245,6 +252,8 @@ def build_health(b):
     km = b.apply(kmbi_row, axis=1, result_type="expand")
     out["kmbi_pct"] = km[0].values
     out["kmbi_mobility_wheelchair"] = km[1].values
+    out["kmbi_score"] = km[2].values          # 원점수
+    out["kmbi_max"] = km[3].values            # 만점 (보행 100 / 의자차 90)
 
     mm = b[MMSE_ITEMS].apply(pd.to_numeric, errors="coerce")
     untested = mm.isna().all(axis=1)

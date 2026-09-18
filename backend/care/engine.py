@@ -42,7 +42,7 @@ KEY_FEATURES = bc.cluster_vars() + ["age", "female", "care_grade", "education_le
                                     "cmt_diabetic", "cmt_fruit", "cmt_texture_fishy", "has_nutrition",
                                     "mmse_untested", "gds_untested", "weight_kg", "height_cm", "met_total", "sitting_min",
                                     "sbp", "dbp", "n_food_groups", "intake_breakfast", "intake_lunch", "intake_dinner",
-                                    "n_days", "kmbi_mobility_wheelchair", "mna_risk"]
+                                    "n_days", "kmbi_mobility_wheelchair", "kmbi_score", "kmbi_max", "mna_risk"]
 # 숫자가 아닌 부가 정보 (리포트용)
 EXTRA_FEATURES = ["diseases", "medications", "improvement_text", "meal_form"]
 # 리포트 식단표용 (일자×끼니 기록)
