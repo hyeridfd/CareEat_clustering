@@ -41,7 +41,7 @@ function Section({ no, title, sub, children, right }) {
 function Field({ label, value, hint, tone }) {
   const t = tone ? TONE[tone] : null
   return (
-    <div className={`rounded-2xl px-4 py-3.5 ${t ? `ring-1 ${t.chip}` : 'bg-navy-50/60'}`}>
+    <div className={`pb-avoid rounded-2xl px-4 py-3.5 ${t ? `ring-1 ${t.chip}` : 'bg-navy-50/60'}`}>
       <p className="text-[11px] font-medium opacity-70">{label}</p>
       <p className="mt-1 text-[17px] font-extrabold leading-tight text-navy-900">{value ?? '–'}</p>
       {hint && <p className="mt-0.5 text-[11px] opacity-70">{hint}</p>}
@@ -54,7 +54,7 @@ function StatusCard({ s, staff, emoji }) {
   const t = TONE[s.tone] || TONE.none
   const pct = s.value != null && s.scaleMax ? Math.min(100, Math.max(3, (s.value / s.scaleMax) * 100)) : null
   return (
-    <div className={`rounded-2xl ring-1 px-4 py-4 ${t.chip}`}>
+    <div className={`pb-avoid rounded-2xl ring-1 px-4 py-4 ${t.chip}`}>
       <div className="flex items-center justify-between gap-2">
         <p className="text-[11px] font-semibold opacity-75">{s.label}</p>
         <span className="text-[10px] opacity-70" aria-hidden>{t.mark}</span>
@@ -76,7 +76,7 @@ function CompareRow({ label, value, avg, min = 0, max = 100, unit = '' }) {
   const pct = (v) => Math.max(0, Math.min(100, ((v - min) / (max - min)) * 100))
   const below = avg != null && value < avg
   return (
-    <div className="py-3">
+    <div className="pb-avoid py-3">
       <div className="mb-2 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
         <span className="text-sm font-semibold text-navy-900">{label}</span>
         <span className="ml-auto flex flex-wrap items-baseline justify-end gap-x-2">
@@ -104,7 +104,7 @@ function RateBars({ items, height = 132 }) {
   const list = items || []
   if (!list.length || list.every((x) => x.value == null)) return <p className="text-sm text-muted py-6">기록된 식사 데이터가 없습니다.</p>
   return (
-    <div className="flex items-end gap-2.5" style={{ height: height + 46 }}>
+    <div className="pb-avoid flex items-end gap-2.5" style={{ height: height + 46 }}>
       {list.map((x) => {
         const miss = x.value == null
         return (
@@ -140,7 +140,7 @@ function MealTable({ log, selected, onSelect }) {
   const hasDay = (d) => log.some((x) => x.day === d)
   const isOn = (c) => selected && selected.day === c.day && selected.meal === c.meal
   return (
-    <div className="overflow-x-auto -mx-2 px-2">
+    <div className="pb-avoid overflow-x-auto -mx-2 px-2">
       <table className="w-full min-w-[560px] border-separate" style={{ borderSpacing: '6px' }}>
         <thead>
           <tr>
@@ -208,7 +208,7 @@ function MealDetail({ cell }) {
                 ['지방', n.fat, 'g', 1], ['식이섬유', n.fiber, 'g', 1], ['나트륨', n.na, 'mg', 0],
                 ['칼슘', n.ca, 'mg', 0]].filter((x) => x[1] != null)
   return (
-    <div className="mt-4 rounded-2xl ring-1 ring-navy-100 bg-white p-4 md:p-5">
+    <div className="pb-avoid mt-4 rounded-2xl ring-1 ring-navy-100 bg-white p-4 md:p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <p className="text-sm font-extrabold text-navy-900">{cell.day}일차 {MEAL_LABEL[cell.meal]} 식단</p>
         <p className="text-xs text-muted">이 끼니 섭취율 <b className="text-navy-900">{cell.rate}%</b></p>
@@ -259,7 +259,7 @@ function NutritionBlock({ n, staff }) {
     <>
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {fields.slice(0, 4).map((f) => (
-          <div key={f.key} className="rounded-2xl bg-navy-50/70 px-4 py-3">
+          <div key={f.key} className="pb-avoid rounded-2xl bg-navy-50/70 px-4 py-3">
             <p className="text-[11px] text-muted">하루 평균 {f.label}</p>
             <p className="mt-1 text-xl font-extrabold tabular-nums text-navy-900">
               {fmt(n.avg_day?.[f.key], f)}<span className="ml-1 text-[11px] font-normal text-muted">{f.unit}</span>
@@ -281,7 +281,7 @@ function NutritionBlock({ n, staff }) {
           </p>
           <div className="space-y-2.5">
             {n.targets.map((t) => (
-              <div key={t.key} className="flex items-center gap-3">
+              <div key={t.key} className="pb-avoid flex items-center gap-3">
                 <span className="w-20 shrink-0 text-xs text-gray-700">{t.label}</span>
                 <div className="relative h-3 flex-1 rounded-full bg-navy-50 min-w-0">
                   <div className={`absolute inset-y-0 left-0 rounded-full ${TONE[t.band].bar}`}
@@ -400,8 +400,8 @@ export default function ReportView({ r }) {
   const res = r.resident
   const who = res?.gender === '여성' ? '👵' : '🧓'
   const sol = r.solution || {}
-  const SCALE_MAX = { 'MNA-SF 0–14': 14, 'K-MMSE-2 0–30': 30, 'K-MBI %': 100, 'GDS-SF 0–15': 15,
-    '5일 평균 섭취율 %': 100, 'IPAQ MET-분/주': 1500 }
+  const SCALE_MAX = { 'MNA-SF 0–14': 14, 'K-MMSE-2 0–30': 30, 'K-MBI 0–100점': 100, 'GDS-SF 0–15': 15,
+    '5일 평균 섭취율 %': 100, 'IPAQ-SF MET-분/주': 4000 }
   const statuses = (r.statuses || []).map((s) => ({ ...s, label: s.title || s.label, scaleMax: SCALE_MAX[s.scale] }))
   const alerts = (r.statuses || []).filter((s) => s.tone === 'bad').length
   const watch = (r.statuses || []).filter((s) => s.tone === 'warn').length
@@ -521,7 +521,7 @@ export default function ReportView({ r }) {
             tone={r.intake.band?.tone === 'none' ? null : r.intake.band?.tone} />
         </div>
         {r.anthropometry.bp_gauge?.pos != null && (
-          <div className="mt-5 max-w-md">
+          <div className="pb-avoid mt-5 max-w-md">
             <p className="text-[11px] font-semibold text-muted mb-1">혈압 (수축기 기준)</p>
             <Gauge g={r.anthropometry.bp_gauge} emoji={who} />
           </div>

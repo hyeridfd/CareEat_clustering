@@ -150,7 +150,7 @@ export function Gauge({ g, emoji = '🧓', compact = false }) {
   const at = (v) => Math.max(0, Math.min(100, ((v - g.min) / span) * 100))
   const ticks = g.ticks || [g.min, ...g.segments.map((s) => s.to)]
   return (
-    <div className={compact ? 'mt-1.5' : 'mt-2'}>
+    <div className={`pb-avoid ${compact ? 'mt-1.5' : 'mt-2'}`}>
       {/* 어르신 위치 */}
       <div className="relative h-5">
         {g.pos != null && (

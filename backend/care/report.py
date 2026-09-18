@@ -238,7 +238,7 @@ def build_report(sb, home: str, eid: str, audience: str = "guardian",
     statuses = [
         status("nutrition", "nutrition", tool("영양 상태", "MNA-SF"), _n(f, "mna_sf"), "MNA-SF 0–14"),
         status("intake", "intake", "식사 섭취", _n(f, "intake_total"), "5일 평균 섭취율 %"),
-        status("adl", "adl", tool("일상생활 수행", "K-MBI"), _n(f, "kmbi_pct"), "K-MBI %",
+        status("adl", "adl", tool("일상생활 수행", "K-MBI"), _n(f, "kmbi_pct"), "K-MBI 0–100점",
                (f"원점수 {_round(_n(f, 'kmbi_score'))}/{_round(_n(f, 'kmbi_max'))}점"
                 + (" · 의자차 기준" if _n(f, "kmbi_mobility_wheelchair") == 1 else ""))
                if _n(f, "kmbi_score") is not None else None),

@@ -99,3 +99,50 @@ body {
     @apply text-xs font-bold tracking-[0.14em] uppercase text-navy-500;
   }
 }
+
+/* ── 인쇄 · PDF 저장 ─────────────────────────────────────────
+   항목 하나가 페이지 경계에서 잘리지 않도록 한다.
+   섹션 전체는 페이지를 넘어갈 수 있게 두고(한 페이지보다 길 수 있으므로),
+   카드·표 행·눈금 같은 '한 덩어리'만 쪼개지지 않게 막는다. */
+@media print {
+  @page {
+    margin: 12mm;
+  }
+
+  body {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;          /* 눈금·배지 색이 빠지지 않도록 */
+  }
+
+  /* 한 덩어리로 유지 */
+  .pb-avoid,
+  tr, thead, li,
+  .badge {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* 제목만 페이지 끝에 남는 것(고아 제목) 방지 */
+  section > header,
+  h1, h2, h3,
+  .section-title {
+    break-after: avoid;
+    page-break-after: avoid;
+    break-inside: avoid;
+  }
+
+  /* 섹션은 넘어가도 되지만, 시작 직후 바로 잘리지 않게 */
+  section {
+    break-inside: auto;
+  }
+
+  /* 화면용 그림자·테두리는 인쇄에서 옅게 */
+  .surface, .card {
+    box-shadow: none !important;
+  }
+
+  /* 인쇄에서 뺄 것만 표시해 둔다 (식단표 칸처럼 button 인 내용은 남겨야 하므로 일괄 숨김은 하지 않는다) */
+  .no-print {
+    display: none !important;
+  }
+}

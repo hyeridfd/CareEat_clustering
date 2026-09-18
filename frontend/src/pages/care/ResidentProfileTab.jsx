@@ -82,7 +82,7 @@ const TONE_BAR = { good: 'bg-emerald-500', warn: 'bg-amber-500', bad: 'bg-rose-5
 
 function Stat({ label, value, unit, hint, tone, gauge, emoji }) {
   return (
-    <div className="rounded-xl bg-slate-50 px-3 py-2.5">
+    <div className="pb-avoid rounded-xl bg-slate-50 px-3 py-2.5">
       <p className="text-[11px] text-gray-500">{label}</p>
       <p className={`text-lg font-bold tabular-nums ${tone ? TONE_TXT[tone] : 'text-gray-900'}`}>
         {value ?? '–'}<span className="ml-1 text-[11px] font-normal text-gray-400">{unit}</span>

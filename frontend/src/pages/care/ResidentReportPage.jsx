@@ -20,7 +20,7 @@ export default function ResidentReportPage() {
       title="상세 리포트"
       subtitle="조사 결과와 돌봄 계획을 한 장으로 정리했습니다."
       actions={
-        <div className="flex gap-2">
+        <div className="no-print flex gap-2">
           <Link to={`/care/residents/${elderlyId}`} className="btn-secondary text-sm">어르신 화면</Link>
           <button onClick={() => window.print()} className="btn-primary text-sm">인쇄 · PDF 저장</button>
         </div>
