@@ -80,7 +80,7 @@ function SubTabs({ active, onChange }) {
 const TONE_TXT = { good: 'text-emerald-700', warn: 'text-amber-700', bad: 'text-rose-600', none: 'text-gray-400' }
 const TONE_BAR = { good: 'bg-emerald-500', warn: 'bg-amber-500', bad: 'bg-rose-500', none: 'bg-gray-300' }
 
-function Stat({ label, value, unit, hint, tone, gauge }) {
+function Stat({ label, value, unit, hint, tone, gauge, emoji }) {
   return (
     <div className="rounded-xl bg-slate-50 px-3 py-2.5">
       <p className="text-[11px] text-gray-500">{label}</p>
@@ -88,7 +88,7 @@ function Stat({ label, value, unit, hint, tone, gauge }) {
         {value ?? '–'}<span className="ml-1 text-[11px] font-normal text-gray-400">{unit}</span>
       </p>
       {hint && <p className="text-[11px] text-gray-400">{hint}</p>}
-      {gauge && <Gauge g={gauge} />}
+      {gauge && <Gauge g={gauge} emoji={emoji} />}
     </div>
   )
 }
@@ -118,13 +118,14 @@ function Bars({ items }) {
 function HealthPanel({ r }) {
   if (!r) return <div className="surface p-12 text-center text-muted">불러오는 중…</div>
   const a = r.anthropometry || {}
+  const who = r.resident?.gender === '여성' ? '👵' : '🧓'
   return (
     <div className="space-y-5">
       <Card title="평가 지표" right={<span className="text-xs text-gray-400">{r.assessed_on} 평가</span>}>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
           {(r.statuses || []).map((s) => (
             <Stat key={s.key} label={s.title || s.label} value={s.value} unit=""
-              hint={s.note ? `${s.band} · ${s.note}` : s.band} tone={s.tone} gauge={s.gauge} />
+              hint={s.note ? `${s.band} · ${s.note}` : s.band} tone={s.tone} gauge={s.gauge} emoji={who} />
           ))}
         </div>
       </Card>
@@ -133,8 +134,9 @@ function HealthPanel({ r }) {
           <Stat label="키" value={a.height} unit="cm" />
           <Stat label="몸무게" value={a.weight} unit="kg"
             hint={a.weight_change != null ? `직전 대비 ${a.weight_change > 0 ? '+' : ''}${a.weight_change}kg` : null} />
-          <Stat label="체질량지수" value={a.bmi} unit="" hint={a.bmi_band?.label} tone={a.bmi_band?.tone} gauge={a.bmi_gauge} />
-          <Stat label="혈압" value={a.sbp ? `${a.sbp}/${a.dbp}` : null} unit="mmHg" />
+          <Stat label="체질량지수" value={a.bmi} unit="" hint={a.bmi_band?.label} tone={a.bmi_band?.tone} gauge={a.bmi_gauge} emoji={who} />
+          <Stat label="혈압" value={a.sbp ? `${a.sbp}/${a.dbp}` : null} unit="mmHg"
+            hint={a.bp_band?.label} tone={a.bp_band?.tone} gauge={a.bp_gauge} emoji={who} />
           <Stat label="식사 섭취율" value={r.intake?.total} unit="%" hint={r.intake?.band?.label} tone={r.intake?.band?.tone} />
         </div>
       </Card>

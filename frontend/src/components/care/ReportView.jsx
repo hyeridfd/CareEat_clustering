@@ -50,7 +50,7 @@ function Field({ label, value, hint, tone }) {
 }
 
 /* 상태 카드: 단계 + (담당자) 점수 게이지 */
-function StatusCard({ s, staff }) {
+function StatusCard({ s, staff, emoji }) {
   const t = TONE[s.tone] || TONE.none
   const pct = s.value != null && s.scaleMax ? Math.min(100, Math.max(3, (s.value / s.scaleMax) * 100)) : null
   return (
@@ -60,7 +60,7 @@ function StatusCard({ s, staff }) {
         <span className="text-[10px] opacity-70" aria-hidden>{t.mark}</span>
       </div>
       <p className="mt-1.5 text-[16px] font-extrabold leading-tight">{s.band}</p>
-      {s.gauge ? <Gauge g={s.gauge} /> : staff && s.value != null && (
+      {s.gauge ? <Gauge g={s.gauge} emoji={emoji} /> : staff && s.value != null && (
         <div className="mt-2.5 h-1.5 rounded-full bg-white/70 overflow-hidden">
           <div className={`h-full rounded-full ${t.bar}`} style={{ width: `${pct ?? 40}%` }} />
         </div>
@@ -397,6 +397,7 @@ function Stars({ value }) {
 export default function ReportView({ r }) {
   const staff = r.audience === 'staff'
   const [pickedMeal, setPickedMeal] = useState(null)
+  const who = res.gender === '여성' ? '👵' : '🧓'
   const res = r.resident
   const sol = r.solution || {}
   const SCALE_MAX = { 'MNA-SF 0–14': 14, 'K-MMSE-2 0–30': 30, 'K-MBI %': 100, 'GDS-SF 0–15': 15,
@@ -447,7 +448,7 @@ export default function ReportView({ r }) {
       {/* 한눈에 보기 */}
       <Section title="한눈에 보기" sub={staff ? '카드 아래는 사용한 평가 도구와 점수입니다.' : '어르신의 현재 상태를 단계로 정리했습니다.'}>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-          {statuses.map((s) => <StatusCard key={s.key} s={s} staff={staff} />)}
+          {statuses.map((s) => <StatusCard key={s.key} s={s} staff={staff} emoji={who} />)}
         </div>
       </Section>
 
@@ -513,10 +514,18 @@ export default function ReportView({ r }) {
             tone={r.anthropometry.weight_change != null && r.anthropometry.weight_change <= -2 ? 'bad' : null} />
           <Field label="체질량지수" value={r.anthropometry.bmi} hint={r.anthropometry.bmi_band?.label}
             tone={r.anthropometry.bmi_band?.tone === 'none' ? null : r.anthropometry.bmi_band?.tone} />
-          <Field label="혈압" value={r.anthropometry.sbp ? `${r.anthropometry.sbp} / ${r.anthropometry.dbp}` : null} hint="mmHg" />
+          <Field label="혈압" value={r.anthropometry.sbp ? `${r.anthropometry.sbp} / ${r.anthropometry.dbp}` : null}
+            hint={r.anthropometry.bp_band?.label || 'mmHg'}
+            tone={r.anthropometry.bp_band?.tone === 'good' ? null : r.anthropometry.bp_band?.tone} />
           <Field label="식사 섭취율" value={r.intake.total != null ? `${r.intake.total}%` : null} hint={r.intake.band?.label}
             tone={r.intake.band?.tone === 'none' ? null : r.intake.band?.tone} />
         </div>
+        {r.anthropometry.bp_gauge?.pos != null && (
+          <div className="mt-5 max-w-md">
+            <p className="text-[11px] font-semibold text-muted mb-1">혈압 (수축기 기준)</p>
+            <Gauge g={r.anthropometry.bp_gauge} emoji={who} />
+          </div>
+        )}
       </Section>
 
       {/* 식사 기록 */}

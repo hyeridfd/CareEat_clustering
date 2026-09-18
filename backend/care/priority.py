@@ -60,13 +60,15 @@ def compute(features: dict, prev_features: dict | None, type_info: dict, transit
     elif dep is not None and dep >= 1:
         add("eating_partial_help", "식사 부분 도움 필요", 3, dep)
     gds = _v(f, "gds")
-    if gds is not None and gds >= 8:
-        add("depressive", "우울 척도 높음 (GDS-SF ≥ 8)", 8, round(gds, 1))
+    if gds is not None and gds >= 10:
+        add("depressive", "심한 우울증 범위 (GDS-SF ≥ 10)", 8, round(gds, 1))
+    elif gds is not None and gds >= 6:
+        add("depressive_mild", "가벼운 우울증 범위 (GDS-SF 6–9)", 4, round(gds, 1))
     kmbi = _v(f, "kmbi_pct")
     if kmbi is not None and kmbi < 40:
         raw, mx = _v(f, "kmbi_score"), _v(f, "kmbi_max")
         detail = f"{round(kmbi)}% (원점수 {round(raw)}/{round(mx)}점)" if raw is not None and mx else round(kmbi)
-        add("adl_low", "일상생활 수행 크게 저하 (K-MBI < 40%)", 5, detail)
+        add("adl_low", "일상생활 수행 크게 저하 (K-MBI 40점 미만)", 5, detail)
 
     # 최근 변화 (직전 평가 지표 대비)
     p = prev_features or {}

@@ -23,11 +23,12 @@ EATING = ["스스로 드심", "부분 도움 필요", "전적인 도움 필요"]
 # 단계 구분: (기준함수, 단계, 톤) — 톤: good | warn | bad
 BANDS = {
     "nutrition": lambda v: ("영양불량", "bad") if v <= 7 else (("영양불량 위험", "warn") if v <= 11 else ("양호", "good")),
-    "cognition": lambda v: ("중등도 이상 저하", "bad") if v < 18 else (("경도 저하", "warn") if v < 24 else ("정상 범위", "good")),
-    "adl": lambda v: ("많은 도움 필요", "bad") if v < 50 else (("부분 도움 필요", "warn") if v < 80 else ("대부분 자립", "good")),
-    "mood": lambda v: ("우울감 높음", "bad") if v >= 8 else (("주의", "warn") if v >= 5 else ("양호", "good")),
-    "activity": lambda v: ("거의 없음", "bad") if v < 1 else (("부족", "warn") if v < 600 else ("충분", "good")),
-    "intake": lambda v: ("낮음", "bad") if v < 50 else (("주의", "warn") if v < 75 else ("양호", "good")),
+    "cognition": lambda v: ("기준 미만", "warn") if v < 24 else ("정상 범위", "good"),
+    "adl": lambda v: ("완전 의존", "bad") if v < 25 else (("대부분 의존", "bad") if v < 50 else
+                     (("중간 의존", "warn") if v < 75 else (("경도 의존", "warn") if v < 91 else ("최소 의존", "good")))),
+    "mood": lambda v: ("심한 우울증", "bad") if v >= 10 else (("가벼운 우울증", "warn") if v >= 6 else ("정상", "good")),
+    "activity": lambda v: ("낮음", "bad") if v < 600 else (("보통", "warn") if v < 3000 else ("높음", "good")),
+    "intake": lambda v: ("부족", "bad") if v < 50 else (("주의", "warn") if v < 75 else ("양호", "good")),
     "bmi": lambda v: ("저체중", "bad") if v < 18.5 else (("정상", "good") if v < 25 else ("과체중", "warn")),
     "satisfaction": lambda v: ("낮음", "bad") if v <= 2.5 else (("보통", "warn") if v < 4 else ("높음", "good")),
 }
@@ -75,41 +76,93 @@ def _facility_latest(sb, home: str) -> dict:
 
 
 # 지표별 눈금 — 점수 체계를 모르는 사람도 "이 막대 어디쯤"인지 보이게 한다.
-# segments 는 왼쪽부터 차례로 [끝값, 이름, 색]. 낮을수록 좋은 지표는 reverse=True.
+# segments 는 왼쪽부터 [끝값, 이름, 색]. 낮을수록 좋은 지표는 reverse=True.
 SCALES = {
     "nutrition": {"tool": "MNA-SF", "min": 0, "max": 14, "unit": "점",
-                  "segments": [(7, "영양불량", "bad"), (11, "위험", "warn"), (14, "양호", "good")]},
-    "intake": {"tool": "5일 평균", "min": 0, "max": 100, "unit": "%",
-               "segments": [(50, "낮음", "bad"), (75, "주의", "warn"), (100, "양호", "good")]},
-    "adl": {"tool": "K-MBI", "min": 0, "max": 100, "unit": "%",
-            "segments": [(50, "많은 도움", "bad"), (80, "부분 도움", "warn"), (100, "대부분 자립", "good")]},
+                  "segments": [(7, "영양불량", "bad"), (11, "영양불량 위험", "warn"), (14, "정상", "good")]},
+    "intake": {"tool": "5일 평균 섭취율", "min": 0, "max": 100, "unit": "%",
+               "segments": [(50, "부족", "bad"), (75, "주의", "warn"), (100, "양호", "good")]},
+    "adl": {"tool": "K-MBI", "min": 0, "max": 100, "unit": "점",
+            "segments": [(24, "완전 의존", "bad"), (49, "대부분 의존", "bad"), (74, "중간 의존", "warn"),
+                         (90, "경도 의존", "warn"), (100, "최소 의존", "good")]},
     "cognition": {"tool": "K-MMSE-2", "min": 0, "max": 30, "unit": "점",
-                  "segments": [(17, "중등도 이상 저하", "bad"), (23, "경도 저하", "warn"), (30, "정상 범위", "good")]},
+                  "segments": [(24, "기준 미만", "warn"), (30, "정상 범위", "good")]},
     "mood": {"tool": "GDS-SF", "min": 0, "max": 15, "unit": "점", "reverse": True,
-             "segments": [(4, "양호", "good"), (7, "주의", "warn"), (15, "우울감 높음", "bad")]},
-    "activity": {"tool": "IPAQ-SF", "min": 0, "max": 1500, "unit": "MET-분/주",
-                 "segments": [(1, "거의 없음", "bad"), (600, "부족", "warn"), (1500, "충분", "good")]},
+             "segments": [(5, "정상", "good"), (9, "가벼운 우울", "warn"), (15, "심한 우울", "bad")]},
+    "activity": {"tool": "IPAQ-SF", "min": 0, "max": 4000, "unit": "MET-분/주",
+                 "segments": [(600, "낮음", "bad"), (3000, "보통", "warn"), (4000, "높음", "good")]},
     "bmi": {"tool": "BMI", "min": 14, "max": 32, "unit": "kg/m²",
             "segments": [(18.5, "저체중", "bad"), (25, "정상", "good"), (32, "과체중", "warn")]},
+    "bp": {"tool": "수축기 혈압", "min": 80, "max": 180, "unit": "mmHg",
+           "segments": [(90, "저혈압", "bad"), (120, "정상", "good"), (130, "주의혈압", "warn"),
+                        (140, "고혈압 전단계", "warn"), (160, "고혈압 1기", "bad"), (180, "고혈압 2기", "bad")]},
 }
 
+# K-MMSE-2 정상 기준은 학력에 따라 다르다 (무학 19 · 초졸 22 · 중졸 이상 24)
+MMSE_CUT = {0: 19, 1: 22, 2: 24, 3: 24, 4: 24}
 
-def scale_of(kind: str, value):
-    """지표 눈금 + 값의 위치(%)"""
+
+_EDU_LABEL = {0: "무학", 1: "초등학교 졸업", 2: "중학교 졸업", 3: "고등학교 졸업", 4: "대학교 졸업"}
+
+
+def _edu_label(education_level):
+    try:
+        return _EDU_LABEL.get(int(education_level), "중학교 졸업 이상")
+    except (TypeError, ValueError):
+        return "중학교 졸업 이상"
+
+
+def mmse_cut(education_level):
+    try:
+        return MMSE_CUT.get(int(education_level), 24)
+    except (TypeError, ValueError):
+        return 24
+
+
+def scale_of(kind: str, value, education_level=None):
+    """지표 눈금 + 값의 위치(%). 인지 기능은 학력별 기준을 반영한다."""
     sc = SCALES.get(kind)
     if not sc:
         return None
+    segments = list(sc["segments"])
+    note = None
+    if kind == "cognition":
+        cut = mmse_cut(education_level)
+        segments = [(cut, "기준 미만", "warn"), (30, "정상 범위", "good")]
+        note = {0: "무학 기준 19점 이상", 1: "초등 졸업 기준 22점 이상"}.get(
+            int(education_level) if str(education_level).replace(".", "").isdigit() else -1,
+            "중학교 졸업 이상 기준 24점 이상")
     lo, hi = sc["min"], sc["max"]
     prev, segs = lo, []
-    for end, label, tone in sc["segments"]:
+    for end, label, tone in segments:
         segs.append({"from": round(prev, 1), "to": round(end, 1), "label": label, "tone": tone,
                      "width": round(100 * (end - prev) / (hi - lo), 2)})
         prev = end
     out = {"tool": sc["tool"], "min": lo, "max": hi, "unit": sc["unit"],
-           "reverse": bool(sc.get("reverse")), "segments": segs}
+           "reverse": bool(sc.get("reverse")), "segments": segs, "note": note,
+           "ticks": [lo] + [round(e, 1) for e, _, _ in segments]}
     if value is not None:
         out["pos"] = round(max(0, min(100, 100 * (float(value) - lo) / (hi - lo))), 2)
     return out
+
+
+def bp_band(sbp, dbp):
+    """대한고혈압학회 기준 분류"""
+    if sbp is None or dbp is None:
+        return None
+    if sbp < 90 or dbp < 60:
+        return {"label": "저혈압", "tone": "bad"}
+    if sbp >= 160 or dbp >= 100:
+        return {"label": "고혈압 2기", "tone": "bad"}
+    if sbp >= 140 and dbp < 90:
+        return {"label": "수축기 단독 고혈압", "tone": "bad"}
+    if sbp >= 140 or dbp >= 90:
+        return {"label": "고혈압 1기", "tone": "bad"}
+    if sbp >= 130 or dbp >= 80:
+        return {"label": "고혈압 전단계", "tone": "warn"}
+    if sbp >= 120:
+        return {"label": "주의혈압", "tone": "warn"}
+    return {"label": "정상", "tone": "good"}
 
 
 def build_report(sb, home: str, eid: str, audience: str = "guardian",
@@ -166,8 +219,11 @@ def build_report(sb, home: str, eid: str, audience: str = "guardian",
     # ── 상태 단계 (보호자·담당자 공통, 점수는 담당자만) ──
     def status(key, kind, label, value, scale=None, note=None):
         b = _band(kind, value)
+        if kind == "cognition" and value is not None:
+            cut = mmse_cut(_n(f, "education_level"))
+            b = {"label": "정상 범위", "tone": "good"} if value >= cut else {"label": "기준 미만", "tone": "warn"}
         item = {"key": key, "title": label, "band": b["label"], "tone": b["tone"], "note": note}
-        gauge = scale_of(kind, value)
+        gauge = scale_of(kind, value, _n(f, "education_level"))
         if gauge:
             item["gauge"] = gauge
         if staff and value is not None:
@@ -183,7 +239,9 @@ def build_report(sb, home: str, eid: str, audience: str = "guardian",
                (f"원점수 {_round(_n(f, 'kmbi_score'))}/{_round(_n(f, 'kmbi_max'))}점"
                 + (" · 의자차 기준" if _n(f, "kmbi_mobility_wheelchair") == 1 else ""))
                if _n(f, "kmbi_score") is not None else None),
-        status("cognition", "cognition", tool("인지 기능", "K-MMSE-2"), _n(f, "mmse"), "K-MMSE-2 0–30"),
+        status("cognition", "cognition", tool("인지 기능", "K-MMSE-2"), _n(f, "mmse"), "K-MMSE-2 0–30",
+               f"{_edu_label(_n(f, 'education_level'))} 기준 {mmse_cut(_n(f, 'education_level'))}점 이상이 정상"
+               if _n(f, "mmse") is not None else None),
         status("mood", "mood", tool("기분·정서", "GDS-SF"), _n(f, "gds"), "GDS-SF 0–15"),
         status("activity", "activity", tool("신체 활동", "IPAQ-SF"), _n(f, "met_total"), "IPAQ-SF MET-분/주"),
     ]
@@ -196,6 +254,8 @@ def build_report(sb, home: str, eid: str, audience: str = "guardian",
         "bmi_gauge": scale_of("bmi", _n(f, "bmi")),
         "weight_change": _round(w - pw, 1) if (w and pw) else None,
         "sbp": _round(_n(f, "sbp")), "dbp": _round(_n(f, "dbp")),
+        "bp_band": bp_band(_n(f, "sbp"), _n(f, "dbp")),
+        "bp_gauge": scale_of("bp", _n(f, "sbp")),
     }
 
     # ── 섭취 ──
