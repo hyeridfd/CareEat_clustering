@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import copy
+import time
 from statistics import mean
 
 from .data import fetch_all
@@ -53,6 +54,26 @@ def _round(v, d=0):
     return round(v, d) if d else round(v)
 
 
+# 시설 전체 최신 평가 캐시 — 같은 시설 리포트를 연달아 열 때 매번 다시 읽지 않는다.
+_PEER_CACHE: dict[str, tuple[float, dict]] = {}
+_PEER_TTL = 60.0
+
+
+def _facility_latest(sb, home: str) -> dict:
+    hit = _PEER_CACHE.get(home)
+    now = time.time()
+    if hit and now - hit[0] < _PEER_TTL:
+        return hit[1]
+    latest = {}
+    for row in fetch_all(sb, "care_assessments",
+                         "elderly_id,type_code,type_name,features,model_version,created_at",
+                         eq={"nursing_home_id": home}, order="created_at", desc=True):
+        latest.setdefault(row["elderly_id"], row)
+    _PEER_CACHE[home] = (now, latest)
+    return latest
+
+
+
 def build_report(sb, home: str, eid: str, audience: str = "guardian",
                  assessment: dict | None = None, solution: dict | None = None,
                  facility_name: str | None = None, type_info: dict | None = None,
@@ -61,8 +82,8 @@ def build_report(sb, home: str, eid: str, audience: str = "guardian",
     a = assessment or {}
     f = a.get("features") or {}
     prev = None
-    hist = fetch_all(sb, "care_assessments", "id,elderly_id,created_at,features,type_code",
-                     eq={"elderly_id": eid}, order="created_at", desc=True)
+    hist = (sb.table("care_assessments").select("id,elderly_id,created_at,features,type_code")
+            .eq("elderly_id", eid).order("created_at", desc=True).limit(8).execute().data or [])
     if len(hist) > 1:
         prev = hist[1].get("features") or {}
 
@@ -73,11 +94,7 @@ def build_report(sb, home: str, eid: str, audience: str = "guardian",
         facility_name = nh[0]["name"] if nh else home
 
     # ── 시설 내 유형 분포 · 평균 (같은 모델 버전의 최신 평가 기준) ──
-    latest = {}
-    for row in fetch_all(sb, "care_assessments", "elderly_id,type_code,type_name,features,model_version,created_at",
-                         eq={"nursing_home_id": home}, order="created_at", desc=True):
-        latest.setdefault(row["elderly_id"], row)
-    peers = [r for r in latest.values() if r.get("model_version") == a.get("model_version")]
+    peers = [r for r in _facility_latest(sb, home).values() if r.get("model_version") == a.get("model_version")]
     dist = {}
     for r in peers:
         d = dist.setdefault(r["type_code"], {"code": r["type_code"], "name": r.get("type_name"), "count": 0})

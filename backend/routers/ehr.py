@@ -7,6 +7,7 @@ care.py 와 같은 규칙을 따른다:
   · 어르신 소유권은 _resident() 로 매번 확인
   · 응답은 dict 그대로, 요청 바디만 Pydantic
 """
+import json
 from datetime import datetime
 from typing import Optional
 from zoneinfo import ZoneInfo
@@ -38,6 +39,65 @@ def _owned(sb, table: str, home: str, eid: str, rid: str) -> dict:
     if not r.data:
         raise HTTPException(status_code=404, detail="해당 기록을 찾을 수 없습니다.")
     return r.data[0]
+
+
+# ─────────────────── 설문에서 채울 수 있는 값 ───────────────────
+# 기초조사표·보호자 등록 정보에서 프로필 빈칸을 미리 채워 준다.
+# 담당자가 확인하고 '저장'을 눌러야 실제로 저장된다.
+_GENDER = {"여자": "female", "여성": "female", "남자": "male", "남성": "male"}
+_LTC = {"1등급": "1등급", "2등급": "2등급", "3등급": "3등급", "4등급 이상": "4등급",
+        "4등급": "4등급", "5등급": "5등급", "인지지원등급": "인지지원등급"}
+_TEXTURE = {"일반식": 0, "다진식": 1, "갈은식(믹서식)": 2, "갈은식": 2, "유동식": 3}
+
+
+def _json_list(x):
+    """리스트, JSON 문자열, 문자열로 한 번 더 감싸인 JSON 모두 받아 문자열 목록으로 돌려준다."""
+    for _ in range(3):
+        if isinstance(x, list):
+            return [str(i).strip() for i in x if str(i).strip()]
+        if not isinstance(x, str) or not x.strip():
+            return []
+        try:
+            x = json.loads(x)
+        except json.JSONDecodeError:
+            return []
+    return []
+
+
+def _survey_source(sb, home: str, eid: str) -> dict:
+    """기초조사표 + 등록된 보호자에서 프로필 기본값과 진단·복약 목록을 뽑는다."""
+    b = (sb.table("basic_survey")
+         .select("age,gender,care_grade,meal_type,diseases,medications,updated_at")
+         .eq("elderly_id", eid).limit(1).execute().data or [None])[0]
+    g = (sb.table("guardians").select("name,relation,phone")
+         .eq("elderly_id", eid).eq("nursing_home_id", home).eq("is_active", True)
+         .limit(1).execute().data or [None])[0]
+
+    defaults, birth_year = {}, None
+    if b:
+        try:
+            y = int(float(b.get("age")))
+            birth_year = y if 1900 < y < 2100 else None
+        except (TypeError, ValueError):
+            birth_year = None
+        if b.get("gender") in _GENDER:
+            defaults["gender"] = _GENDER[b["gender"]]
+        if b.get("care_grade") in _LTC:
+            defaults["ltc_grade"] = _LTC[b["care_grade"]]
+        if b.get("meal_type") in _TEXTURE:
+            defaults["texture_level"] = _TEXTURE[b["meal_type"]]
+    if g:
+        if g.get("name"):
+            defaults["guardian_name"] = g["name"]
+        if g.get("relation"):
+            defaults["guardian_relation"] = g["relation"]
+        if g.get("phone"):
+            defaults["guardian_phone"] = g["phone"]
+
+    diseases = [d for d in _json_list(b.get("diseases") if b else None) if d not in ("없음", "기타")]
+    meds = _json_list(b.get("medications") if b else None)
+    return {"defaults": defaults, "birth_year": birth_year, "diseases": diseases,
+            "medications": meds, "survey_at": (b or {}).get("updated_at")}
 
 
 # ─────────────────────────── 요청 모델 ───────────────────────────
@@ -113,10 +173,17 @@ def get_profile(eid: str, user: dict = Depends(require_staff)):
                   "dx_parkinson": "파킨슨", "dx_stroke": "뇌혈관질환", "dx_depression": "우울증"}
         survey_dx = [label for k, label in labels.items() if f.get(k)]
 
+    src = _survey_source(sb, home, eid)
+    have_c = {c["name"] for c in conditions}
+    have_m = {m["name"] for m in medications}
     return {"resident": res, "profile": prof, "conditions": conditions,
             "medications": medications, "allergies": allergies,
-            "survey_diagnoses": survey_dx,
-            "survey_updated_at": latest[0]["created_at"] if latest else None}
+            "survey_diagnoses": survey_dx or src["diseases"],
+            "survey_defaults": src["defaults"],
+            "survey_birth_year": src["birth_year"],
+            "survey_import": {"conditions": [d for d in src["diseases"] if d not in have_c],
+                              "medications": [m for m in src["medications"] if m not in have_m]},
+            "survey_updated_at": latest[0]["created_at"] if latest else src["survey_at"]}
 
 
 @router.put("/residents/{eid}/profile")
@@ -225,6 +292,31 @@ def _ts(row: dict) -> Optional[str]:
         if row.get(k):
             return row[k]
     return None
+
+
+
+@router.post("/residents/{eid}/import-from-survey")
+def import_from_survey(eid: str, user: dict = Depends(require_staff)):
+    """기초조사표의 진단·복약 목록을 진단·복약 기록으로 옮긴다 (이미 있는 이름은 건너뛴다)."""
+    sb, home = get_supabase(), user["scope_home"]
+    _resident(sb, home, eid)
+    src = _survey_source(sb, home, eid)
+    have_c = {c["name"] for c in (sb.table("resident_conditions").select("name")
+                                  .eq("elderly_id", eid).eq("nursing_home_id", home).execute().data or [])}
+    have_m = {m["name"] for m in (sb.table("resident_medications").select("name")
+                                  .eq("elderly_id", eid).eq("nursing_home_id", home).execute().data or [])}
+    actor = user["actor"]
+    rows_c = [{"elderly_id": eid, "nursing_home_id": home, "name": n, "status": "active",
+               "note": "기초조사표에서 가져옴", "recorded_by": actor}
+              for n in src["diseases"] if n not in have_c]
+    rows_m = [{"elderly_id": eid, "nursing_home_id": home, "name": n, "schedule": [], "is_active": True,
+               "note": "기초조사표에서 가져옴", "recorded_by": actor}
+              for n in src["medications"] if n not in have_m]
+    if rows_c:
+        sb.table("resident_conditions").insert(rows_c).execute()
+    if rows_m:
+        sb.table("resident_medications").insert(rows_m).execute()
+    return {"conditions": len(rows_c), "medications": len(rows_m)}
 
 
 @router.get("/residents/{eid}/history")

@@ -50,12 +50,17 @@ export default function ResidentProfileTab({ elderlyId, residentName }) {
   const load = () => api.get(`/ehr/residents/${elderlyId}/profile`)
     .then((r) => {
       setD(r.data)
-      setForm({
+      // 빈칸은 설문·보호자 등록 정보로 미리 채운다 (저장된 값이 있으면 그 값이 우선)
+      const base = {
         birth_date: '', gender: '', admit_date: '', room: '', ltc_grade: '',
         guardian_name: '', guardian_relation: '', guardian_phone: '',
         texture_level: '', thickener: '', therapeutic_diet: '', notes: '',
-        ...(r.data.profile || {}),
+        ...(r.data.survey_defaults || {}),
+      }
+      Object.entries(r.data.profile || {}).forEach(([k, v]) => {
+        if (v !== null && v !== undefined && v !== '') base[k] = v
       })
+      setForm(base)
     })
     .catch((e) => setErr(errMsg(e)))
 
@@ -83,6 +88,9 @@ export default function ResidentProfileTab({ elderlyId, residentName }) {
     return api.put(`/ehr/residents/${elderlyId}/profile`, body)
   }, '기본정보를 저장했습니다.')
 
+  const importSurvey = () => run('import', () => api.post(`/ehr/residents/${elderlyId}/import-from-survey`),
+    '기초조사표의 진단·복약을 가져왔습니다.')
+
   if (err) return <p className="surface p-6 text-red-700">{err}</p>
   if (!d || !form) return <div className="surface p-12 text-center text-muted">불러오는 중…</div>
 
@@ -102,6 +110,11 @@ export default function ResidentProfileTab({ elderlyId, residentName }) {
           </button>
         }
       >
+        {(Object.keys(d.survey_defaults || {}).length > 0 || d.survey_birth_year) && !d.profile && (
+          <p className="mb-4 text-[11px] rounded-xl bg-navy-50 text-navy-800 px-3 py-2">
+            빈칸은 기초조사표와 등록된 보호자 정보에서 미리 채웠습니다. 확인 후 <b>저장</b>을 눌러 주세요.
+          </p>
+        )}
         <div className="flex flex-col sm:flex-row gap-6">
           <div className="flex sm:flex-col items-center gap-3 sm:w-28 shrink-0">
             <Avatar name={residentName} id={elderlyId} size="lg" />
@@ -115,6 +128,9 @@ export default function ResidentProfileTab({ elderlyId, residentName }) {
           <div className="flex-1 grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <Field label="생년월일">
               <input type="date" value={form.birth_date || ''} onChange={set('birth_date')} className="form-input" />
+              {!form.birth_date && d.survey_birth_year && (
+                <span className="mt-1 block text-[11px] text-muted">조사표 출생연도 {d.survey_birth_year}년</span>
+              )}
             </Field>
             <Field label="성별">
               <select value={form.gender || ''} onChange={set('gender')} className="form-input">
@@ -147,7 +163,15 @@ export default function ResidentProfileTab({ elderlyId, residentName }) {
       </Card>
 
       {/* ── 질병·진단 ───────────────────────────── */}
-      <Card title="질병 · 진단">
+      <Card
+        title="질병 · 진단"
+        right={(d.survey_import?.conditions?.length > 0 || d.survey_import?.medications?.length > 0) && (
+          <button onClick={importSurvey} disabled={busy === 'import'} className="btn-secondary text-xs py-1.5 disabled:opacity-50">
+            {busy === 'import' ? '가져오는 중…'
+              : `기초조사표에서 가져오기 (진단 ${d.survey_import.conditions.length} · 약 ${d.survey_import.medications.length})`}
+          </button>
+        )}
+      >
         {d.survey_diagnoses?.length > 0 && (
           <div className="mb-4 rounded-xl bg-slate-50 px-4 py-3">
             <p className="text-[11px] font-semibold text-muted mb-1.5">설문에서 확인된 진단</p>

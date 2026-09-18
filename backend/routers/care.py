@@ -78,8 +78,12 @@ def overview(user: dict = Depends(require_staff)):
     sb, home = get_supabase(), user["scope_home"]
     nh = sb.table("nursing_homes").select("id,name").eq("id", home).execute()
     residents = fetch_all(sb, "elderly_residents", eq={"nursing_home_id": home})
-    assess = _latest_by_elderly(fetch_all(sb, "care_assessments", eq={"nursing_home_id": home},
-                                          order="created_at", desc=True))
+    # 목록 화면은 features(식사기록·영양소) 를 쓰지 않으므로 필요한 열만 읽는다
+    assess = _latest_by_elderly(fetch_all(
+        sb, "care_assessments",
+        "id,elderly_id,type_code,type_name,priority_score,priority_level,is_borderline,"
+        "transition,model_version,created_at,priority_factors",
+        eq={"nursing_home_id": home}, order="created_at", desc=True))
     sols = _latest_by_elderly(fetch_all(sb, "care_solutions", "id,elderly_id,status,created_at,generator",
                                         eq={"nursing_home_id": home}, order="created_at", desc=True))
     prog = {p["elderly_id"]: p for p in fetch_all(sb, "survey_progress", eq={"nursing_home_id": home})}
@@ -317,7 +321,11 @@ def assess(req: AssessRequest, user: dict = Depends(require_staff)):
 def resident_detail(eid: str, user: dict = Depends(require_staff)):
     sb, home = get_supabase(), user["scope_home"]
     r = _resident(sb, home, eid)
-    hist = sb.table("care_assessments").select("*").eq("elderly_id", eid).order("created_at", desc=True).limit(20).execute().data
+    hist = sb.table("care_assessments").select("*").eq("elderly_id", eid).order("created_at", desc=True).limit(10).execute().data
+    for h in hist[1:]:                       # 화면에서 쓰지 않는 식사 기록은 응답에서 덜어낸다
+        fx = h.get("features")
+        if isinstance(fx, dict):
+            fx.pop("meal_log", None)
     sols = sb.table("care_solutions").select("*").eq("elderly_id", eid).order("created_at", desc=True).limit(10).execute().data
     gs = sb.table("guardians").select("*").eq("elderly_id", eid).eq("is_active", True).execute().data
     for g in gs:
