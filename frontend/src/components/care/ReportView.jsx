@@ -237,7 +237,7 @@ function MealDetail({ cell }) {
         </table>
       </div>
       {sums.length > 0 && (
-        <div className="mt-4 grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+        <div className="mt-4 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-7 gap-2">
           {sums.map(([l, v, u, d]) => (
             <div key={l} className="rounded-xl bg-navy-50/70 px-3 py-2">
               <p className="text-[10px] text-muted">{l}</p>
@@ -257,7 +257,7 @@ function NutritionBlock({ n, staff }) {
   const fmt = (v, f) => (v == null ? '–' : Number(v).toFixed(f?.digits ?? 1))
   return (
     <>
-      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {fields.slice(0, 4).map((f) => (
           <div key={f.key} className="pb-avoid rounded-2xl bg-navy-50/70 px-4 py-3">
             <p className="text-[11px] text-muted">하루 평균 {f.label}</p>
@@ -275,7 +275,7 @@ function NutritionBlock({ n, staff }) {
               15끼 중 {n.n_meals}끼만 조사돼, 기록된 끼니를 하루 세 끼로 환산한 값입니다.
             </p>
           )}
-          <p className="text-xs font-bold text-navy-900 mb-1">권장 섭취 기준 대비</p>
+          <p className="pb-keep-next text-xs font-bold text-navy-900 mb-1">권장 섭취 기준 대비</p>
           <p className="text-[11px] text-muted mb-3">
             2020 한국인 영양소 섭취기준(65세 이상) 대비 하루 평균 섭취량입니다. 나트륨은 적을수록 좋습니다.
           </p>
@@ -298,13 +298,13 @@ function NutritionBlock({ n, staff }) {
         </div>
       )}
 
-      <div className="mt-8 grid lg:grid-cols-2 gap-6">
+      <div className="mt-8 grid md:grid-cols-2 gap-6">
         <div>
-          <p className="text-xs font-bold text-navy-900 mb-3">끼니별 평균</p>
+          <p className="pb-keep-next text-xs font-bold text-navy-900 mb-3">끼니별 평균</p>
           <NutTable rows={(n.meals || []).map((m) => ({ label: MEAL_LABEL[m.meal] || m.meal, ...m }))} fields={fields} />
         </div>
-        <div>
-          <p className="text-xs font-bold text-navy-900 mb-3">일자별 섭취</p>
+        <div className="pb-avoid">
+          <p className="pb-keep-next text-xs font-bold text-navy-900 mb-3">일자별 섭취</p>
           <NutTable rows={(n.days || []).map((d) => ({ label: `${d.day}일차`, ...d }))} fields={fields}
             footer={staff ? { label: '하루 평균', ...(n.avg_day || {}) } : null} />
         </div>
@@ -535,13 +535,13 @@ export default function ReportView({ r }) {
           <p className="mb-5 text-sm rounded-xl bg-amber-50 text-amber-900 px-4 py-3">식사(잔반) 조사가 완료되지 않아 일부는 추정값입니다.</p>
         )}
 
-        <p className="text-xs font-bold text-navy-900 mb-3">날짜별 식사 기록</p>
+        <p className="pb-keep-next text-xs font-bold text-navy-900 mb-3">날짜별 식사 기록</p>
         <MealTable log={r.intake.log} selected={pickedMeal} onSelect={setPickedMeal} />
         <MealDetail cell={pickedMeal} />
 
         <div className="mt-8 grid md:grid-cols-2 gap-8">
-          <div>
-            <p className="text-xs font-bold text-navy-900 mb-3">끼니별 평균</p>
+          <div className="pb-avoid">
+            <p className="pb-keep-next text-xs font-bold text-navy-900 mb-3">끼니별 평균</p>
             <RateBars items={r.intake.meals} />
             <p className="mt-2 text-xs text-muted">
               {r.intake.meals.some((m) => m.value == null)
@@ -549,8 +549,8 @@ export default function ReportView({ r }) {
                 : r.intake.low_meals?.length ? `${r.intake.low_meals.join(', ')}에 특히 적게 드셨습니다.` : '끼니별로 고르게 드시고 있습니다.'}
             </p>
           </div>
-          <div>
-            <p className="text-xs font-bold text-navy-900 mb-3">음식 종류별 평균</p>
+          <div className="pb-avoid">
+            <p className="pb-keep-next text-xs font-bold text-navy-900 mb-3">음식 종류별 평균</p>
             <RateBars items={r.intake.components} />
             <p className="mt-2 text-xs text-muted">주찬은 고기·생선·두부 같은 단백질 반찬입니다.</p>
           </div>

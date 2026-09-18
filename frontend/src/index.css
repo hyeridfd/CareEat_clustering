@@ -101,20 +101,43 @@ body {
 }
 
 /* ── 인쇄 · PDF 저장 ─────────────────────────────────────────
-   항목 하나가 페이지 경계에서 잘리지 않도록 한다.
-   섹션 전체는 페이지를 넘어갈 수 있게 두고(한 페이지보다 길 수 있으므로),
-   카드·표 행·눈금 같은 '한 덩어리'만 쪼개지지 않게 막는다. */
+   건강검진 결과지처럼 촘촘하게. 항목 하나가 페이지 경계에서 잘리지 않게 하되,
+   여백을 줄여 장수를 아낀다. */
 @media print {
   @page {
-    margin: 12mm;
+    size: A4;
+    margin: 9mm 10mm;
+  }
+
+  html {
+    font-size: 13px;                   /* rem 기준을 줄여 전체를 한 단계 작게 */
   }
 
   body {
     -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;          /* 눈금·배지 색이 빠지지 않도록 */
+    print-color-adjust: exact;         /* 눈금·배지 색 유지 */
   }
 
-  /* 한 덩어리로 유지 */
+  /* ── 여백 압축 ── */
+  .space-y-5 > * + * { margin-top: 7px !important; }
+  .space-y-4 > * + * { margin-top: 6px !important; }
+  section { padding: 10px 12px !important; border-radius: 8px !important; }
+  section > header { margin-bottom: 7px !important; }
+  .rounded-2xl { border-radius: 8px !important; }
+  .mt-8, .mt-7 { margin-top: 12px !important; }
+  .mt-6, .mt-5 { margin-top: 10px !important; }
+  .gap-5, .gap-6, .gap-8 { gap: 10px !important; }
+  .p-6, .p-7, .md\:p-8, .md\:p-9 { padding: 12px !important; }
+  .px-4 { padding-left: 10px !important; padding-right: 10px !important; }
+  .py-4, .py-3\.5, .py-3 { padding-top: 7px !important; padding-bottom: 7px !important; }
+  td, th { padding-top: 3px !important; padding-bottom: 3px !important; }
+
+  /* 표지는 한 줄짜리 머리글처럼 */
+  .bg-navy-grad { padding: 12px 14px !important; }
+  .bg-navy-grad h1 { font-size: 19px !important; line-height: 1.25 !important; margin-top: 4px !important; }
+  .bg-navy-grad .mt-7 { margin-top: 8px !important; }
+
+  /* ── 한 덩어리로 유지 ── */
   .pb-avoid,
   tr, thead, li,
   .badge {
@@ -122,7 +145,7 @@ body {
     page-break-inside: avoid;
   }
 
-  /* 제목만 페이지 끝에 남는 것(고아 제목) 방지 */
+  /* 제목만 페이지 끝에 남지 않게 */
   section > header,
   h1, h2, h3,
   .section-title {
@@ -131,18 +154,12 @@ body {
     break-inside: avoid;
   }
 
-  /* 섹션은 넘어가도 되지만, 시작 직후 바로 잘리지 않게 */
-  section {
-    break-inside: auto;
-  }
+  section { break-inside: auto; }
 
-  /* 화면용 그림자·테두리는 인쇄에서 옅게 */
-  .surface, .card {
-    box-shadow: none !important;
-  }
+  /* 소제목이 페이지 끝에 혼자 남지 않게 */
+  .pb-keep-next { break-after: avoid; page-break-after: avoid; }
 
-  /* 인쇄에서 뺄 것만 표시해 둔다 (식단표 칸처럼 button 인 내용은 남겨야 하므로 일괄 숨김은 하지 않는다) */
-  .no-print {
-    display: none !important;
-  }
+  /* 화면 장식 제거 */
+  .surface, .card { box-shadow: none !important; }
+  .no-print { display: none !important; }
 }
