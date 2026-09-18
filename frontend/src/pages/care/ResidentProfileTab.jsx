@@ -105,7 +105,8 @@ function HealthPanel({ r }) {
       <Card title="평가 지표" right={<span className="text-xs text-gray-400">{r.assessed_on} 평가</span>}>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
           {(r.statuses || []).map((s) => (
-            <Stat key={s.key} label={s.title || s.label} value={s.value} unit={s.scale ? '' : ''} hint={s.band} tone={s.tone} />
+            <Stat key={s.key} label={s.title || s.label} value={s.value} unit=""
+              hint={s.note ? `${s.band} · ${s.note}` : s.band} tone={s.tone} />
           ))}
         </div>
       </Card>
