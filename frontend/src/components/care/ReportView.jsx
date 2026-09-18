@@ -397,8 +397,8 @@ function Stars({ value }) {
 export default function ReportView({ r }) {
   const staff = r.audience === 'staff'
   const [pickedMeal, setPickedMeal] = useState(null)
-  const who = res.gender === '여성' ? '👵' : '🧓'
   const res = r.resident
+  const who = res?.gender === '여성' ? '👵' : '🧓'
   const sol = r.solution || {}
   const SCALE_MAX = { 'MNA-SF 0–14': 14, 'K-MMSE-2 0–30': 30, 'K-MBI %': 100, 'GDS-SF 0–15': 15,
     '5일 평균 섭취율 %': 100, 'IPAQ MET-분/주': 1500 }
