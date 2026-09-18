@@ -44,7 +44,7 @@ export default function CareLayout({ children, title, subtitle, actions }) {
   return (
     <div className="min-h-screen bg-navy-50/40 lg:flex">
       {/* 데스크톱 사이드바 */}
-      <aside className="hidden lg:flex lg:flex-col w-64 shrink-0 bg-navy-900 text-white">
+      <aside className="no-print hidden lg:flex lg:flex-col w-64 shrink-0 bg-navy-900 text-white">
         <div className="px-5 py-5 border-b border-white/10">
           <Link to="/care" className="flex items-center gap-2.5">
             <LogoMark className="w-9 h-9" tone="white" />
@@ -79,7 +79,7 @@ export default function CareLayout({ children, title, subtitle, actions }) {
       </aside>
 
       {/* 모바일 상단바 */}
-      <div className="lg:hidden sticky top-0 z-30 bg-navy-900 text-white">
+      <div className="no-print lg:hidden sticky top-0 z-30 bg-navy-900 text-white">
         <div className="flex items-center justify-between px-4 h-14">
           <Link to="/care" className="flex items-center gap-2">
             <LogoMark className="w-8 h-8" tone="white" />
@@ -107,7 +107,7 @@ export default function CareLayout({ children, title, subtitle, actions }) {
 
       {/* 본문 */}
       <div className="flex-1 min-w-0">
-        <header className="bg-white border-b border-navy-100">
+        <header className="no-print bg-white border-b border-navy-100">
           <div className="max-w-6xl mx-auto px-5 py-5 flex flex-wrap items-end justify-between gap-3">
             <div>
               <p className="text-xs font-semibold text-navy-500">{facilityName}</p>
@@ -117,7 +117,7 @@ export default function CareLayout({ children, title, subtitle, actions }) {
             {actions}
           </div>
         </header>
-        <main className="max-w-6xl mx-auto px-5 py-6">{children}</main>
+        <main className="pb-main max-w-6xl mx-auto px-5 py-6">{children}</main>
       </div>
     </div>
   )

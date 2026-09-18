@@ -104,7 +104,7 @@ function RateBars({ items, height = 132 }) {
   const list = items || []
   if (!list.length || list.every((x) => x.value == null)) return <p className="text-sm text-muted py-6">기록된 식사 데이터가 없습니다.</p>
   return (
-    <div className="pb-avoid flex items-end gap-2.5" style={{ height: height + 46 }}>
+    <div className="pb-avoid pb-bars flex items-end gap-2.5" style={{ height: height + 46 }}>
       {list.map((x) => {
         const miss = x.value == null
         return (
@@ -539,7 +539,7 @@ export default function ReportView({ r }) {
         <MealTable log={r.intake.log} selected={pickedMeal} onSelect={setPickedMeal} />
         <MealDetail cell={pickedMeal} />
 
-        <div className="mt-8 grid md:grid-cols-2 gap-8">
+        <div className="mt-8 grid md:grid-cols-2 gap-8 pb-2col">
           <div className="pb-avoid">
             <p className="pb-keep-next text-xs font-bold text-navy-900 mb-3">끼니별 평균</p>
             <RateBars items={r.intake.meals} />

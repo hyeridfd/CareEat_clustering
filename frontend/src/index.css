@@ -106,7 +106,23 @@ body {
 @media print {
   @page {
     size: A4;
-    margin: 9mm 10mm;
+    margin: 9mm 10mm 13mm;
+
+    /* 매 쪽 하단 미주 + 쪽번호 */
+    @bottom-left {
+      content: 'Care-Eat 건강·식사 돌봄 리포트';
+      font-family: 'Pretendard', sans-serif;
+      font-size: 8pt;
+      color: #b8c0cc;
+      padding-bottom: 2mm;
+    }
+    @bottom-right {
+      content: counter(page) ' / ' counter(pages);
+      font-family: 'Pretendard', sans-serif;
+      font-size: 8pt;
+      color: #b8c0cc;
+      padding-bottom: 2mm;
+    }
   }
 
   html {
@@ -165,15 +181,29 @@ body {
     page-break-inside: auto !important;
   }
 
-  /* 맨 아래 미주 */
-  .pb-endnote {
-    break-before: avoid;
-    page-break-before: avoid;
-    color: #cbd5e1 !important;
-  }
+  /* 화면용 미주는 숨김 — 인쇄는 @page 하단 미주가 매 쪽에 들어간다 */
+  .pb-endnote { display: none !important; }
 
   /* 소제목이 페이지 끝에 혼자 남지 않게 */
   .pb-keep-next { break-after: avoid; page-break-after: avoid; }
+
+  /* ── 인쇄 전용 레이아웃 ──
+     인쇄 폭(A4 190mm ≈ 718px)은 Tailwind md(768px)보다 좁아서 md: 반응형이 풀린다.
+     리포트는 인쇄에서도 데스크톱과 같은 다단 배치를 유지한다. */
+  .pb-main, main { max-width: none !important; padding: 0 !important; }
+  .min-h-screen { min-height: 0 !important; }
+  body, .bg-navy-50\/40 { background: #fff !important; }
+
+  .sm\:grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+  .sm\:grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
+  .md\:grid-cols-2, .pb-2col { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .md\:grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+  .md\:grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
+  .md\:grid-cols-5 { grid-template-columns: repeat(5, minmax(0, 1fr)) !important; }
+  .md\:grid-cols-7 { grid-template-columns: repeat(7, minmax(0, 1fr)) !important; }
+
+  /* 막대그래프는 한 단계 작게 (inline style 높이는 zoom 으로 축소) */
+  .pb-bars { zoom: 0.8; }
 
   /* 화면 장식 제거 */
   .surface, .card { box-shadow: none !important; }
