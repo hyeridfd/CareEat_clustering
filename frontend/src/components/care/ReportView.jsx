@@ -298,12 +298,12 @@ function NutritionBlock({ n, staff }) {
         </div>
       )}
 
-      <div className="mt-8 grid md:grid-cols-2 gap-6">
-        <div>
+      <div className="mt-8 grid md:grid-cols-5 gap-6">
+        <div className="pb-avoid md:col-span-2">
           <p className="pb-keep-next text-xs font-bold text-navy-900 mb-3">끼니별 평균</p>
           <NutTable rows={(n.meals || []).map((m) => ({ label: MEAL_LABEL[m.meal] || m.meal, ...m }))} fields={fields} />
         </div>
-        <div className="pb-avoid">
+        <div className="pb-avoid md:col-span-3">
           <p className="pb-keep-next text-xs font-bold text-navy-900 mb-3">일자별 섭취</p>
           <NutTable rows={(n.days || []).map((d) => ({ label: `${d.day}일차`, ...d }))} fields={fields}
             footer={staff ? { label: '하루 평균', ...(n.avg_day || {}) } : null} />
@@ -313,35 +313,40 @@ function NutritionBlock({ n, staff }) {
   )
 }
 
+/* 영양소를 세로(행)로, 끼니·일자를 가로(열)로 둔다.
+   가로 스크롤 없이 모든 영양소 항목이 인쇄물에서도 보이도록. */
 function NutTable({ rows, fields, footer }) {
   if (!rows?.length) return <p className="text-sm text-muted py-4">기록이 없습니다.</p>
-  const cols = fields.slice(0, 5)
-  const cell = (r, f) => (r[f.key] == null ? '–' : Number(r[f.key]).toFixed(f.digits ?? 1))
+  const cols = footer ? [...rows, footer] : rows
+  const lastIdx = footer ? cols.length - 1 : -1
+  const cell = (c, f) => (c?.[f.key] == null ? '\u2013' : Number(c[f.key]).toFixed(f.digits ?? 1))
   return (
-    <div className="overflow-x-auto -mx-1 px-1">
-      <table className="w-full min-w-[360px] text-sm">
-        <thead>
-          <tr className="text-left text-[11px] text-muted border-b border-navy-100">
-            <th className="py-2">구분</th>
-            {cols.map((f) => <th key={f.key} className="py-2 text-right">{f.label}<span className="font-normal"> ({f.unit})</span></th>)}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r, i) => (
-            <tr key={i} className="border-b border-navy-50 last:border-0">
-              <td className="py-2 font-semibold text-navy-900 whitespace-nowrap">{r.label}</td>
-              {cols.map((f) => <td key={f.key} className="py-2 text-right tabular-nums text-gray-700">{cell(r, f)}</td>)}
-            </tr>
+    <table className="w-full text-[13px] table-fixed">
+      <thead>
+        <tr className="text-[11px] text-muted border-b border-navy-100">
+          <th className="py-1.5 text-left font-medium w-[38%]">영양소</th>
+          {cols.map((c, i) => (
+            <th key={i} className={`py-1.5 text-right font-semibold ${i === lastIdx ? 'text-navy-900' : 'text-navy-700'}`}>{c.label}</th>
           ))}
-          {footer && (
-            <tr className="bg-navy-50/60">
-              <td className="py-2 font-bold text-navy-900">{footer.label}</td>
-              {cols.map((f) => <td key={f.key} className="py-2 text-right tabular-nums font-bold text-navy-900">{cell(footer, f)}</td>)}
-            </tr>
-          )}
-        </tbody>
-      </table>
-    </div>
+        </tr>
+      </thead>
+      <tbody>
+        {fields.map((f) => (
+          <tr key={f.key} className="border-b border-navy-50 last:border-0">
+            <td className="py-1.5 pr-1 leading-tight">
+              <span className="font-semibold text-navy-900">{f.label}</span>
+              <span className="ml-1 text-[10px] text-muted">({f.unit})</span>
+            </td>
+            {cols.map((c, i) => (
+              <td key={i}
+                className={`py-1.5 text-right tabular-nums ${i === lastIdx ? 'font-bold text-navy-900 bg-navy-50/70' : 'text-gray-700'}`}>
+                {cell(c, f)}
+              </td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
   )
 }
 
