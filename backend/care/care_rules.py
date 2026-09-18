@@ -32,6 +32,21 @@ def _above(c, k, cut):
     return v is not None and v > cut
 
 
+def _dx(f, *keywords):
+    """진단 질환 목록(기초조사표)에 키워드가 들어 있는지"""
+    names = f.get("diseases")
+    if not isinstance(names, list):
+        return False
+    joined = " ".join(str(x) for x in names)
+    return any(k in joined for k in keywords)
+
+
+def _low_component(c, *keys):
+    """잔반이 특히 많은 음식군 (ctx['low_components'])"""
+    lows = c.get("low_components") or ()
+    return any(k in lows for k in keys)
+
+
 RULES = [
     dict(id="R_SWALLOW", category="식사 형태·안전",
          when=lambda f, c: _flag(f, "swallowing_difficulty"),
@@ -165,6 +180,74 @@ RULES = [
          meal="해당 끼니에는 좋아하시는 메뉴를 배치하고 식사 도움을 늘립니다.",
          monitor="해당 끼니의 섭취량을 1주간 매일 기록합니다.",
          guardian="특정 끼니에 덜 드시는 편이라 그 시간대 식사를 더 살펴 드리고 있습니다."),
+    # ── 질환 기반 ──────────────────────────────────────────
+    dict(id="R_DX_DIABETES", category="질환 관리",
+         when=lambda f, c: not _flag(f, "dx_diabetes") and _dx(f, "당뇨"),
+         staff="당뇨가 있어 식사 시간과 간식 시간을 일정하게 유지하고, 식사량이 갑자기 줄거나 늘면 기록합니다. 혈당·약 조절은 의료진과 상의합니다.",
+         meal="단 음료·과자 대신 우유·두유·과일 같은 간식을 배치하고, 국물과 절임 반찬은 적당량으로 제공합니다.",
+         monitor="식사량과 간식 섭취를 매 끼니 기록하고, 저혈당 의심 증상(식은땀·기운 없음)을 관찰합니다.",
+         guardian="당뇨가 있으셔서 식사·간식 시간을 규칙적으로 지켜 드리고 있습니다."),
+    dict(id="R_DX_HTN", category="질환 관리",
+         when=lambda f, c: (_flag(f, "dx_hypertension") or _dx(f, "고혈압")) and not _below(c, "na", 80),
+         staff="고혈압이 있어 국물·절임 반찬 배식량을 조절하고 혈압 기록을 유지합니다.",
+         meal="국은 건더기 위주로 담고 국물은 적게, 김치·젓갈류는 소량만 제공합니다.",
+         monitor="혈압을 주 1회 측정하고 부종 여부를 확인합니다.",
+         guardian="혈압 관리를 위해 국물과 짠 반찬 양을 조절해 드리고 있습니다."),
+    dict(id="R_DX_DEMENTIA", category="질환 관리",
+         when=lambda f, c: _flag(f, "dx_dementia") or _dx(f, "치매"),
+         staff="식사에 집중하기 어려울 수 있어 조용한 자리, 익숙한 식기, 한 번에 한 가지씩 권하기를 적용합니다.",
+         meal="반찬을 한꺼번에 놓기보다 순서대로 드리고, 손으로 집어 드실 수 있는 형태를 함께 냅니다.",
+         monitor="식사 시간, 남긴 양, 식사 중 자리 이탈을 기록합니다.",
+         guardian="식사에 집중하기 편한 환경을 만들어 천천히 도와 드리고 있습니다."),
+    dict(id="R_DX_KIDNEY", category="질환 관리",
+         when=lambda f, c: _dx(f, "신장", "신부전", "투석"),
+         staff="신장 질환이 있어 단백질·칼륨·나트륨 조절이 필요한지 담당 의료진과 반드시 확인한 뒤 식단을 조정합니다.",
+         meal="의료진 지시 전에는 임의로 단백질·칼륨 식품을 늘리거나 줄이지 않습니다.",
+         monitor="부종, 소변량 변화, 체중 변화를 기록합니다.",
+         guardian="신장 상태에 맞춰 의료진과 상의하며 식사를 조정하고 있습니다."),
+    dict(id="R_DX_ANEMIA", category="질환 관리",
+         when=lambda f, c: _dx(f, "빈혈") or _below(c, "fe", 70),
+         staff="철 섭취가 부족하거나 빈혈 이력이 있어 급원 식품 제공 빈도를 영양사와 확인합니다.",
+         meal="살코기·간·달걀·해조류 같은 철 급원을 늘리고, 비타민 C가 있는 채소·과일을 같이 냅니다.",
+         monitor="어지럼·기운 없음·창백함을 관찰합니다.",
+         guardian="철분이 부족하지 않도록 반찬 구성을 조정하고 있습니다."),
+    dict(id="R_DX_OSTEO", category="질환 관리",
+         when=lambda f, c: _dx(f, "골다공증", "골절") or (_below(c, "ca", 70) and _below(c, "vd", 50)),
+         staff="뼈 건강 관리가 필요해 칼슘·비타민 D 급원 제공과 낮 시간 활동을 함께 검토합니다.",
+         meal="우유·두유·요구르트·뼈째 먹는 생선·두부를 간식과 반찬에 배치합니다.",
+         monitor="낙상 위험과 보행 상태를 함께 확인합니다.",
+         guardian="뼈 건강을 위해 유제품과 칼슘이 많은 반찬을 늘려 드리고 있습니다."),
+    dict(id="R_DX_CONSTIPATION", category="질환 관리",
+         when=lambda f, c: _dx(f, "변비") or (_below(c, "fiber", 70) and _below(c, "k", 70)),
+         staff="배변 상태를 매일 기록하고, 수분 섭취량을 함께 확인합니다.",
+         meal="부드럽게 익힌 채소·해조류·과일을 끼니마다 제공하고 수분을 자주 권합니다.",
+         monitor="배변 횟수와 복부 팽만을 기록합니다.",
+         guardian="변비가 생기지 않도록 채소·과일과 물을 자주 챙겨 드리고 있습니다."),
+    # ── 잔반(음식군) 기반 ───────────────────────────────────
+    dict(id="R_LEFT_SOUP", category="잔반 대응",
+         when=lambda f, c: _low_component(c, "국·탕"),
+         staff="국·탕을 특히 많이 남겨 온도·간·양이 맞는지 식사 관찰로 확인합니다.",
+         meal="국물 양을 줄이고 건더기 위주로 담아 드립니다. 삼키기 어려우면 점도 조절을 검토합니다.",
+         monitor="국·탕 잔반을 1주간 따로 기록합니다.",
+         guardian="국을 많이 남기셔서 건더기 위주로 담아 드리고 있습니다."),
+    dict(id="R_LEFT_SIDE", category="잔반 대응",
+         when=lambda f, c: _low_component(c, "부찬"),
+         staff="부찬을 많이 남겨 식감·선호를 확인하고, 좋아하시는 반찬으로 교체 가능한지 검토합니다.",
+         meal="질긴 나물은 부드럽게 익히거나 잘게 썰어 제공합니다.",
+         monitor="어떤 반찬을 남기는지 이름과 함께 기록합니다.",
+         guardian="남기시는 반찬을 파악해 좋아하시는 것으로 바꿔 드리고 있습니다."),
+    dict(id="R_LEFT_RICE", category="잔반 대응",
+         when=lambda f, c: _low_component(c, "밥·죽"),
+         staff="주식을 많이 남겨 1회 배식량이 많은지, 식사 형태가 맞는지 확인합니다.",
+         meal="한 번에 담는 밥·죽 양을 줄이고, 남기면 간식으로 열량을 보충합니다.",
+         monitor="주식 잔반과 체중을 함께 봅니다.",
+         guardian="밥을 남기셔서 양을 조절하고 간식으로 보충해 드리고 있습니다."),
+    dict(id="R_LEFT_KIMCHI", category="잔반 대응",
+         when=lambda f, c: _low_component(c, "김치"),
+         staff="김치를 거의 드시지 않아 대체 채소 반찬으로 섬유·비타민을 보완합니다.",
+         meal="익힌 나물·샐러드 등 드시기 편한 채소 반찬을 추가합니다.",
+         monitor="채소 섭취량을 확인합니다.",
+         guardian="김치를 잘 안 드셔서 다른 채소 반찬으로 챙겨 드리고 있습니다."),
     dict(id="R_REASSESS", category="재평가",
          when=lambda f, c: c.get("is_borderline") or _v(f, "has_nutrition") == 0 or _flag(f, "mmse_untested"),
          staff="유형 판정이 경계에 있거나 일부 조사가 비어 있어, 누락 항목(잔반 조사·인지 검사 등)을 보완해 재평가합니다.",

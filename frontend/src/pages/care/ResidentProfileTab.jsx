@@ -1,12 +1,29 @@
 import { useEffect, useState } from 'react'
 import api from '../../lib/api'
-import { Card, errMsg, fmtDate } from '../../components/care/CareUI'
+import { Card, Gauge, errMsg, fmtDate } from '../../components/care/CareUI'
 import Avatar from '../../components/care/Avatar'
 
 const TEXTURE = ['일반식', '다진식', '갈은식', '유동식']
 const THICKENER = [['', '없음'], ['mild', '약간 걸쭉'], ['moderate', '중간'], ['extreme', '되직함']]
 const LTC = ['1등급', '2등급', '3등급', '4등급', '5등급', '인지지원등급', '등급외', '미신청']
 const DOSE_TIMES = ['아침', '점심', '저녁', '취침 전', '필요시']
+const EDU = ['무학', '초등학교 졸업', '중학교 졸업', '고등학교 졸업', '대학교(전문대 포함) 졸업 이상']
+const ALCOHOL = [['', '선택'], ['none', '안 마심'], ['sometimes', '가끔'], ['often', '자주'], ['quit', '끊음']]
+const SMOKING = [['', '선택'], ['none', '비흡연'], ['current', '흡연'], ['quit', '금연']]
+
+// 입소일 → 거주 기간
+function stayLength(admit) {
+  if (!admit) return null
+  const a = new Date(admit)
+  if (Number.isNaN(a.getTime())) return null
+  const t = new Date()
+  let months = (t.getFullYear() - a.getFullYear()) * 12 + (t.getMonth() - a.getMonth())
+  if (t.getDate() < a.getDate()) months -= 1
+  if (months < 0) return null
+  if (months < 1) return '1개월 미만'
+  const y = Math.floor(months / 12), m = months % 12
+  return `${y ? `${y}년 ` : ''}${m ? `${m}개월` : y ? '' : '0개월'}`.trim()
+}
 const SEVERITY = {
   mild: ['경증', 'bg-amber-50 text-amber-700 border-amber-200'],
   moderate: ['중등', 'bg-orange-50 text-orange-700 border-orange-200'],
@@ -63,7 +80,7 @@ function SubTabs({ active, onChange }) {
 const TONE_TXT = { good: 'text-emerald-700', warn: 'text-amber-700', bad: 'text-rose-600', none: 'text-gray-400' }
 const TONE_BAR = { good: 'bg-emerald-500', warn: 'bg-amber-500', bad: 'bg-rose-500', none: 'bg-gray-300' }
 
-function Stat({ label, value, unit, hint, tone }) {
+function Stat({ label, value, unit, hint, tone, gauge }) {
   return (
     <div className="rounded-xl bg-slate-50 px-3 py-2.5">
       <p className="text-[11px] text-gray-500">{label}</p>
@@ -71,6 +88,7 @@ function Stat({ label, value, unit, hint, tone }) {
         {value ?? '–'}<span className="ml-1 text-[11px] font-normal text-gray-400">{unit}</span>
       </p>
       {hint && <p className="text-[11px] text-gray-400">{hint}</p>}
+      {gauge && <Gauge g={gauge} />}
     </div>
   )
 }
@@ -106,7 +124,7 @@ function HealthPanel({ r }) {
         <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
           {(r.statuses || []).map((s) => (
             <Stat key={s.key} label={s.title || s.label} value={s.value} unit=""
-              hint={s.note ? `${s.band} · ${s.note}` : s.band} tone={s.tone} />
+              hint={s.note ? `${s.band} · ${s.note}` : s.band} tone={s.tone} gauge={s.gauge} />
           ))}
         </div>
       </Card>
@@ -115,7 +133,7 @@ function HealthPanel({ r }) {
           <Stat label="키" value={a.height} unit="cm" />
           <Stat label="몸무게" value={a.weight} unit="kg"
             hint={a.weight_change != null ? `직전 대비 ${a.weight_change > 0 ? '+' : ''}${a.weight_change}kg` : null} />
-          <Stat label="체질량지수" value={a.bmi} unit="" hint={a.bmi_band?.label} tone={a.bmi_band?.tone} />
+          <Stat label="체질량지수" value={a.bmi} unit="" hint={a.bmi_band?.label} tone={a.bmi_band?.tone} gauge={a.bmi_gauge} />
           <Stat label="혈압" value={a.sbp ? `${a.sbp}/${a.dbp}` : null} unit="mmHg" />
           <Stat label="식사 섭취율" value={r.intake?.total} unit="%" hint={r.intake?.band?.label} tone={r.intake?.band?.tone} />
         </div>
@@ -223,6 +241,7 @@ export default function ResidentProfileTab({ elderlyId, residentName }) {
   const [na, setNa] = useState({ allergen: '', severity: 'mild', reaction: '' })
   const [sub, setSub] = useState('info')
   const [rep, setRep] = useState(null)
+  const [ocr, setOcr] = useState(null)      // 약봉투 사진에서 읽은 후보
 
   const load = () => api.get(`/ehr/residents/${elderlyId}/profile`)
     .then((r) => {
@@ -232,6 +251,7 @@ export default function ResidentProfileTab({ elderlyId, residentName }) {
         birth_date: '', gender: '', admit_date: '', room: '', ltc_grade: '',
         guardian_name: '', guardian_relation: '', guardian_phone: '',
         texture_level: '', thickener: '', therapeutic_diet: '', notes: '',
+        education: '', alcohol: '', smoking: '',
         ...(r.data.survey_defaults || {}),
       }
       Object.entries(r.data.profile || {}).forEach(([k, v]) => {
@@ -271,6 +291,38 @@ export default function ResidentProfileTab({ elderlyId, residentName }) {
     return api.put(`/ehr/residents/${elderlyId}/profile`, body)
   }, '기본정보를 저장했습니다.')
 
+  const readPhoto = async (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    setBusy('ocr'); setMsg(''); setOcr(null)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      const { data } = await api.post(`/ehr/residents/${elderlyId}/medications/ocr`, fd,
+        { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 90000 })
+      if (!data.items?.length) setMsg('사진에서 약 이름을 찾지 못했습니다. 더 선명한 사진으로 다시 시도해 주세요.')
+      setOcr({ ...data, picked: (data.items || []).map((x) => x.confidence !== 'low') })
+    } catch (err) {
+      setMsg(errMsg(err))
+    } finally {
+      setBusy('')
+    }
+  }
+
+  const saveOcr = () => {
+    const rows = (ocr?.items || []).filter((_, i) => ocr.picked[i])
+    if (!rows.length) return
+    run('ocrsave', async () => {
+      for (const x of rows) {
+        await api.post(`/ehr/residents/${elderlyId}/medications`, {
+          name: x.name, dose: x.dose || null, schedule: x.schedule || [], note: '약봉투 사진에서 읽음',
+        })
+      }
+      setOcr(null)
+    }, `${rows.length}개 약물을 등록했습니다. 내용을 확인해 주세요.`)
+  }
+
   const importSurvey = () => run('import', () => api.post(`/ehr/residents/${elderlyId}/import-from-survey`),
     '기초조사표의 진단·복약을 가져왔습니다.')
 
@@ -279,6 +331,9 @@ export default function ResidentProfileTab({ elderlyId, residentName }) {
 
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value })
   const yrs = age(form.birth_date)
+  const stay = stayLength(form.admit_date)
+  const ltcOptions = [...new Set([...LTC, form.ltc_grade].filter(Boolean))]
+  const eduOptions = [...new Set([...EDU, form.education].filter(Boolean))]
 
   return (
     <div className="space-y-5">
@@ -331,6 +386,7 @@ export default function ResidentProfileTab({ elderlyId, residentName }) {
             </Field>
             <Field label="입소일">
               <input type="date" value={form.admit_date || ''} onChange={set('admit_date')} className="form-input" />
+              {stay && <span className="mt-1 block text-[11px] text-muted">거주 기간 {stay}</span>}
             </Field>
             <Field label="호실">
               <input value={form.room || ''} onChange={set('room')} placeholder="301호" className="form-input" />
@@ -338,7 +394,23 @@ export default function ResidentProfileTab({ elderlyId, residentName }) {
             <Field label="장기요양등급">
               <select value={form.ltc_grade || ''} onChange={set('ltc_grade')} className="form-input">
                 <option value="">선택</option>
-                {LTC.map((g) => <option key={g} value={g}>{g}</option>)}
+                {ltcOptions.map((g) => <option key={g} value={g}>{g}</option>)}
+              </select>
+            </Field>
+            <Field label="최종 학력">
+              <select value={form.education || ''} onChange={set('education')} className="form-input">
+                <option value="">선택</option>
+                {eduOptions.map((g) => <option key={g} value={g}>{g}</option>)}
+              </select>
+            </Field>
+            <Field label="음주">
+              <select value={form.alcohol || ''} onChange={set('alcohol')} className="form-input">
+                {ALCOHOL.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+            </Field>
+            <Field label="흡연">
+              <select value={form.smoking || ''} onChange={set('smoking')} className="form-input">
+                {SMOKING.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </select>
             </Field>
             <Field label="보호자">
@@ -412,7 +484,42 @@ export default function ResidentProfileTab({ elderlyId, residentName }) {
       </Card>
 
       {/* ── 복용 약물 ───────────────────────────── */}
-      <Card title="복용 약물">
+      <Card
+        title="복용 약물"
+        right={
+          <label className={`btn-secondary text-xs py-1.5 cursor-pointer ${busy === 'ocr' ? 'opacity-50 pointer-events-none' : ''}`}>
+            {busy === 'ocr' ? '사진 읽는 중…' : '약봉투 사진으로 추가'}
+            <input type="file" accept="image/*" capture="environment" onChange={readPhoto} className="hidden" />
+          </label>
+        }
+      >
+        {ocr && (
+          <div className="mb-4 rounded-xl border border-navy-100 bg-navy-50/50 px-4 py-3">
+            <p className="text-xs font-bold text-navy-900">사진에서 읽은 약 {ocr.items.length}개</p>
+            <p className="text-[11px] text-muted mt-0.5">
+              잘못 읽었을 수 있습니다. 확인하고 체크한 것만 등록하세요.{ocr.note ? ` · ${ocr.note}` : ''}
+            </p>
+            <ul className="mt-2 space-y-1.5">
+              {ocr.items.map((x, i) => (
+                <li key={`${x.name}-${i}`} className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={ocr.picked[i]}
+                    onChange={() => setOcr({ ...ocr, picked: ocr.picked.map((p, j) => (j === i ? !p : p)) })} />
+                  <span className="font-semibold text-navy-900">{x.name}</span>
+                  {x.dose && <span className="text-muted text-xs">{x.dose}</span>}
+                  {(x.schedule || []).map((t) => <span key={t} className="badge bg-white border border-navy-100 text-navy-700">{t}</span>)}
+                  {x.confidence === 'low' && <span className="badge bg-amber-50 text-amber-800">확인 필요</span>}
+                </li>
+              ))}
+            </ul>
+            <div className="mt-3 flex gap-2">
+              <button onClick={saveOcr} disabled={busy === 'ocrsave' || !ocr.picked.some(Boolean)}
+                className="btn-primary text-xs py-1.5 disabled:opacity-40">
+                {busy === 'ocrsave' ? '등록 중…' : '선택한 약 등록'}
+              </button>
+              <button onClick={() => setOcr(null)} className="btn-secondary text-xs py-1.5">취소</button>
+            </div>
+          </div>
+        )}
         {d.medications.length === 0 ? <Empty text="등록된 약물이 없습니다." /> : (
           <ul className="divide-y divide-slate-100 mb-4">
             {d.medications.map((m) => (

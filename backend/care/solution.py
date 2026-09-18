@@ -74,6 +74,7 @@ SYSTEM_PROMPT = """당신은 요양원 식사·영양 돌봄 코디네이터를 
 1. 조치는 반드시 후보 조치 목록 안에서만 고르고, 각 조치에 해당 rule_id 를 적습니다. 목록에 없는 새로운 의학적 조치를 만들지 않습니다.
 2. 약 이름·용량, 진단, 처방, 치료 효과를 단정하는 표현을 쓰지 않습니다. 의료적 판단이 필요하면 '의료진과 상의'로 안내합니다.
 3. 후보 문장을 어르신의 지표·선호에 맞게 구체화하고, 중요도 순으로 정렬합니다(최대 6개).
+3-0. '진단 질환'과 '잔반이 많은 음식군'을 반드시 함께 봅니다. 질환에 맞는 식사 조정(예: 고혈압이면 국물·절임, 당뇨면 단 간식 시간)과 어느 음식군을 남기는지에 대한 대응을 각각 한 줄 이상 씁니다. 약 이름을 근거로 효능·부작용을 설명하지 않습니다.
 3-1. '실제 섭취 영양소(하루 평균)'가 주어지면 그 수치를 근거로 씁니다. 기준 대비 80% 미만인 영양소는 무엇을 늘릴지, 나트륨이 기준을 넘으면 무엇을 줄일지 식사 지침에 구체적으로 적습니다. 특정 끼니가 유난히 적으면 그 끼니를 짚습니다. 영양제·보충제 제품명이나 용량은 쓰지 않습니다.
 4. guardian_message 는 보호자가 읽는 3~5문장의 쉬운 존댓말입니다. 점수·척도명(MNA, GDS 등)·유형 코드를 쓰지 않고, 불안을 주지 않되 사실대로 씁니다. 350자 이내.
 5. 반드시 아래 JSON 한 개만 출력합니다.
@@ -85,6 +86,18 @@ SYSTEM_PROMPT = """당신은 요양원 식사·영양 돌봄 코디네이터를 
  "cautions": ["담당자가 주의할 점"],
  "guardian_message": "보호자 안내 문장"}"""
 
+
+
+
+COMPONENT_LABELS = {"intake_rice": "밥·죽", "intake_soup": "국·탕", "intake_main": "주찬",
+                    "intake_side": "부찬", "intake_kimchi": "김치"}
+
+
+def low_components(features: dict, cut: float = 70.0, top: int = 2):
+    """잔반이 특히 많은 음식군 — 섭취율이 낮은 순으로 최대 두 가지"""
+    vals = [(v, label) for k, label in COMPONENT_LABELS.items()
+            for v in [features.get(k)] if isinstance(v, (int, float)) and v < cut]
+    return [label for _, label in sorted(vals)[:top]]
 
 
 def nutrition_summary(features: dict):
@@ -131,6 +144,11 @@ def build_context(features: dict, type_info: dict, priority: dict, candidates: l
                         for x in priority["factors"]]},
         "유형 변화": transition.get("kind"),
         "주요 지표": ind,
+        "진단 질환": [str(x) for x in (features.get("diseases") or [])][:12],
+        "복용 약물": [str(x) for x in (features.get("medications") or [])][:12],
+        "잔반이 많은 음식군": low_components(features) or "없음",
+        "음식군별 섭취율(%)": {label: features.get(k) for k, label in COMPONENT_LABELS.items()
+                            if features.get(k) is not None},
         "실제 섭취 영양소(하루 평균)": nutrition_ctx(features),
         "급식 개선 의견": (features.get("improvement_text") or "")[:200],
         "후보 조치 목록": [{"rule_id": c["id"], "category": c["category"], "staff": c["staff"], "meal": c["meal"],
@@ -255,7 +273,8 @@ def validate(out: dict, candidates: list, fallback: dict):
 def generate(features, type_info, priority, transition, is_borderline, provider: str | None = None):
     _n, npct, low_meal = nutrition_summary(features)
     ctx_rules = {"factor_codes": {x["code"] for x in priority["factors"]}, "is_borderline": is_borderline,
-                 "priority_level": priority["level"], "nutrition_pct": npct, "low_meal": low_meal}
+                 "priority_level": priority["level"], "nutrition_pct": npct, "low_meal": low_meal,
+                 "low_components": low_components(features)}
     candidates = care_rules.select(features, ctx_rules)
     fallback = rules_solution(type_info, priority, candidates)
     provider = (provider or os.getenv("LLM_PROVIDER", "none")).lower()

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { PfmlLogo } from '../brand/Brand'
+import { Gauge } from './CareUI'
 
 // 유형 색 (대비 검증 통과 팔레트)
 const TYPE_COLORS = ['#1151b8', '#d97706', '#e11d48', '#6d28d9', '#0f9d76', '#475569']
@@ -59,14 +60,12 @@ function StatusCard({ s, staff }) {
         <span className="text-[10px] opacity-70" aria-hidden>{t.mark}</span>
       </div>
       <p className="mt-1.5 text-[16px] font-extrabold leading-tight">{s.band}</p>
-      {staff && s.value != null && (
-        <>
-          <div className="mt-2.5 h-1.5 rounded-full bg-white/70 overflow-hidden">
-            <div className={`h-full rounded-full ${t.bar}`} style={{ width: `${pct ?? 40}%` }} />
-          </div>
-          <p className="mt-1.5 text-[10px] opacity-70">{s.scale} · {s.value}</p>
-        </>
+      {s.gauge ? <Gauge g={s.gauge} /> : staff && s.value != null && (
+        <div className="mt-2.5 h-1.5 rounded-full bg-white/70 overflow-hidden">
+          <div className={`h-full rounded-full ${t.bar}`} style={{ width: `${pct ?? 40}%` }} />
+        </div>
       )}
+      {staff && s.value != null && <p className="mt-1 text-[10px] opacity-70">{s.scale} · {s.value}</p>}
       {staff && s.note && <p className="mt-1 text-[10px] opacity-60">{s.note}</p>}
     </div>
   )

@@ -12,9 +12,10 @@ from datetime import datetime
 from typing import Optional
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
 
+from care import ocr
 from dependencies import get_supabase, require_staff
 
 router = APIRouter()
@@ -45,7 +46,7 @@ def _owned(sb, table: str, home: str, eid: str, rid: str) -> dict:
 # 기초조사표·보호자 등록 정보에서 프로필 빈칸을 미리 채워 준다.
 # 담당자가 확인하고 '저장'을 눌러야 실제로 저장된다.
 _GENDER = {"여자": "female", "여성": "female", "남자": "male", "남성": "male"}
-_LTC = {"1등급": "1등급", "2등급": "2등급", "3등급": "3등급", "4등급 이상": "4등급",
+_LTC = {"1등급": "1등급", "2등급": "2등급", "3등급": "3등급", "4등급 이상": "4등급 이상",
         "4등급": "4등급", "5등급": "5등급", "인지지원등급": "인지지원등급"}
 _TEXTURE = {"일반식": 0, "다진식": 1, "갈은식(믹서식)": 2, "갈은식": 2, "유동식": 3}
 
@@ -67,7 +68,7 @@ def _json_list(x):
 def _survey_source(sb, home: str, eid: str) -> dict:
     """기초조사표 + 등록된 보호자에서 프로필 기본값과 진단·복약 목록을 뽑는다."""
     b = (sb.table("basic_survey")
-         .select("age,gender,care_grade,meal_type,diseases,medications,updated_at")
+         .select("age,gender,care_grade,education,meal_type,diseases,medications,updated_at")
          .eq("elderly_id", eid).limit(1).execute().data or [None])[0]
     g = (sb.table("guardians").select("name,relation,phone")
          .eq("elderly_id", eid).eq("nursing_home_id", home).eq("is_active", True)
@@ -86,6 +87,8 @@ def _survey_source(sb, home: str, eid: str) -> dict:
             defaults["ltc_grade"] = _LTC[b["care_grade"]]
         if b.get("meal_type") in _TEXTURE:
             defaults["texture_level"] = _TEXTURE[b["meal_type"]]
+        if str(b.get("education") or "").strip():
+            defaults["education"] = str(b["education"]).strip()
     if g:
         if g.get("name"):
             defaults["guardian_name"] = g["name"]
@@ -114,6 +117,9 @@ class ProfileIn(BaseModel):
     texture_level: Optional[int] = None
     thickener: Optional[str] = None
     therapeutic_diet: Optional[str] = None
+    education: Optional[str] = None
+    alcohol: Optional[str] = None
+    smoking: Optional[str] = None
     banned_foods: Optional[list] = None
     notes: Optional[str] = None
 
@@ -317,6 +323,23 @@ def import_from_survey(eid: str, user: dict = Depends(require_staff)):
     if rows_m:
         sb.table("resident_medications").insert(rows_m).execute()
     return {"conditions": len(rows_c), "medications": len(rows_m)}
+
+
+
+@router.post("/residents/{eid}/medications/ocr")
+async def read_medication_photo(eid: str, file: UploadFile = File(...),
+                                provider: Optional[str] = None,
+                                user: dict = Depends(require_staff)):
+    """약봉투·처방전 사진에서 약 이름을 읽어 후보로 돌려준다 (저장하지 않음)."""
+    sb, home = get_supabase(), user["scope_home"]
+    _resident(sb, home, eid)
+    data = await file.read()
+    try:
+        return ocr.read_medication_image(data, file.content_type, provider)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"사진을 읽지 못했습니다: {str(e)[:160]}")
 
 
 @router.get("/residents/{eid}/history")

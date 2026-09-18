@@ -74,6 +74,44 @@ def _facility_latest(sb, home: str) -> dict:
 
 
 
+# 지표별 눈금 — 점수 체계를 모르는 사람도 "이 막대 어디쯤"인지 보이게 한다.
+# segments 는 왼쪽부터 차례로 [끝값, 이름, 색]. 낮을수록 좋은 지표는 reverse=True.
+SCALES = {
+    "nutrition": {"tool": "MNA-SF", "min": 0, "max": 14, "unit": "점",
+                  "segments": [(7, "영양불량", "bad"), (11, "위험", "warn"), (14, "양호", "good")]},
+    "intake": {"tool": "5일 평균", "min": 0, "max": 100, "unit": "%",
+               "segments": [(50, "낮음", "bad"), (75, "주의", "warn"), (100, "양호", "good")]},
+    "adl": {"tool": "K-MBI", "min": 0, "max": 100, "unit": "%",
+            "segments": [(50, "많은 도움", "bad"), (80, "부분 도움", "warn"), (100, "대부분 자립", "good")]},
+    "cognition": {"tool": "K-MMSE-2", "min": 0, "max": 30, "unit": "점",
+                  "segments": [(17, "중등도 이상 저하", "bad"), (23, "경도 저하", "warn"), (30, "정상 범위", "good")]},
+    "mood": {"tool": "GDS-SF", "min": 0, "max": 15, "unit": "점", "reverse": True,
+             "segments": [(4, "양호", "good"), (7, "주의", "warn"), (15, "우울감 높음", "bad")]},
+    "activity": {"tool": "IPAQ-SF", "min": 0, "max": 1500, "unit": "MET-분/주",
+                 "segments": [(1, "거의 없음", "bad"), (600, "부족", "warn"), (1500, "충분", "good")]},
+    "bmi": {"tool": "BMI", "min": 14, "max": 32, "unit": "kg/m²",
+            "segments": [(18.5, "저체중", "bad"), (25, "정상", "good"), (32, "과체중", "warn")]},
+}
+
+
+def scale_of(kind: str, value):
+    """지표 눈금 + 값의 위치(%)"""
+    sc = SCALES.get(kind)
+    if not sc:
+        return None
+    lo, hi = sc["min"], sc["max"]
+    prev, segs = lo, []
+    for end, label, tone in sc["segments"]:
+        segs.append({"from": round(prev, 1), "to": round(end, 1), "label": label, "tone": tone,
+                     "width": round(100 * (end - prev) / (hi - lo), 2)})
+        prev = end
+    out = {"tool": sc["tool"], "min": lo, "max": hi, "unit": sc["unit"],
+           "reverse": bool(sc.get("reverse")), "segments": segs}
+    if value is not None:
+        out["pos"] = round(max(0, min(100, 100 * (float(value) - lo) / (hi - lo))), 2)
+    return out
+
+
 def build_report(sb, home: str, eid: str, audience: str = "guardian",
                  assessment: dict | None = None, solution: dict | None = None,
                  facility_name: str | None = None, type_info: dict | None = None,
@@ -129,21 +167,25 @@ def build_report(sb, home: str, eid: str, audience: str = "guardian",
     def status(key, kind, label, value, scale=None, note=None):
         b = _band(kind, value)
         item = {"key": key, "title": label, "band": b["label"], "tone": b["tone"], "note": note}
+        gauge = scale_of(kind, value)
+        if gauge:
+            item["gauge"] = gauge
         if staff and value is not None:
             item["value"] = _round(value, 1)
             item["scale"] = scale
         return item
 
+    tool = (lambda name, t: f"{name} ({t})" if staff else name)
     statuses = [
-        status("nutrition", "nutrition", "영양 상태", _n(f, "mna_sf"), "MNA-SF 0–14"),
+        status("nutrition", "nutrition", tool("영양 상태", "MNA-SF"), _n(f, "mna_sf"), "MNA-SF 0–14"),
         status("intake", "intake", "식사 섭취", _n(f, "intake_total"), "5일 평균 섭취율 %"),
-        status("adl", "adl", "일상생활 수행", _n(f, "kmbi_pct"), "K-MBI %",
+        status("adl", "adl", tool("일상생활 수행", "K-MBI"), _n(f, "kmbi_pct"), "K-MBI %",
                (f"원점수 {_round(_n(f, 'kmbi_score'))}/{_round(_n(f, 'kmbi_max'))}점"
                 + (" · 의자차 기준" if _n(f, "kmbi_mobility_wheelchair") == 1 else ""))
                if _n(f, "kmbi_score") is not None else None),
-        status("cognition", "cognition", "인지 기능", _n(f, "mmse"), "K-MMSE-2 0–30"),
-        status("mood", "mood", "기분·정서", _n(f, "gds"), "GDS-SF 0–15"),
-        status("activity", "activity", "신체 활동", _n(f, "met_total"), "IPAQ MET-분/주"),
+        status("cognition", "cognition", tool("인지 기능", "K-MMSE-2"), _n(f, "mmse"), "K-MMSE-2 0–30"),
+        status("mood", "mood", tool("기분·정서", "GDS-SF"), _n(f, "gds"), "GDS-SF 0–15"),
+        status("activity", "activity", tool("신체 활동", "IPAQ-SF"), _n(f, "met_total"), "IPAQ-SF MET-분/주"),
     ]
 
     # ── 신체 계측 ──
@@ -151,6 +193,7 @@ def build_report(sb, home: str, eid: str, audience: str = "guardian",
     anthro = {
         "height": _round(_n(f, "height_cm"), 1), "weight": _round(w, 1), "bmi": _round(_n(f, "bmi"), 1),
         "bmi_band": _band("bmi", _n(f, "bmi")),
+        "bmi_gauge": scale_of("bmi", _n(f, "bmi")),
         "weight_change": _round(w - pw, 1) if (w and pw) else None,
         "sbp": _round(_n(f, "sbp")), "dbp": _round(_n(f, "dbp")),
     }

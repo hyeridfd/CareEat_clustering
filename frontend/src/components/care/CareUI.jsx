@@ -127,3 +127,38 @@ export function SortTh({ label, sortKey, sort, onSort, className = '', align = '
     </th>
   )
 }
+
+/* 지표 눈금 — 구간(양호/주의/관리 필요)을 색으로 깔고 어르신 값을 바늘로 찍는다.
+   점수 체계를 모르는 사람도 "이 정도면 어디쯤"인지 바로 보이게 하는 것이 목적. */
+const SEG_FILL = { good: 'bg-emerald-300', warn: 'bg-amber-300', bad: 'bg-rose-300', none: 'bg-slate-200' }
+
+export function Gauge({ g, compact = false }) {
+  if (!g?.segments?.length) return null
+  return (
+    <div className={compact ? 'mt-1.5' : 'mt-2'}>
+      <div className="relative">
+        <div className="flex h-2 rounded-full overflow-hidden bg-slate-100">
+          {g.segments.map((s) => (
+            <div key={`${s.label}-${s.to}`} className={SEG_FILL[s.tone] || SEG_FILL.none}
+              style={{ width: `${s.width}%` }} title={`${s.label} ${s.from}–${s.to}${g.unit || ''}`} />
+          ))}
+        </div>
+        {g.pos != null && (
+          <span className="absolute -top-1 h-4 w-[3px] rounded-sm bg-gray-900 ring-2 ring-white"
+            style={{ left: `calc(${g.pos}% - 1.5px)` }} aria-hidden />
+        )}
+      </div>
+      {!compact && (
+        <div className="mt-1.5 flex text-[9px] leading-3 text-gray-400">
+          {g.segments.map((s) => (
+            <span key={s.label} className="truncate px-0.5 text-center" style={{ width: `${s.width}%` }}>{s.label}</span>
+          ))}
+        </div>
+      )}
+      <div className="flex justify-between text-[9px] text-gray-400">
+        <span>{g.min}</span>
+        <span>{g.max}{g.unit ? ` ${g.unit}` : ''}{g.reverse ? ' · 낮을수록 좋음' : ''}</span>
+      </div>
+    </div>
+  )
+}
