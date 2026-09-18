@@ -13,7 +13,25 @@ import os
 
 import httpx
 
-from .solution import ANTHROPIC_MODEL, OPENAI_MODEL, TIMEOUT, _extract_json, _key
+from .solution import TIMEOUT, _extract_json, _key
+
+# 사진 판독은 솔루션 생성보다 좋은 모델을 쓰는 편이 정확하다.
+# .env 에서 따로 지정할 수 있고, 지정하지 않으면 아래 기본값을 쓴다.
+#   OCR_PROVIDER = openai | anthropic     (없으면 LLM_PROVIDER, 그것도 없으면 키가 있는 쪽)
+#   OCR_MODEL    = 모델 이름              (없으면 아래 기본값)
+DEFAULT_OCR_MODEL = {"openai": "gpt-4o", "anthropic": "claude-sonnet-4-5"}
+
+
+def ocr_model(provider: str) -> str:
+    return _key("OCR_MODEL") or DEFAULT_OCR_MODEL.get(provider, "gpt-4o")
+
+
+def ocr_status() -> dict:
+    provider = (_key("OCR_PROVIDER") or os.getenv("LLM_PROVIDER", "") or "").lower()
+    if provider not in ("openai", "anthropic"):
+        provider = "openai" if _key("OPENAI_API_KEY") else ("anthropic" if _key("ANTHROPIC_API_KEY") else "none")
+    return {"provider": provider, "model": ocr_model(provider) if provider != "none" else None,
+            "openai_key": bool(_key("OPENAI_API_KEY")), "anthropic_key": bool(_key("ANTHROPIC_API_KEY"))}
 
 MAX_BYTES = 8 * 1024 * 1024
 OK_TYPES = ("image/jpeg", "image/png", "image/webp", "image/heic", "image/heif")
@@ -38,7 +56,7 @@ def read_medication_image(data: bytes, content_type: str, provider: str | None =
     if ct not in OK_TYPES:
         raise ValueError("JPG·PNG·WEBP 사진만 읽을 수 있습니다.")
     b64 = base64.b64encode(data).decode()
-    provider = (provider or os.getenv("LLM_PROVIDER", "none")).lower()
+    provider = (provider or _key("OCR_PROVIDER") or os.getenv("LLM_PROVIDER", "none")).lower()
     if provider not in ("openai", "anthropic"):
         provider = "openai" if _key("OPENAI_API_KEY") else "anthropic"
 
@@ -46,7 +64,7 @@ def read_medication_image(data: bytes, content_type: str, provider: str | None =
         key = _key("OPENAI_API_KEY")
         if not key:
             raise RuntimeError("OPENAI_API_KEY 가 설정되어 있지 않습니다.")
-        model = os.getenv("OPENAI_MODEL", OPENAI_MODEL)
+        model = ocr_model("openai")
         r = httpx.post("https://api.openai.com/v1/chat/completions",
                        headers={"Authorization": f"Bearer {key}"},
                        json={"model": model, "temperature": 0,
@@ -62,7 +80,7 @@ def read_medication_image(data: bytes, content_type: str, provider: str | None =
         key = _key("ANTHROPIC_API_KEY")
         if not key:
             raise RuntimeError("ANTHROPIC_API_KEY 가 설정되어 있지 않습니다.")
-        model = os.getenv("ANTHROPIC_MODEL", ANTHROPIC_MODEL)
+        model = ocr_model("anthropic")
         r = httpx.post("https://api.anthropic.com/v1/messages",
                        headers={"x-api-key": key, "anthropic-version": "2023-06-01"},
                        json={"model": model, "max_tokens": 1500, "temperature": 0,

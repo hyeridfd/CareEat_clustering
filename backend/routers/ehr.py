@@ -326,6 +326,12 @@ def import_from_survey(eid: str, user: dict = Depends(require_staff)):
 
 
 
+@router.get("/ocr-status")
+def ocr_status(user: dict = Depends(require_staff)):
+    """약봉투 판독에 쓰는 모델 확인용"""
+    return ocr.ocr_status()
+
+
 @router.post("/residents/{eid}/medications/ocr")
 async def read_medication_photo(eid: str, file: UploadFile = File(...),
                                 provider: Optional[str] = None,

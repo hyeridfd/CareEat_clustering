@@ -304,7 +304,8 @@ export default function ResidentProfileTab({ elderlyId, residentName }) {
       const { data } = await api.post(`/ehr/residents/${elderlyId}/medications/ocr`, fd,
         { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 90000 })
       if (!data.items?.length) setMsg('사진에서 약 이름을 찾지 못했습니다. 더 선명한 사진으로 다시 시도해 주세요.')
-      setOcr({ ...data, picked: (data.items || []).map((x) => x.confidence !== 'low') })
+      // 잘못 읽을 수 있으므로 기본은 모두 해제 — 담당자가 확인하고 체크한 것만 등록한다
+      setOcr({ ...data, picked: (data.items || []).map(() => false) })
     } catch (err) {
       setMsg(errMsg(err))
     } finally {
@@ -322,7 +323,7 @@ export default function ResidentProfileTab({ elderlyId, residentName }) {
         })
       }
       setOcr(null)
-    }, `${rows.length}개 약물을 등록했습니다. 내용을 확인해 주세요.`)
+    }, `${rows.length}개 약물을 등록했습니다. 용량·복용 시간을 다시 확인해 주세요.`)
   }
 
   const importSurvey = () => run('import', () => api.post(`/ehr/residents/${elderlyId}/import-from-survey`),
@@ -497,9 +498,19 @@ export default function ResidentProfileTab({ elderlyId, residentName }) {
       >
         {ocr && (
           <div className="mb-4 rounded-xl border border-navy-100 bg-navy-50/50 px-4 py-3">
-            <p className="text-xs font-bold text-navy-900">사진에서 읽은 약 {ocr.items.length}개</p>
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <p className="text-xs font-bold text-navy-900">사진에서 읽은 약 {ocr.items.length}개 · 확인 필요</p>
+              <button type="button" className="text-[11px] font-semibold text-navy-600 hover:underline"
+                onClick={() => {
+                  const all = ocr.picked.every(Boolean)
+                  setOcr({ ...ocr, picked: ocr.picked.map(() => !all) })
+                }}>
+                {ocr.picked.every(Boolean) ? '전체 해제' : '전체 선택'}
+              </button>
+            </div>
             <p className="text-[11px] text-muted mt-0.5">
-              잘못 읽었을 수 있습니다. 확인하고 체크한 것만 등록하세요.{ocr.note ? ` · ${ocr.note}` : ''}
+              사진을 잘못 읽을 수 있어 <b>기본은 모두 해제</b>되어 있습니다. 약 이름·용량을 확인하고 체크한 것만 등록하세요.
+              {ocr.note ? ` · ${ocr.note}` : ''}{ocr.generator ? ` · ${ocr.generator}` : ''}
             </p>
             <ul className="mt-2 space-y-1.5">
               {ocr.items.map((x, i) => (
@@ -509,7 +520,8 @@ export default function ResidentProfileTab({ elderlyId, residentName }) {
                   <span className="font-semibold text-navy-900">{x.name}</span>
                   {x.dose && <span className="text-muted text-xs">{x.dose}</span>}
                   {(x.schedule || []).map((t) => <span key={t} className="badge bg-white border border-navy-100 text-navy-700">{t}</span>)}
-                  {x.confidence === 'low' && <span className="badge bg-amber-50 text-amber-800">확인 필요</span>}
+                  <span className="badge bg-white border border-navy-100 text-navy-600">확인 필요</span>
+                  {x.confidence === 'low' && <span className="badge bg-amber-50 text-amber-800">흐릿하게 읽힘</span>}
                 </li>
               ))}
             </ul>
