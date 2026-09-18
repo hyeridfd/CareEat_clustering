@@ -154,7 +154,23 @@ body {
     break-inside: avoid;
   }
 
-  section { break-inside: auto; }
+  /* 번호 항목(01~07) 등 각 섹션은 페이지 경계에서 쪼개지 않는다.
+     한 페이지에 안 들어가는 긴 섹션만 .pb-flow 로 예외 처리. */
+  section {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .pb-flow {
+    break-inside: auto !important;
+    page-break-inside: auto !important;
+  }
+
+  /* 맨 아래 미주 */
+  .pb-endnote {
+    break-before: avoid;
+    page-break-before: avoid;
+    color: #cbd5e1 !important;
+  }
 
   /* 소제목이 페이지 끝에 혼자 남지 않게 */
   .pb-keep-next { break-after: avoid; page-break-after: avoid; }

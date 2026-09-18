@@ -18,9 +18,9 @@ function rateTone(v) {
   return v < 50 ? TONE.bad : v < 75 ? TONE.warn : TONE.good
 }
 
-function Section({ no, title, sub, children, right }) {
+function Section({ no, title, sub, children, right, flow = false }) {
   return (
-    <section className="surface p-6 md:p-8">
+    <section className={`surface p-6 md:p-8${flow ? ' pb-flow' : ''}`}>
       <header className="flex flex-wrap items-start justify-between gap-3 mb-6">
         <div className="flex items-start gap-3">
           {no && (
@@ -602,7 +602,7 @@ export default function ReportView({ r }) {
       </Section>
 
       {/* 돌봄 제안 */}
-      <Section title="돌봄 제안" sub={staff ? '규칙 근거를 바탕으로 만든 제안이며, 담당자 승인 후 적용됩니다.' : '시설에서 이렇게 돌봐 드리고 있습니다.'}>
+      <Section flow title="돌봄 제안" sub={staff ? '규칙 근거를 바탕으로 만든 제안이며, 담당자 승인 후 적용됩니다.' : '시설에서 이렇게 돌봐 드리고 있습니다.'}>
         {!staff && sol.guardian_message && (
           <p className="rounded-2xl bg-navy-50/70 px-5 py-4 text-[15px] leading-7 text-navy-900 whitespace-pre-line">{sol.guardian_message}</p>
         )}
@@ -650,7 +650,7 @@ export default function ReportView({ r }) {
 
       {/* 담당자 전용 */}
       {staff && r.priority?.factors?.length > 0 && (
-        <Section title="돌봄 우선순위 근거" sub="유형 위험도, 현재 상태, 직전 평가 대비 변화를 더한 값입니다.">
+        <Section flow title="돌봄 우선순위 근거" sub="유형 위험도, 현재 상태, 직전 평가 대비 변화를 더한 값입니다.">
           <ul className="divide-y divide-navy-50">
             {r.priority.factors.map((x) => (
               <li key={x.code} className="flex items-start justify-between gap-3 py-2.5 text-sm">
@@ -666,7 +666,7 @@ export default function ReportView({ r }) {
       )}
 
       {staff && r.history?.length > 1 && (
-        <Section title="평가 이력">
+        <Section flow title="평가 이력">
           <div className="overflow-x-auto">
             <table className="w-full text-sm min-w-[440px]">
               <thead><tr className="text-left text-xs text-muted border-b border-navy-100">
@@ -702,6 +702,11 @@ export default function ReportView({ r }) {
           </span>
         </div>
       </section>
+
+      {/* 미주 */}
+      <p className="pb-endnote pt-1 pb-2 text-center text-[10px] tracking-[0.08em] text-slate-300">
+        Care-Eat 건강·식사 돌봄 리포트
+      </p>
     </div>
   )
 }
