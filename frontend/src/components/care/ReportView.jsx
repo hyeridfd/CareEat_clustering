@@ -314,32 +314,38 @@ function NutritionBlock({ n, staff }) {
 }
 
 /* 영양소를 세로(행)로, 끼니·일자를 가로(열)로 둔다.
-   가로 스크롤 없이 모든 영양소 항목이 인쇄물에서도 보이도록. */
+   가로 스크롤 없이 모든 영양소 항목이 인쇄물에서도 보이도록.
+   두 표의 행 수가 같으므로 머리글·행 높이를 고정해 좌우 높이를 맞춘다. */
+const NUT_ROW_H = 'h-[26px]'
+
 function NutTable({ rows, fields, footer }) {
   if (!rows?.length) return <p className="text-sm text-muted py-4">기록이 없습니다.</p>
   const cols = footer ? [...rows, footer] : rows
   const lastIdx = footer ? cols.length - 1 : -1
   const cell = (c, f) => (c?.[f.key] == null ? '\u2013' : Number(c[f.key]).toFixed(f.digits ?? 1))
   return (
-    <table className="w-full text-[13px] table-fixed">
+    <table className="w-full text-[11px] leading-none">
       <thead>
-        <tr className="text-[11px] text-muted border-b border-navy-100">
-          <th className="py-1.5 text-left font-medium w-[38%]">영양소</th>
+        <tr className="text-[10px] text-muted border-b border-navy-100">
+          <th className={`${NUT_ROW_H} text-left font-medium whitespace-nowrap`}>영양소</th>
           {cols.map((c, i) => (
-            <th key={i} className={`py-1.5 text-right font-semibold ${i === lastIdx ? 'text-navy-900' : 'text-navy-700'}`}>{c.label}</th>
+            <th key={i}
+              className={`${NUT_ROW_H} pl-1.5 text-right font-bold whitespace-nowrap ${i === lastIdx ? 'text-navy-900' : 'text-navy-700'}`}>
+              {c.label}
+            </th>
           ))}
         </tr>
       </thead>
       <tbody>
         {fields.map((f) => (
           <tr key={f.key} className="border-b border-navy-50 last:border-0">
-            <td className="py-1.5 pr-1 leading-tight">
+            <td className={`${NUT_ROW_H} pr-1 whitespace-nowrap`}>
               <span className="font-semibold text-navy-900">{f.label}</span>
-              <span className="ml-1 text-[10px] text-muted">({f.unit})</span>
+              <span className="ml-0.5 text-[9px] text-muted">({f.unit})</span>
             </td>
             {cols.map((c, i) => (
               <td key={i}
-                className={`py-1.5 text-right tabular-nums ${i === lastIdx ? 'font-bold text-navy-900 bg-navy-50/70' : 'text-gray-700'}`}>
+                className={`${NUT_ROW_H} pl-1.5 text-right tabular-nums whitespace-nowrap ${i === lastIdx ? 'font-bold text-navy-900 bg-navy-50/70' : 'text-gray-700'}`}>
                 {cell(c, f)}
               </td>
             ))}
