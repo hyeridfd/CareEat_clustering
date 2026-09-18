@@ -1,19 +1,20 @@
 import { create } from 'zustand'
+import { clearAuth, readAuth, writeAuth } from './session'
 
 const useAuthStore = create((set) => ({
-  token: localStorage.getItem('token') || null,
-  user: JSON.parse(localStorage.getItem('user') || 'null'),
-  isAdmin: localStorage.getItem('isAdmin') === 'true',
+  token: readAuth('token') || null,
+  user: JSON.parse(readAuth('user') || 'null'),
+  isAdmin: readAuth('isAdmin') === 'true',
 
   setAuth: (token, user, isAdmin = false) => {
-    localStorage.setItem('token', token)
-    localStorage.setItem('user', JSON.stringify(user))
-    localStorage.setItem('isAdmin', isAdmin)
+    writeAuth('token', token)
+    writeAuth('user', JSON.stringify(user))
+    writeAuth('isAdmin', String(isAdmin))
     set({ token, user, isAdmin })
   },
 
   logout: () => {
-    localStorage.clear()
+    clearAuth()
     set({ token: null, user: null, isAdmin: false })
   },
 }))
