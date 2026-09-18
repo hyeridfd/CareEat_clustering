@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../../lib/api'
 import CareLayout from '../../components/care/CareLayout'
-import { Card, LEVELS, LevelPill, ScoreBar, SOLUTION_STATUS, TRANSITION, TypeBadge, errMsg, fmtDate } from '../../components/care/CareUI'
+import { Card, LEVELS, LevelPill, ScoreBar, SOLUTION_STATUS, SortTh, TRANSITION, TypeBadge, errMsg, fmtDate, sortRows, useSortState } from '../../components/care/CareUI'
 
 const LEVEL_KEYS = ['high', 'medium', 'low', 'unassessed']
 
@@ -29,6 +29,17 @@ export default function CarePage() {
   const [level, setLevel] = useState('all')
   const [type, setType] = useState('all')
   const [q, setQ] = useState('')
+  const [sort, toggleSort] = useSortState('score', 'desc')
+
+  // 열별 정렬 기준 (미평가는 항상 뒤로)
+  const SORT_VALUES = {
+    name: (r) => r.display_name || r.elderly_id,
+    type: (r) => r.assessment?.type_code || null,
+    score: (r) => (r.assessment ? r.assessment.priority_score : null),
+    survey: (r) => (r.surveys ? Number(!!r.surveys.basic) * 10 + (r.surveys.nutrition_days || 0) : null),
+    solution: (r) => r.solution?.status || null,
+    assessed: (r) => r.assessment?.created_at || null,
+  }
 
   const load = () => {
     setLoading(true)
@@ -54,14 +65,15 @@ export default function CarePage() {
 
   const rows = useMemo(() => {
     if (!data) return []
-    return data.residents.filter((r) => {
+    const list = data.residents.filter((r) => {
       const lv = r.assessment?.priority_level || 'unassessed'
       if (level !== 'all' && lv !== level) return false
       if (type !== 'all' && r.assessment?.type_code !== type) return false
       if (q && !`${r.elderly_id} ${r.display_name}`.toLowerCase().includes(q.toLowerCase())) return false
       return true
     })
-  }, [data, level, type, q])
+    return sortRows(list, sort, SORT_VALUES)
+  }, [data, level, type, q, sort])
 
   const types = data?.model?.types || []
 
@@ -132,13 +144,13 @@ export default function CarePage() {
             <thead>
               <tr className="text-left text-xs text-gray-500 border-b border-gray-100">
                 <th className="px-4 py-3 w-10">#</th>
-                <th className="px-2 py-3">어르신</th>
-                <th className="px-2 py-3">유형</th>
-                <th className="px-2 py-3 w-44">돌봄 우선순위</th>
+                <SortTh label="어르신" sortKey="name" sort={sort} onSort={toggleSort} className="px-2 py-3" />
+                <SortTh label="유형" sortKey="type" sort={sort} onSort={toggleSort} className="px-2 py-3" />
+                <SortTh label="돌봄 우선순위" sortKey="score" sort={sort} onSort={toggleSort} className="px-2 py-3 w-44" />
                 <th className="px-2 py-3">주요 요인</th>
-                <th className="px-2 py-3">조사</th>
-                <th className="px-2 py-3">솔루션</th>
-                <th className="px-4 py-3 text-right">평가일</th>
+                <SortTh label="조사" sortKey="survey" sort={sort} onSort={toggleSort} className="px-2 py-3" />
+                <SortTh label="솔루션" sortKey="solution" sort={sort} onSort={toggleSort} className="px-2 py-3" />
+                <SortTh label="평가일" sortKey="assessed" sort={sort} onSort={toggleSort} className="px-4 py-3" align="right" />
               </tr>
             </thead>
             <tbody>

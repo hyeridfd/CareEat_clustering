@@ -164,15 +164,20 @@ def enrich_meal_log(meal_log, meal_form, elderly_id=None):
     if not cells:
         return meal_log, None
     days = sorted(per_day)
-    n_day = max(len(days), 1)
-    avg_day = {k: v / n_day for k, v in _sum_all(per_day.values()).items()}
     meal_counts = {m: sum(1 for c in meal_log if c.get("meal") == m and c.get("nut")) for m in MAIN_MEALS}
+    n_meals = sum(meal_counts.values())
+    # 하루 평균은 '기록된 끼니'를 하루 세 끼로 환산해 구한다.
+    # (일부 끼니가 조사되지 않은 날을 그대로 나누면 하루 섭취량이 과소평가된다)
+    total = _sum_all(per_day.values())
+    avg_day = {k: v / n_meals * 3 for k, v in total.items()} if n_meals else {}
     summary = {
         "days": [{"day": d, **_round(per_day[d], digits)} for d in days],
         "meals": [{"meal": m, **_round({k: v / max(meal_counts[m], 1) for k, v in per_meal[m].items()}, digits)}
                   for m in MAIN_MEALS if m in per_meal],
         "avg_day": _round(avg_day, digits),
         "n_days": len(days),
+        "n_meals": n_meals,
+        "partial": n_meals < len(days) * 3,
     }
     return meal_log, summary
 

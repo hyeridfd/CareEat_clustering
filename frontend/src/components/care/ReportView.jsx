@@ -132,8 +132,12 @@ function MealTable({ log, selected, onSelect }) {
       </p>
     )
   }
-  const days = [...new Set(log.map((x) => x.day))].sort((a, b) => a - b)
+  // 조사 기간(5일)은 항상 줄을 만들고, 그날 기록이 아예 없으면 '데이터 없음'으로 표시한다
+  const logged = [...new Set(log.map((x) => x.day))]
+  const maxDay = Math.max(5, ...logged)
+  const days = Array.from({ length: maxDay }, (_, i) => i + 1)
   const cell = (d, m) => log.find((x) => x.day === d && x.meal === m)
+  const hasDay = (d) => log.some((x) => x.day === d)
   const isOn = (c) => selected && selected.day === c.day && selected.meal === c.meal
   return (
     <div className="overflow-x-auto -mx-2 px-2">
@@ -148,9 +152,13 @@ function MealTable({ log, selected, onSelect }) {
           {days.map((d) => (
             <tr key={d}>
               <th className="text-left text-xs font-bold text-navy-900">{d}일차</th>
-              {MEALS.map((m) => {
+              {!hasDay(d) ? (
+                <td colSpan={MEALS.length} className="rounded-xl bg-slate-50 text-center text-xs text-slate-400 py-4">
+                  데이터 없음
+                </td>
+              ) : MEALS.map((m) => {
                 const c = cell(d, m)
-                if (!c) return <td key={m} className="rounded-xl bg-slate-50 text-center text-[11px] text-slate-300 py-3">–</td>
+                if (!c) return <td key={m} title="조사 기록 없음" className="rounded-xl bg-slate-50 text-center text-[11px] text-slate-300 py-3">–</td>
                 const t = rateTone(c.rate)
                 const on = isOn(c)
                 return (
@@ -262,6 +270,11 @@ function NutritionBlock({ n, staff }) {
 
       {n.targets?.length > 0 && (
         <div className="mt-7">
+          {n.partial && (
+            <p className="mb-3 text-[11px] rounded-xl bg-amber-50 text-amber-900 px-3 py-2">
+              15끼 중 {n.n_meals}끼만 조사돼, 기록된 끼니를 하루 세 끼로 환산한 값입니다.
+            </p>
+          )}
           <p className="text-xs font-bold text-navy-900 mb-1">권장 섭취 기준 대비</p>
           <p className="text-[11px] text-muted mb-3">
             2020 한국인 영양소 섭취기준(65세 이상) 대비 하루 평균 섭취량입니다. 나트륨은 적을수록 좋습니다.

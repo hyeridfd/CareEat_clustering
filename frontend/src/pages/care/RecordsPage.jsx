@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import api from '../../lib/api'
 import CareLayout, { Empty } from '../../components/care/CareLayout'
-import { TypeBadge, errMsg, fmtDate } from '../../components/care/CareUI'
+import { SortTh, TypeBadge, errMsg, fmtDate, sortRows, useSortState } from '../../components/care/CareUI'
 import { startSurvey } from '../../lib/surveySession'
 
 const STEPS = [
@@ -23,13 +23,24 @@ export default function RecordsPage() {
   const [q, setQ] = useState('')
   const [filter, setFilter] = useState('all')
   const [form, setForm] = useState({ open: false, name: '', elderly_id: '' })
+  const [sort, toggleSort] = useSortState()
+
+  // 열별 정렬 기준
+  const SORT_VALUES = {
+    name: (r) => r.display_name || r.elderly_id,
+    basic: (r) => Number(!!r.surveys.basic),
+    nutrition: (r) => r.surveys.nutrition_days || 0,
+    satisfaction: (r) => Number(!!r.surveys.satisfaction),
+    type: (r) => r.assessment?.type_code || null,
+    assessed: (r) => r.assessment?.created_at || null,
+  }
 
   const load = () => api.get('/care/overview').then((r) => setData(r.data)).catch((e) => setMsg({ kind: 'error', text: errMsg(e) }))
   useEffect(() => { load() }, [])
 
   const rows = useMemo(() => {
     if (!data) return []
-    return data.residents
+    const list = data.residents
       .filter((r) => {
         const s = r.surveys
         const done = s.basic && s.nutrition_days >= 5 && s.satisfaction
@@ -39,8 +50,9 @@ export default function RecordsPage() {
         if (q && !`${r.elderly_id} ${r.display_name}`.toLowerCase().includes(q.toLowerCase())) return false
         return true
       })
-      .sort((a, b) => Number(b.surveys.basic) - Number(a.surveys.basic) || a.elderly_id.localeCompare(b.elderly_id))
-  }, [data, filter, q])
+    const base = list.sort((a, b) => Number(b.surveys.basic) - Number(a.surveys.basic) || a.elderly_id.localeCompare(b.elderly_id))
+    return sortRows(base, sort, SORT_VALUES)
+  }, [data, filter, q, sort])
 
   const stats = useMemo(() => {
     const list = data?.residents || []
@@ -121,12 +133,12 @@ export default function RecordsPage() {
           <table className="w-full text-sm min-w-[720px]">
             <thead>
               <tr className="text-left text-xs text-muted border-b border-navy-100">
-                <th className="px-5 py-3">어르신</th>
-                <th className="px-2 py-3">건강 프로파일</th>
-                <th className="px-2 py-3">식사 섭취</th>
-                <th className="px-2 py-3">만족·선호</th>
-                <th className="px-2 py-3">최근 진단</th>
-                <th className="px-2 py-3 text-right">평가일</th>
+                <SortTh label="어르신" sortKey="name" sort={sort} onSort={toggleSort} className="px-5 py-3" />
+                <SortTh label="건강 프로파일" sortKey="basic" sort={sort} onSort={toggleSort} className="px-2 py-3" />
+                <SortTh label="식사 섭취" sortKey="nutrition" sort={sort} onSort={toggleSort} className="px-2 py-3" />
+                <SortTh label="만족·선호" sortKey="satisfaction" sort={sort} onSort={toggleSort} className="px-2 py-3" />
+                <SortTh label="최근 진단" sortKey="type" sort={sort} onSort={toggleSort} className="px-2 py-3" />
+                <SortTh label="평가일" sortKey="assessed" sort={sort} onSort={toggleSort} className="px-2 py-3" align="right" />
                 <th className="px-5 py-3 text-right">조사 입력</th>
               </tr>
             </thead>

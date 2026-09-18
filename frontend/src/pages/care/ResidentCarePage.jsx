@@ -115,6 +115,11 @@ function NutritionCard({ n }) {
   const show = n.targets.filter((t) => ['energy', 'protein', 'fiber', 'ca', 'na', 'k'].includes(t.key))
   return (
     <Card title="섭취 영양소" right={<span className="text-xs text-gray-400">하루 평균 · {n.n_days || 0}일</span>}>
+      {n.partial && (
+        <p className="mb-3 text-[11px] rounded-lg bg-amber-50 text-amber-900 px-3 py-2">
+          15끼 중 {n.n_meals}끼만 조사돼, 기록된 끼니를 하루 세 끼로 환산했습니다.
+        </p>
+      )}
       <div className="space-y-2.5">
         {show.map((t) => (
           <div key={t.key} className="flex items-center gap-2.5">

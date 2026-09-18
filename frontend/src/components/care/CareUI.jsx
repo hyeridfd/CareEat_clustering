@@ -1,3 +1,4 @@
+import { useState } from 'react'
 // 돌봄 관리 공통 UI
 export const TYPE_STYLES = [
   'bg-blue-50 text-blue-700 ring-blue-200',
@@ -86,4 +87,43 @@ export function errMsg(e, fallback = '요청에 실패했습니다.') {
   if (typeof d === 'string') return d
   if (Array.isArray(d)) return d.map((x) => x.msg).join(', ')
   return fallback
+}
+
+/* 표 정렬 — 머리글을 누르면 오름차순 ⇄ 내림차순.
+   useSort 는 정렬 상태와 비교 함수를, SortTh 는 누를 수 있는 머리글을 준다. */
+export function useSortState(initialKey = null, initialDir = 'asc') {
+  const [sort, setSort] = useState({ key: initialKey, dir: initialDir })
+  const toggle = (key) =>
+    setSort((s) => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }))
+  return [sort, toggle]
+}
+
+/* values: 행 → 정렬값(숫자·문자·null). null 은 항상 뒤로 보낸다. */
+export function sortRows(rows, sort, values) {
+  if (!sort?.key || !values[sort.key]) return rows
+  const get = values[sort.key]
+  const sign = sort.dir === 'asc' ? 1 : -1
+  return [...rows].sort((a, b) => {
+    const x = get(a), y = get(b)
+    const nx = x === null || x === undefined || x === '', ny = y === null || y === undefined || y === ''
+    if (nx && ny) return 0
+    if (nx) return 1
+    if (ny) return -1
+    if (typeof x === 'number' && typeof y === 'number') return (x - y) * sign
+    return String(x).localeCompare(String(y), 'ko') * sign
+  })
+}
+
+export function SortTh({ label, sortKey, sort, onSort, className = '', align = 'left' }) {
+  const on = sort?.key === sortKey
+  const mark = !on ? '↕' : sort.dir === 'asc' ? '↑' : '↓'
+  return (
+    <th className={`${className} ${align === 'right' ? 'text-right' : 'text-left'}`}>
+      <button type="button" onClick={() => onSort(sortKey)}
+        className={`inline-flex items-center gap-1 hover:text-navy-700 ${on ? 'text-navy-700 font-semibold' : ''}`}>
+        {label}
+        <span className={`text-[10px] ${on ? 'opacity-90' : 'opacity-30'}`}>{mark}</span>
+      </button>
+    </th>
+  )
 }

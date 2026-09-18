@@ -355,6 +355,7 @@ def resident_detail(eid: str, user: dict = Depends(require_staff)):
             fld = nutri.fields()
             keys = ["energy", "protein", "fiber", "ca", "na", "k"]
             nutrition = {"avg_day": nsum.get("avg_day") or {}, "n_days": nsum.get("n_days"),
+                         "n_meals": nsum.get("n_meals"), "partial": bool(nsum.get("partial")),
                          "meals": nsum.get("meals") or [], "days": nsum.get("days") or [],
                          "fields": [{"key": k, **fld[k]} for k in keys if k in fld],
                          "targets": nutri.compare_targets(nsum.get("avg_day"), gender)}

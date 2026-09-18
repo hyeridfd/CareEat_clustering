@@ -284,6 +284,11 @@ SNACK_DEFAULT_PORTIONS = {
     4: {"간식1": {"간식": 190}, "간식2": {"간식": 118}},
     5: {"간식1": {"간식": 125}, "간식2": {"간식": 124.9}},
 }
+# 조사 자체를 하지 않은 날 — 리포트에 '데이터 없음'으로 표시하고 섭취율·영양소 계산에서 뺀다.
+# 잔반이 비어 있어도 여기 없으면 조사 화면 기본값대로 '다 먹음'으로 본다.
+# {어르신ID: (일자, ...)}  — 새로 확인되면 여기에 추가한다.
+UNSURVEYED_DAYS = {"HS17": (1, 2)}
+
 MAIN_MEALS = ("아침", "점심", "저녁")
 MEAL_ORDER = {"아침": 0, "간식1": 1, "점심": 2, "간식2": 3, "저녁": 4}
 COMPONENT = {"밥/죽": "rice", "국/탕": "soup", "주찬": "main", "부찬1": "side", "부찬2": "side",
@@ -295,6 +300,7 @@ def build_nutrition(n):
     for _, r in n.iterrows():
         mp = parse_json_obj(r.get("meal_portions"))
         pw = parse_json_obj(r.get("plate_waste"))
+        skip_days = UNSURVEYED_DAYS.get(str(r.get("elderly_id")), ())
         served = Counter(); eaten = Counter()
         meal_served = Counter(); meal_eaten = Counter()
         day_served = Counter(); day_eaten = Counter()
@@ -303,6 +309,8 @@ def build_nutrition(n):
         days = sorted(set(mp) | set(pw))
         for d in days:
             dnum = int(re.sub(r"\D", "", d) or 0)
+            if dnum in skip_days:        # 조사하지 않은 날 (UNSURVEYED_DAYS)
+                continue
             for meal in MAIN_MEALS:
                 foods = mp.get(d, {}).get(meal, {})
                 for food, g in foods.items():
@@ -324,7 +332,7 @@ def build_nutrition(n):
                     cell["items"].append({"slot": food, "name": None, "g": round(float(g), 1),
                                           "rate": round(100 * rate)})
             for meal in ("간식1", "간식2"):
-                waste = pw.get(d, {}).get(meal, {})
+                waste = pw.get(d, {}).get(meal, {}) or {}
                 defaults = SNACK_DEFAULT_PORTIONS.get(dnum, {}).get(meal, {})
                 for food, g in defaults.items():
                     wv = waste.get(food, 0)

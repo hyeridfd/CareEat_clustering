@@ -194,6 +194,8 @@ def build_report(sb, home: str, eid: str, audience: str = "guardian",
             "days": nsum.get("days") or [],
             "meals": nsum.get("meals") or [],
             "n_days": nsum.get("n_days"),
+            "n_meals": nsum.get("n_meals"),
+            "partial": bool(nsum.get("partial")),
             "targets": [t for t in nutri.compare_targets(nsum.get("avg_day"), gender)
                         if staff or t["key"] in keys],
         }

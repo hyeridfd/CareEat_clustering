@@ -37,6 +37,180 @@ function Empty({ text }) {
   return <p className="py-6 text-center text-sm text-muted">{text}</p>
 }
 
+const SUB_TABS = [
+  { key: 'info', label: '인적사항', hint: '진단 · 복약 · 알레르기' },
+  { key: 'health', label: '건강 상태', hint: '평가 지표 · 계측' },
+  { key: 'meal', label: '식사 · 영양', hint: '섭취율 · 영양소' },
+]
+
+function SubTabs({ active, onChange }) {
+  return (
+    <div className="flex gap-1.5 rounded-2xl bg-white ring-1 ring-gray-200 p-1.5">
+      {SUB_TABS.map((t) => {
+        const on = t.key === active
+        return (
+          <button key={t.key} type="button" onClick={() => onChange(t.key)}
+            className={`flex-1 rounded-xl px-3 py-2 text-center transition ${on ? 'bg-navy-50 text-navy-900 ring-1 ring-navy-200' : 'text-gray-500 hover:bg-slate-50'}`}>
+            <span className="block text-sm font-bold">{t.label}</span>
+            <span className="block text-[10px] text-gray-400">{t.hint}</span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+const TONE_TXT = { good: 'text-emerald-700', warn: 'text-amber-700', bad: 'text-rose-600', none: 'text-gray-400' }
+const TONE_BAR = { good: 'bg-emerald-500', warn: 'bg-amber-500', bad: 'bg-rose-500', none: 'bg-gray-300' }
+
+function Stat({ label, value, unit, hint, tone }) {
+  return (
+    <div className="rounded-xl bg-slate-50 px-3 py-2.5">
+      <p className="text-[11px] text-gray-500">{label}</p>
+      <p className={`text-lg font-bold tabular-nums ${tone ? TONE_TXT[tone] : 'text-gray-900'}`}>
+        {value ?? '–'}<span className="ml-1 text-[11px] font-normal text-gray-400">{unit}</span>
+      </p>
+      {hint && <p className="text-[11px] text-gray-400">{hint}</p>}
+    </div>
+  )
+}
+
+function Bars({ items }) {
+  if (!items?.length) return <Empty text="표시할 값이 없습니다." />
+  return (
+    <div className="space-y-2.5">
+      {items.map((t) => (
+        <div key={t.key || t.label} className="flex items-center gap-2.5">
+          <span className="w-20 shrink-0 text-xs text-gray-600 truncate">{t.label}</span>
+          <div className="relative h-2.5 flex-1 min-w-0 rounded-full bg-gray-100">
+            <div className={`absolute inset-y-0 left-0 rounded-full ${TONE_BAR[t.band] || 'bg-navy-500'}`}
+              style={{ width: `${Math.max(2, Math.min(100, t.pct))}%` }} />
+          </div>
+          <span className="w-28 shrink-0 text-right text-[11px] tabular-nums text-gray-500">
+            <b className="text-gray-900">{t.value}</b>{t.target != null ? ` / ${t.target}` : ''} {t.unit}
+          </span>
+          <span className={`w-10 shrink-0 text-right text-xs font-bold tabular-nums ${TONE_TXT[t.band] || ''}`}>{t.pct}%</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/* 리포트에서 가져온 건강 지표 */
+function HealthPanel({ r }) {
+  if (!r) return <div className="surface p-12 text-center text-muted">불러오는 중…</div>
+  const a = r.anthropometry || {}
+  return (
+    <div className="space-y-5">
+      <Card title="평가 지표" right={<span className="text-xs text-gray-400">{r.assessed_on} 평가</span>}>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+          {(r.statuses || []).map((s) => (
+            <Stat key={s.key} label={s.title || s.label} value={s.value} unit={s.scale ? '' : ''} hint={s.band} tone={s.tone} />
+          ))}
+        </div>
+      </Card>
+      <Card title="신체 계측">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+          <Stat label="키" value={a.height} unit="cm" />
+          <Stat label="몸무게" value={a.weight} unit="kg"
+            hint={a.weight_change != null ? `직전 대비 ${a.weight_change > 0 ? '+' : ''}${a.weight_change}kg` : null} />
+          <Stat label="체질량지수" value={a.bmi} unit="" hint={a.bmi_band?.label} tone={a.bmi_band?.tone} />
+          <Stat label="혈압" value={a.sbp ? `${a.sbp}/${a.dbp}` : null} unit="mmHg" />
+          <Stat label="식사 섭취율" value={r.intake?.total} unit="%" hint={r.intake?.band?.label} tone={r.intake?.band?.tone} />
+        </div>
+      </Card>
+      {r.comparison?.length > 0 && (
+        <Card title="시설 평균과 비교">
+          <ul className="space-y-2.5">
+            {r.comparison.map((c) => (
+              <li key={c.label} className="flex items-center gap-2.5 text-sm">
+                <span className="w-28 shrink-0 text-xs text-gray-600 truncate">{c.label}</span>
+                <div className="relative h-2.5 flex-1 min-w-0 rounded-full bg-gray-100">
+                  <div className="absolute inset-y-0 left-0 rounded-full bg-navy-600"
+                    style={{ width: `${Math.max(2, Math.min(100, ((c.self - c.min) / (c.max - c.min)) * 100))}%` }} />
+                  {c.facility_avg != null && (
+                    <span className="absolute -top-0.5 h-3.5 w-px bg-slate-500"
+                      style={{ left: `${Math.max(0, Math.min(100, ((c.facility_avg - c.min) / (c.max - c.min)) * 100))}%` }} />
+                  )}
+                </div>
+                <span className="w-32 shrink-0 text-right text-[11px] tabular-nums text-gray-500">
+                  <b className="text-gray-900">{c.self}{c.unit}</b> · 평균 {c.facility_avg ?? '–'}{c.unit}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+    </div>
+  )
+}
+
+/* 리포트에서 가져온 식사·영양 */
+function MealPanel({ r }) {
+  if (!r) return <div className="surface p-12 text-center text-muted">불러오는 중…</div>
+  const n = r.nutrition
+  const rate = (v) => (v == null ? 'none' : v < 50 ? 'bad' : v < 75 ? 'warn' : 'good')
+  return (
+    <div className="space-y-5">
+      <Card title="식사 섭취율" right={<span className="text-xs text-gray-400">{r.intake?.days || 0}일 기록</span>}>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          <Stat label="전체" value={r.intake?.total} unit="%" tone={rate(r.intake?.total)} />
+          {(r.intake?.meals || []).map((m) => (
+            <Stat key={m.label} label={m.label} value={m.value} unit="%" tone={rate(m.value)} />
+          ))}
+        </div>
+        <div className="mt-3 grid grid-cols-2 md:grid-cols-5 gap-2">
+          {(r.intake?.components || []).map((c) => (
+            <Stat key={c.label} label={c.label} value={c.value} unit="%" tone={rate(c.value)} />
+          ))}
+        </div>
+      </Card>
+      {n ? (
+        <>
+          <Card title="섭취 영양소" right={<span className="text-xs text-gray-400">하루 평균 · {n.n_days || 0}일</span>}>
+            {n.partial && (
+              <p className="mb-3 text-[11px] rounded-lg bg-amber-50 text-amber-900 px-3 py-2">
+                15끼 중 {n.n_meals}끼만 조사돼, 기록된 끼니를 하루 세 끼로 환산했습니다.
+              </p>
+            )}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
+              {(n.fields || []).slice(0, 4).map((f) => (
+                <Stat key={f.key} label={f.label} value={n.avg_day?.[f.key]} unit={f.unit} />
+              ))}
+            </div>
+            <Bars items={n.targets} />
+            <p className="mt-3 text-[11px] text-gray-400">
+              식단표 · 배식량 · 목측법 잔반으로 계산한 실제 섭취량입니다. 기준은 2020 한국인 영양소 섭취기준(65세 이상).
+            </p>
+          </Card>
+          <Card title="끼니별 · 일자별">
+            <div className="grid md:grid-cols-2 gap-5">
+              <div>
+                <p className="text-xs font-bold text-gray-700 mb-2">끼니별 평균</p>
+                {(n.meals || []).map((m) => (
+                  <div key={m.meal} className="flex justify-between border-b border-slate-50 py-1.5 text-sm">
+                    <span className="text-gray-600">{m.meal}</span>
+                    <span className="tabular-nums text-gray-900">{Math.round(m.energy || 0)} kcal · 단백질 {Number(m.protein || 0).toFixed(1)}g</span>
+                  </div>
+                ))}
+              </div>
+              <div>
+                <p className="text-xs font-bold text-gray-700 mb-2">일자별</p>
+                {(n.days || []).map((x) => (
+                  <div key={x.day} className="flex justify-between border-b border-slate-50 py-1.5 text-sm">
+                    <span className="text-gray-600">{x.day}일차</span>
+                    <span className="tabular-nums text-gray-900">{Math.round(x.energy || 0)} kcal</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </Card>
+        </>
+      ) : <Card title="섭취 영양소"><Empty text="아직 계산된 영양소가 없습니다. 재평가 후 표시됩니다." /></Card>}
+    </div>
+  )
+}
+
 export default function ResidentProfileTab({ elderlyId, residentName }) {
   const [d, setD] = useState(null)
   const [form, setForm] = useState(null)
@@ -46,6 +220,8 @@ export default function ResidentProfileTab({ elderlyId, residentName }) {
   const [nc, setNc] = useState({ name: '', diagnosed_on: '', note: '' })
   const [nm, setNm] = useState({ name: '', dose: '', schedule: [], food_caution: '' })
   const [na, setNa] = useState({ allergen: '', severity: 'mild', reaction: '' })
+  const [sub, setSub] = useState('info')
+  const [rep, setRep] = useState(null)
 
   const load = () => api.get(`/ehr/residents/${elderlyId}/profile`)
     .then((r) => {
@@ -64,7 +240,13 @@ export default function ResidentProfileTab({ elderlyId, residentName }) {
     })
     .catch((e) => setErr(errMsg(e)))
 
-  useEffect(() => { load() }, [elderlyId])
+  useEffect(() => { load(); setRep(null) }, [elderlyId])
+
+  // 건강·식사 탭을 처음 열 때만 리포트를 불러온다
+  useEffect(() => {
+    if (sub === 'info' || rep) return
+    api.get(`/care/residents/${elderlyId}/report`).then((r) => setRep(r.data)).catch(() => setRep(false))
+  }, [sub, elderlyId, rep])
 
   const run = async (key, fn, ok) => {
     setBusy(key); setMsg('')
@@ -99,8 +281,17 @@ export default function ResidentProfileTab({ elderlyId, residentName }) {
 
   return (
     <div className="space-y-5">
+      <SubTabs active={sub} onChange={setSub} />
       {msg && <p className="text-sm rounded-xl bg-navy-50 text-navy-800 px-4 py-3">{msg}</p>}
 
+      {sub === 'health' && (rep === false
+        ? <p className="surface p-6 text-sm text-muted">평가 결과가 없어 지표를 불러올 수 없습니다. 먼저 평가를 실행하세요.</p>
+        : <HealthPanel r={rep} />)}
+      {sub === 'meal' && (rep === false
+        ? <p className="surface p-6 text-sm text-muted">평가 결과가 없어 식사·영양을 불러올 수 없습니다.</p>
+        : <MealPanel r={rep} />)}
+
+      <div className={sub === 'info' ? 'space-y-5' : 'hidden'}>
       {/* ── 기본 인적사항 ───────────────────────── */}
       <Card
         title="기본 인적사항"
@@ -341,6 +532,7 @@ export default function ResidentProfileTab({ elderlyId, residentName }) {
           마지막 수정 {fmtDate(d.profile.updated_at)}{d.profile.updated_by ? ` · ${d.profile.updated_by}` : ''}
         </p>
       )}
+      </div>
     </div>
   )
 }
