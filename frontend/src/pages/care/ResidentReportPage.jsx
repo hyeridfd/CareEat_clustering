@@ -15,6 +15,24 @@ export default function ResidentReportPage() {
     api.get(`/care/residents/${elderlyId}/report`).then((res) => setR(res.data)).catch((e) => setErr(errMsg(e)))
   }, [elderlyId])
 
+  // 브라우저는 document.title 을 PDF 기본 파일명으로 쓴다 → {시설}_{어르신}_{저장날짜}
+  const printPdf = () => {
+    const strip = (v) => String(v || '').replace(/[\\\/:*?"<>|]/g, '').replace(/\s+/g, ' ').trim()
+    const d = new Date()
+    const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    const name = [strip(r?.facility?.name), strip(r?.resident?.display_name), today].filter(Boolean).join('_')
+    const prev = document.title
+    document.title = name
+    const restore = () => {
+      document.title = prev
+      window.removeEventListener('afterprint', restore)
+    }
+    window.addEventListener('afterprint', restore)
+    window.print()
+    // afterprint 를 못 받는 브라우저 대비
+    setTimeout(restore, 3000)
+  }
+
   return (
     <CareLayout
       title="상세 리포트"
@@ -22,7 +40,7 @@ export default function ResidentReportPage() {
       actions={
         <div className="no-print flex gap-2">
           <Link to={`/care/residents/${elderlyId}`} className="btn-secondary text-sm">어르신 화면</Link>
-          <button onClick={() => window.print()} className="btn-primary text-sm">인쇄 · PDF 저장</button>
+          <button onClick={printPdf} className="btn-primary text-sm">인쇄 · PDF 저장</button>
         </div>
       }
     >
