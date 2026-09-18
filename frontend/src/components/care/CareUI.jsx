@@ -130,7 +130,13 @@ export function SortTh({ label, sortKey, sort, onSort, className = '', align = '
 
 /* 지표 눈금 — 구간(정상/주의/관리 필요)을 색으로 깔고, 눈금 숫자와 어르신 위치를 함께 보여준다.
    점수 체계를 모르는 사람도 "이 정도면 어디쯤"인지 바로 보이게 하는 것이 목적. */
-const SEG_FILL = { good: 'bg-emerald-300', warn: 'bg-amber-300', bad: 'bg-rose-300', none: 'bg-slate-200' }
+// 단계마다 색조를 달리해 인접 구간이 한 덩어리로 보이지 않게 한다
+const SEG_FILL = {
+  good: 'bg-emerald-400', good2: 'bg-emerald-200',
+  warn: 'bg-amber-400', warn2: 'bg-amber-200',
+  bad: 'bg-rose-400', bad2: 'bg-rose-200',
+  none: 'bg-slate-200',
+}
 
 function tickStyle(pct) {
   if (pct <= 2) return { left: 0, transform: 'none' }
@@ -154,8 +160,9 @@ export function Gauge({ g, emoji = '🧓', compact = false }) {
       </div>
       <div className="relative">
         <div className="flex h-2 rounded-full overflow-hidden bg-slate-100">
-          {g.segments.map((s) => (
-            <div key={`${s.label}-${s.to}`} className={SEG_FILL[s.tone] || SEG_FILL.none}
+          {g.segments.map((s, i) => (
+            <div key={`${s.label}-${s.to}`}
+              className={`${SEG_FILL[s.tone] || SEG_FILL.none} ${i ? 'border-l border-white' : ''}`}
               style={{ width: `${s.width}%` }} title={`${s.label} ${s.from}–${s.to}${g.unit || ''}`} />
           ))}
         </div>
@@ -173,7 +180,8 @@ export function Gauge({ g, emoji = '🧓', compact = false }) {
       {!compact && (
         <div className="flex text-[9px] leading-3 text-gray-400">
           {g.segments.map((s) => (
-            <span key={s.label} className="truncate px-0.5 text-center" style={{ width: `${s.width}%` }}>{s.label}</span>
+            <span key={s.label} className="px-0.5 text-center overflow-hidden whitespace-nowrap text-ellipsis"
+              style={{ width: `${s.width}%` }} title={`${s.label} ${s.from}–${s.to}`}>{s.label}</span>
           ))}
         </div>
       )}

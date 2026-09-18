@@ -27,9 +27,11 @@ BANDS = {
     "adl": lambda v: ("완전 의존", "bad") if v < 25 else (("대부분 의존", "bad") if v < 50 else
                      (("중간 의존", "warn") if v < 75 else (("경도 의존", "warn") if v < 91 else ("최소 의존", "good")))),
     "mood": lambda v: ("심한 우울증", "bad") if v >= 10 else (("가벼운 우울증", "warn") if v >= 6 else ("정상", "good")),
-    "activity": lambda v: ("낮음", "bad") if v < 600 else (("보통", "warn") if v < 3000 else ("높음", "good")),
+    "activity": lambda v: ("낮음 Low", "bad") if v < 600 else (("보통 Moderate", "warn") if v < 3000 else ("높음 High", "good")),
     "intake": lambda v: ("부족", "bad") if v < 50 else (("주의", "warn") if v < 75 else ("양호", "good")),
-    "bmi": lambda v: ("저체중", "bad") if v < 18.5 else (("정상", "good") if v < 25 else ("과체중", "warn")),
+    "bmi": lambda v: ("저체중", "bad") if v < 18.5 else (("정상", "good") if v < 23 else
+                     (("비만 전단계", "warn") if v < 25 else (("1단계 비만", "warn") if v < 30 else
+                      (("2단계 비만", "bad") if v < 35 else ("3단계 비만", "bad"))))),
     "satisfaction": lambda v: ("낮음", "bad") if v <= 2.5 else (("보통", "warn") if v < 4 else ("높음", "good")),
 }
 
@@ -83,19 +85,20 @@ SCALES = {
     "intake": {"tool": "5일 평균 섭취율", "min": 0, "max": 100, "unit": "%",
                "segments": [(50, "부족", "bad"), (75, "주의", "warn"), (100, "양호", "good")]},
     "adl": {"tool": "K-MBI", "min": 0, "max": 100, "unit": "점",
-            "segments": [(24, "완전 의존", "bad"), (49, "대부분 의존", "bad"), (74, "중간 의존", "warn"),
-                         (90, "경도 의존", "warn"), (100, "최소 의존", "good")]},
+            "segments": [(24, "완전 의존", "bad"), (49, "대부분 의존", "bad2"), (74, "중간 의존", "warn"),
+                         (90, "경도 의존", "warn2"), (100, "최소 의존", "good")]},
     "cognition": {"tool": "K-MMSE-2", "min": 0, "max": 30, "unit": "점",
                   "segments": [(24, "기준 미만", "warn"), (30, "정상 범위", "good")]},
     "mood": {"tool": "GDS-SF", "min": 0, "max": 15, "unit": "점", "reverse": True,
              "segments": [(5, "정상", "good"), (9, "가벼운 우울", "warn"), (15, "심한 우울", "bad")]},
     "activity": {"tool": "IPAQ-SF", "min": 0, "max": 4000, "unit": "MET-분/주",
-                 "segments": [(600, "낮음", "bad"), (3000, "보통", "warn"), (4000, "높음", "good")]},
-    "bmi": {"tool": "BMI", "min": 14, "max": 32, "unit": "kg/m²",
-            "segments": [(18.5, "저체중", "bad"), (25, "정상", "good"), (32, "과체중", "warn")]},
+                 "segments": [(600, "낮음 Low", "bad"), (3000, "보통 Moderate", "warn"), (4000, "높음 High", "good")]},
+    "bmi": {"tool": "BMI", "min": 14, "max": 40, "unit": "kg/m²",
+            "segments": [(18.5, "저체중", "bad2"), (23, "정상", "good"), (25, "비만 전단계", "warn2"),
+                         (30, "1단계 비만", "warn"), (35, "2단계 비만", "bad2"), (40, "3단계 비만", "bad")]},
     "bp": {"tool": "수축기 혈압", "min": 80, "max": 180, "unit": "mmHg",
-           "segments": [(90, "저혈압", "bad"), (120, "정상", "good"), (130, "주의혈압", "warn"),
-                        (140, "고혈압 전단계", "warn"), (160, "고혈압 1기", "bad"), (180, "고혈압 2기", "bad")]},
+           "segments": [(90, "저혈압", "bad2"), (120, "정상", "good"), (130, "주의혈압", "warn2"),
+                        (140, "고혈압 전단계", "warn"), (160, "고혈압 1기", "bad2"), (180, "고혈압 2기", "bad")]},
 }
 
 # K-MMSE-2 정상 기준은 학력에 따라 다르다 (무학 19 · 초졸 22 · 중졸 이상 24)
