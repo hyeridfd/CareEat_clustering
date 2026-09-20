@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from care import engine, priority as prio, solution as sol, notify, nutrition as nutri, retrieval as rag
-from care import facility as fac
+from care import facility as fac, action as act
 from care.report import build_report
 from care.data import fetch_all, fetch_surveys
 from dependencies import create_token, get_supabase, require_staff, get_kst_now
@@ -106,6 +106,29 @@ def facility_profile(refresh: bool = False, user: dict = Depends(require_staff))
     """
     sb, home = get_supabase(), user["scope_home"]
     return jsonable(fac.build_profile(sb, home, use_cache=not refresh))
+
+
+@router.get("/facility/action")
+def facility_action(top: int = 5, rag_on: bool = True, refresh: bool = False,
+                    user: dict = Depends(require_staff)):
+    """Care-Eat Action — 관리 우선순위별 실행 개선안.
+
+    우선순위(Insight) 하나하나에
+      ① 공식 지침 근거(RAG, 문헌·쪽수)
+      ② 식품 DB(Neo4j 스냅샷) 기반 메뉴 후보
+      ③ 시설 잔반 데이터 최하위 메뉴의 대체안
+    을 붙여 돌려준다.
+    """
+    sb, home = get_supabase(), user["scope_home"]
+    profile = fac.build_profile(sb, home, use_cache=not refresh)
+    return jsonable(act.build(profile, top=top, use_rag=rag_on))
+
+
+@router.get("/facility/graph-status")
+def facility_graph_status(user: dict = Depends(require_staff)):
+    """식품·메뉴 DB 스냅샷 적재 현황"""
+    from care import graph
+    return {"available": graph.available(), **(graph.stats() if graph.available() else {})}
 
 
 @router.get("/knowledge-status")

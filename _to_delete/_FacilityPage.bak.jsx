@@ -62,7 +62,6 @@ function PriorityCard({ x }) {
 const TABS = [
   { key: 'scan', label: '시설 진단', desc: '지금 우리 시설은 어떤가' },
   { key: 'priority', label: '관리 우선순위', desc: '무엇부터 바꿔야 하는가' },
-  { key: 'action', label: '개선안', desc: '다음 주 식단을 어떻게 바꾸나' },
 ]
 
 function Tabs({ tab, onChange, counts }) {
@@ -84,142 +83,6 @@ function Tabs({ tab, onChange, counts }) {
         )
       })}
     </div>
-  )
-}
-
-/* ── Care-Eat Action ──────────────────────────────────────────────
-   우선순위 하나에 ① 공식 지침 근거 ② 식품 DB 메뉴 후보 ③ 잔반 메뉴 대체안을 붙인다. */
-
-function MenuChip({ it, delta }) {
-  const metric =
-    it.amount != null ? `${it.amount}${it.unit || ''}`
-      : it.sodium_mg != null ? `나트륨 ${it.sodium_mg}mg`
-        : ''
-  const warn = []
-  if (it.sodium_underestimated) warn.push(`나트륨 과소 (${it.sodium_underestimated.slice(0, 2).join(' · ')} 자료 없음)`)
-  if (it.amount_outlier) warn.push('레시피 분량 확인 필요')
-  if (it.broth_missing) warn.push('국물 미등록 — 중량은 건더기뿐')
-  return (
-    <li className="rounded-xl ring-1 ring-navy-100 bg-white px-3.5 py-2.5">
-      <div className="flex items-center gap-1.5">
-        {it.meal_cat && <span className="badge bg-navy-50 text-navy-700">{it.meal_cat}</span>}
-        <span className="text-sm font-bold text-navy-900 truncate">{it.title}</span>
-        {metric && <span className="ml-auto shrink-0 text-[11px] font-bold tabular-nums text-navy-900">{metric}</span>}
-      </div>
-      <p className="mt-1 text-[11px] tabular-nums text-muted">
-        1인분 {it.serving_g}g
-        {it.energy_kcal != null && ` · ${it.energy_kcal}kcal`}
-        {it.amount != null && it.sodium_mg != null && ` · 나트륨 ${it.sodium_mg}mg`}
-      </p>
-      {delta && (
-        <p className="mt-1 text-[11px] tabular-nums">
-          <span className={delta.sodium_mg <= 0 ? 'text-navy-700' : 'text-rose-700'}>
-            나트륨 {delta.sodium_mg > 0 ? '+' : ''}{delta.sodium_mg}mg
-          </span>
-          <span className="mx-1 text-slate-300">|</span>
-          <span className={delta.protein_g >= 0 ? 'text-navy-700' : 'text-amber-700'}>
-            단백질 {delta.protein_g > 0 ? '+' : ''}{delta.protein_g}g
-          </span>
-          <span className="mx-1 text-slate-300">|</span>
-          <span className="text-muted">{delta.energy_kcal > 0 ? '+' : ''}{delta.energy_kcal}kcal</span>
-        </p>
-      )}
-      {it.key_ingredients?.length > 0 && (
-        <p className="mt-1 text-[11px] text-muted truncate">{it.key_ingredients.join(' · ')}</p>
-      )}
-      {it.salty_ingredients?.length > 0 && (
-        <p className="mt-1 text-[11px] text-muted truncate">간이 센 재료 {it.salty_ingredients.join(' · ')}</p>
-      )}
-      {it.caution_ingredients?.length > 0 && (
-        <p className="mt-0.5 text-[11px] text-amber-700 truncate">
-          확인 필요: {it.caution_ingredients.slice(0, 3).join(' · ')}
-        </p>
-      )}
-      {warn.map((w, i) => <p key={i} className="mt-0.5 text-[11px] text-rose-700 truncate">※ {w}</p>)}
-    </li>
-  )
-}
-
-function MenuBlock({ m }) {
-  if (!m) return null
-  if (m.kind === 'replace') {
-    return (
-      <div className="mt-3 rounded-xl bg-navy-50/50 p-4">
-        <p className="text-xs font-bold text-navy-900">{m.purpose}</p>
-        <ul className="mt-2.5 space-y-2.5">
-          {m.swaps.map((s, i) => (
-            <li key={i}>
-              <div className="flex flex-wrap items-baseline gap-2">
-                <span className="text-sm font-bold text-navy-900">{s.current}</span>
-                {s.current_rate != null && (
-                  <span className="text-[11px] tabular-nums text-rose-700">섭취율 {s.current_rate}%{s.current_n ? ` · ${s.current_n}건` : ''}</span>
-                )}
-                {s.meal_cat && <span className="badge bg-white text-navy-700">{s.meal_cat} 자리</span>}
-              </div>
-              {s.current_nutrition && (
-                <p className="mt-0.5 text-[11px] tabular-nums text-muted">
-                  현재 1인분 {s.current_nutrition.serving_g}g · {s.current_nutrition.energy_kcal}kcal ·
-                  단백질 {s.current_nutrition.protein_g}g · 나트륨 {s.current_nutrition.sodium_mg}mg
-                </p>
-              )}
-              {s.note
-                ? <p className="mt-1 text-[11px] text-amber-700">{s.note}</p>
-                : <ul className="mt-1.5 grid sm:grid-cols-2 gap-1.5">{s.candidates.map((c) => <MenuChip key={c.id} it={c} delta={c.delta} />)}</ul>}
-            </li>
-          ))}
-        </ul>
-      </div>
-    )
-  }
-  return (
-    <div className="mt-3 rounded-xl bg-navy-50/50 p-4">
-      <p className="text-xs font-bold text-navy-900">{m.purpose}</p>
-      {m.basis && <p className="mt-0.5 text-[11px] text-muted">{m.basis}</p>}
-      <ul className="mt-2.5 grid sm:grid-cols-2 gap-1.5">
-        {m.items.map((it) => <MenuChip key={it.id} it={it} />)}
-      </ul>
-    </div>
-  )
-}
-
-function ActionCard({ x }) {
-  return (
-    <li className="rounded-2xl ring-1 ring-navy-100 bg-white p-5">
-      <div className="flex items-start gap-3">
-        <span className="mt-0.5 flex items-center justify-center w-7 h-7 shrink-0 rounded-lg bg-navy-900 text-white text-xs font-extrabold tabular-nums">{x.rank}</span>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="badge bg-navy-50 text-navy-700">{x.area_label}</span>
-            <span className="badge bg-slate-100 text-slate-600">{x.severity_label}</span>
-            <span className="ml-auto text-[11px] tabular-nums text-muted">{x.score}점</span>
-          </div>
-          <p className="mt-2 text-[15px] font-bold leading-6 text-navy-900">{x.title}</p>
-          <p className="mt-1 text-xs text-muted">{x.detail}</p>
-
-          {x.action && (
-            <p className="mt-3 rounded-xl bg-navy-50/70 px-4 py-2.5 text-sm leading-6 text-navy-900">
-              <b className="text-navy-500 text-xs mr-1.5">해야 할 일</b>{x.action}
-            </p>
-          )}
-
-          {x.guidelines?.length > 0 && (
-            <div className="mt-3 space-y-2">
-              <p className="text-xs font-bold text-navy-900">근거 지침</p>
-              {x.guidelines.map((gl) => (
-                <blockquote key={gl.tag} className="rounded-xl border-l-2 border-navy-200 bg-white px-3.5 py-2">
-                  <p className="text-[13px] leading-6 text-slate-700">
-                    <sup className="mr-1 font-bold text-navy-600">{gl.tag.replace('G', '')}</sup>{gl.text}
-                  </p>
-                  <p className="mt-1 text-[11px] text-muted">{gl.source}</p>
-                </blockquote>
-              ))}
-            </div>
-          )}
-
-          <MenuBlock m={x.menus} />
-        </div>
-      </div>
-    </li>
   )
 }
 
@@ -292,19 +155,6 @@ export default function FacilityPage() {
   const [busy, setBusy] = useState(false)
   const [tab, setTab] = useState('scan')
   const [area, setArea] = useState('all')
-  const [act, setAct] = useState(null)
-  const [actBusy, setActBusy] = useState(false)
-  const [actErr, setActErr] = useState('')
-
-  // 개선안은 지침 검색(RAG)이 들어가 느리다 → 탭을 열 때 한 번만 만든다
-  const loadAction = (force = false) => {
-    if (actBusy || (act && !force)) return
-    setActBusy(true); setActErr('')
-    api.get('/care/facility/action', { params: { top: 5, refresh: force }, timeout: 120000 })
-      .then((r) => setAct(r.data))
-      .catch((e) => setActErr(errMsg(e)))
-      .finally(() => setActBusy(false))
-  }
 
   const load = (refresh = false) => {
     setBusy(true)
@@ -336,7 +186,7 @@ export default function FacilityPage() {
 
       {d && (
         <div className="space-y-5">
-          <Tabs tab={tab} onChange={(t) => { setTab(t); if (t === 'action') loadAction() }} counts={{ priority: d.priorities?.length || 0, action: act?.plans?.length ?? null }} />
+          <Tabs tab={tab} onChange={setTab} counts={{ priority: d.priorities?.length || 0 }} />
 
           {tab === 'priority' && (
             <>
@@ -366,59 +216,6 @@ export default function FacilityPage() {
                 점수는 규모(해당 어르신 비율) × 심각도(시급 3 / 주의 2 / 관찰 1) ÷ 3 입니다.
                 다음 단계(Action)에서는 각 항목에 공식 지침 근거와 식품·메뉴 DB를 연결해 바꿀 메뉴까지 제시합니다.
               </p>
-            </>
-          )}
-
-          {tab === 'action' && (
-            <>
-              <Section title="실행 개선안"
-                sub="우선순위 상위 항목에 공식 지침 근거와 식품·메뉴 DB의 후보를 붙였습니다. 제공량 산정과 최종 채택은 영양사가 합니다."
-                right={<button onClick={() => loadAction(true)} disabled={actBusy} className="btn-secondary text-sm">{actBusy ? '만드는 중…' : '다시 만들기'}</button>}>
-                {actErr && <p className="text-sm text-red-700 py-2">{actErr}</p>}
-                {!actErr && actBusy && !act && (
-                  <p className="text-sm text-muted py-6 text-center">지침을 찾고 메뉴 후보를 고르는 중입니다… (30초쯤 걸립니다)</p>
-                )}
-                {act && (
-                  <>
-                    <div className="flex flex-wrap gap-1.5 mb-4">
-                      <span className="badge bg-navy-50 text-navy-700">우선순위 {act.plans?.length ?? 0}건</span>
-                      <span className={`badge ${act.rag_enabled ? 'bg-navy-50 text-navy-700' : 'bg-slate-100 text-slate-500'}`}>
-                        지침 근거 {act.rag_enabled ? '연결됨' : '미연결'}
-                      </span>
-                      <span className={`badge ${act.graph ? 'bg-navy-50 text-navy-700' : 'bg-slate-100 text-slate-500'}`}>
-                        식품 DB {act.graph ? `요리 ${act.graph.foods}개` : '미연결'}
-                      </span>
-                      {act.diseases_applied?.length > 0 && (
-                        <span className="badge bg-amber-50 text-amber-900">금기 검증 {act.diseases_applied.join(' · ')}</span>
-                      )}
-                    </div>
-                    {act.plans?.length
-                      ? <ol className="space-y-3">{act.plans.map((x) => <ActionCard key={x.id} x={x} />)}</ol>
-                      : <p className="text-sm text-muted py-2">개선안을 만들 우선순위가 없습니다.</p>}
-                  </>
-                )}
-              </Section>
-
-              {act?.references?.length > 0 && (
-                <Section title="인용한 지침" sub="개선안에 붙은 번호와 같습니다.">
-                  <ol className="space-y-1.5">
-                    {act.references.map((r) => (
-                      <li key={r.tag} className="text-[12px] leading-6 text-slate-700">
-                        <b className="mr-1.5 text-navy-700 tabular-nums">{r.tag.replace('G', '')}</b>
-                        <b>{r.locator || ''}</b> {r.citation}
-                        {r.short && <span className="ml-1 text-muted">({r.short})</span>}
-                        {r.url && <a href={r.url} target="_blank" rel="noreferrer" className="ml-1.5 text-navy-600 underline">원문</a>}
-                      </li>
-                    ))}
-                  </ol>
-                </Section>
-              )}
-
-              {act?.limits?.length > 0 && (
-                <ul className="text-[11px] text-muted px-1 space-y-0.5">
-                  {act.limits.map((t, i) => <li key={i}>· {t}</li>)}
-                </ul>
-              )}
             </>
           )}
 

@@ -229,8 +229,13 @@ def guideline_context(features: dict, candidates: list, ctx_rules: dict):
         log.warning("[care] 지침 검색 생략: %r", e)
         return [], []
 
+    return pack(rows)
+
+
+def pack(rows: list, start: int = 1):
+    """검색 결과 → (프롬프트용 발췌, 출처 목록). 개인/시설 양쪽에서 함께 쓴다."""
     snippets, refs = [], []
-    for i, row in enumerate(rows, 1):
+    for i, row in enumerate(rows, start):
         tag = f"G{i}"
         src = row.get("source") or {}
         label = src.get("citation") or " ".join(str(x) for x in [src.get("title"), src.get("org"), src.get("year")] if x)
@@ -242,6 +247,18 @@ def guideline_context(features: dict, candidates: list, ctx_rules: dict):
                      "org": src.get("org"), "year": src.get("year"), "citation": label,
                      "locator": loc, "url": src.get("url"), "similarity": round(float(row["similarity"]), 3)})
     return snippets, refs
+
+
+def context_for(queries: list[str]):
+    """질의 문자열을 직접 받아 지침 근거를 찾는다 (시설 규칙의 query 필드용)."""
+    if not enabled() or not queries:
+        return [], []
+    try:
+        rows = search([q for q in queries if q][:MAX_QUERIES])
+    except Exception as e:
+        log.warning("[care] 시설 지침 검색 생략: %r", e)
+        return [], []
+    return pack(rows)
 
 
 def status() -> dict:
