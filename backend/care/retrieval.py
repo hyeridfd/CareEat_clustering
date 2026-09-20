@@ -25,10 +25,15 @@ EMBED_DIM = 1536
 TIMEOUT = float(os.getenv("EMBED_TIMEOUT", "30"))
 
 MAX_QUERIES = int(os.getenv("RAG_QUERIES", "4"))        # 질의 수 (임베딩 1회에 묶어 보낸다)
-PER_QUERY = int(os.getenv("RAG_PER_QUERY", "3"))        # 질의당 문단 수
-MAX_SNIPPETS = int(os.getenv("RAG_SNIPPETS", "8"))      # 프롬프트에 넣을 문단 총수
+PER_QUERY = int(os.getenv("RAG_PER_QUERY", "2"))        # 질의당 문단 수
+MAX_SNIPPETS = int(os.getenv("RAG_SNIPPETS", "6"))      # 프롬프트에 넣을 문단 총수
 SNIPPET_CHARS = int(os.getenv("RAG_SNIPPET_CHARS", "420"))
-MIN_SIM = float(os.getenv("RAG_MIN_SIM", "0.2"))
+MIN_SIM = float(os.getenv("RAG_MIN_SIM", "0.33"))       # 절대 하한
+
+# 상대 하한 — 한 질의 안에서 1등 대비 이 비율 아래는 버린다.
+# 문단에 영문 권고문과 한국어 요지가 섞여 있어 유사도 절대값이 낮게 눌리므로,
+# 절대 하한만으로는 잡음을 못 거른다. 1등과의 거리로 한 번 더 자른다.
+REL_CUT = float(os.getenv("RAG_REL_CUT", "0.93"))
 
 
 def enabled() -> bool:
@@ -134,9 +139,14 @@ def search(queries: list[str]) -> list[dict]:
     vecs = embed(queries)
     hits: dict[int, dict] = {}
     for q, v in zip(queries, vecs):
+        # 상대 하한을 적용하려면 1등을 알아야 하므로 넉넉히 받아 온 뒤 자른다
         res = sb.rpc("match_care_chunks",
-                     {"query_embedding": v, "match_count": PER_QUERY, "min_similarity": MIN_SIM}).execute()
-        for row in (res.data or []):
+                     {"query_embedding": v, "match_count": PER_QUERY + 3, "min_similarity": MIN_SIM}).execute()
+        rows = res.data or []
+        if not rows:
+            continue
+        floor = rows[0]["similarity"] * REL_CUT
+        for row in [r for r in rows if r["similarity"] >= floor][:PER_QUERY]:
             cur = hits.get(row["id"])
             if not cur or row["similarity"] > cur["similarity"]:
                 hits[row["id"]] = {**row, "query": q}
