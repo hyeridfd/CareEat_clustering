@@ -5,6 +5,7 @@ import useAuthStore from '../../lib/authStore'
 import { LogoMark } from '../brand/Brand'
 
 const NAV = [
+  { to: '/care/facility', label: '시설', desc: '영양·급식 운영 진단', icon: 'facility' },
   { to: '/care/records', label: '기록', desc: '어르신·조사 현황', icon: 'record' },
   { to: '/care', label: '진단', desc: '유형·돌봄 우선순위', icon: 'diagnose', exact: true },
   { to: '/care/solutions', label: '솔루션', desc: '돌봄 계획·식단·프로그램', icon: 'solution' },
@@ -16,6 +17,7 @@ const NAV = [
 export function NavIcon({ name, className = 'w-[18px] h-[18px]' }) {
   const p = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round' }
   const shapes = {
+    facility: <><path d="M4 21V9l7-5 7 5v12" {...p} /><path d="M9 21v-5h4v5" {...p} /><path d="M20 21H4" {...p} /></>,
     record: <><rect x="4" y="3" width="16" height="18" rx="3" {...p} /><path d="M8 8h8M8 12h8M8 16h5" {...p} /></>,
     diagnose: <><circle cx="8" cy="9" r="3" {...p} /><circle cx="16" cy="15" r="3" {...p} /><path d="M11 9h3M10 15H7" {...p} /></>,
     solution: <><path d="M12 3a6 6 0 0 0-3 11.2V17h6v-2.8A6 6 0 0 0 12 3z" {...p} /><path d="M10 20h4" {...p} /></>,

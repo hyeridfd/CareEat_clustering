@@ -12,6 +12,7 @@ import SatisfactionSurveyPage from './pages/surveys/SatisfactionSurveyPage'
 import BluefoodSurveyPage from './pages/surveys/BluefoodSurveyPage'
 import StaffLoginPage from './pages/care/StaffLoginPage'
 import CarePage from './pages/care/CarePage'
+import FacilityPage from './pages/care/FacilityPage'
 import RecordsPage from './pages/care/RecordsPage'
 import SolutionsPage from './pages/care/SolutionsPage'
 import NewsPage from './pages/care/NewsPage'
@@ -60,6 +61,7 @@ export default function App() {
         {/* 요양시설 담당자 */}
         <Route path="/staff-login" element={<StaffLoginPage />} />
         <Route path="/care" element={<StaffRoute><CarePage /></StaffRoute>} />
+        <Route path="/care/facility" element={<StaffRoute><FacilityPage /></StaffRoute>} />
         <Route path="/care/records" element={<StaffRoute><RecordsPage /></StaffRoute>} />
         <Route path="/care/solutions" element={<StaffRoute><SolutionsPage /></StaffRoute>} />
         <Route path="/care/news" element={<StaffRoute><NewsPage /></StaffRoute>} />
