@@ -693,6 +693,16 @@ export default function ReportView({ r }) {
             </div>
           )}
         </div>
+        {staff && sol.cautions?.length > 0 && (
+          <div className="pb-avoid mt-6 rounded-2xl bg-amber-50/70 ring-1 ring-amber-200 px-5 py-4">
+            <p className="text-xs font-bold text-amber-900 mb-2">담당자 주의사항</p>
+            <ul className="space-y-1.5">
+              {sol.cautions.map((x, i) => (
+                <li key={i} className="flex gap-2 text-sm leading-6 text-amber-900"><span>•</span><span><Cited text={x} /></span></li>
+              ))}
+            </ul>
+          </div>
+        )}
         <RefList refs={sol.references} />
         {!sol.actions?.length && !sol.guardian_message && <p className="text-sm text-muted">아직 만들어진 돌봄 계획이 없습니다.</p>}
       </Section>

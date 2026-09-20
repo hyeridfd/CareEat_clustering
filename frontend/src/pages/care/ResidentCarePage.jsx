@@ -473,6 +473,13 @@ export default function ResidentCarePage() {
                       : <ul className="list-disc pl-4 text-sm text-gray-700 space-y-1">{draft.monitoring.map((x, i) => <li key={i}>{x}</li>)}</ul>}
                   </div>
                 </div>
+                {(editable || draft.cautions?.length > 0) && (
+                  <div>
+                    <label className="form-label">담당자 주의사항</label>
+                    {editable ? <ListEditor items={draft.cautions} onChange={(v) => setDraft({ ...draft, cautions: v })} placeholder="주의사항 추가" />
+                      : <ul className="list-disc pl-4 text-sm text-gray-700 space-y-1">{draft.cautions.map((x, i) => <li key={i}>{splitCites(x).body}</li>)}</ul>}
+                  </div>
+                )}
                 <div>
                   <div className="flex items-end justify-between">
                     <label className="form-label">보호자 안내 문장</label>
