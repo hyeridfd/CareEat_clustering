@@ -3,6 +3,7 @@
 from typing import Optional
 import copy
 import json
+import os
 from datetime import datetime, timezone
 
 import numpy as np
@@ -63,6 +64,36 @@ def kakao_template(user: dict = Depends(require_staff)):
     """솔라피/카카오 템플릿 등록 화면에 입력할 내용 (현재 REPORT_BASE_URL 기준)"""
     return {**notify.template_for_registration(), "mode": notify._env("KAKAO_MODE", "dry_run"),
             "provider": notify._env("KAKAO_PROVIDER", "solapi")}
+
+
+@router.get("/residents/{eid}/solution-preview")
+def solution_preview(eid: str, user: dict = Depends(require_staff)):
+    """LLM 을 호출하지 않고, 실제로 보낼 프롬프트와 컨텍스트를 그대로 돌려준다 (진단용)."""
+    sb, home = get_supabase(), user["scope_home"]
+    _resident(sb, home, eid)
+    a = _one(sb.table("care_assessments").select("*").eq("elderly_id", eid)
+             .order("created_at", desc=True).limit(1).execute(), "먼저 평가를 실행하세요.")
+    try:
+        tinfo = engine.load_model(a["model_version"]).type_info(a["type_code"])
+    except Exception:
+        tinfo = {"code": a["type_code"], "name": a["type_name"], "guardian_label": a["type_name"], "description": ""}
+    pr = {"score": a["priority_score"], "level": a["priority_level"], "factors": a["priority_factors"]}
+    f = a["features"]
+    _n2, npct, low_meal = sol.nutrition_summary(f)
+    ctx_rules = {"factor_codes": {x["code"] for x in pr["factors"]}, "is_borderline": a["is_borderline"],
+                 "priority_level": pr["level"], "nutrition_pct": npct, "low_meal": low_meal,
+                 "low_components": sol.low_components(f)}
+    cands = sol.care_rules.select(f, ctx_rules)
+    snippets, refs = rag.guideline_context(f, cands, ctx_rules)
+    ctx = sol.build_context(f, tinfo, pr, cands, a.get("transition") or {}, snippets)
+    return jsonable({
+        "prompt_version": sol.PROMPT_VERSION,
+        "model": os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
+        "system_prompt": sol.SYSTEM_PROMPT,
+        "snippet_count": len(snippets),
+        "refs": refs,
+        "context": ctx,
+    })
 
 
 @router.get("/knowledge-status")

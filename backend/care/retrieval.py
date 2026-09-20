@@ -125,6 +125,15 @@ def build_queries(features: dict, candidates: list, ctx_rules: dict) -> list[str
 
 # ─────────────────────────── 검색 ───────────────────────────
 
+# 기관 운영 차원의 권고 — 어르신 개별 조치의 근거가 될 수 없으므로 검색에서 뺀다.
+# (인력 배치, 표준 절차, 돌봄 체계, 종사자·보호자 교육, 다직종 팀 구성 …)
+EXCLUDE_SECTION = re.compile(r"인력|표준 절차|돌봄 체계|종사자|보호자 교육|다직종|상담의 방식")
+
+
+def _institutional(row: dict) -> bool:
+    return bool(EXCLUDE_SECTION.search(row.get("section") or ""))
+
+
 def _sources_by_id(sb, ids) -> dict:
     if not ids:
         return {}
@@ -143,6 +152,9 @@ def search(queries: list[str]) -> list[dict]:
         res = sb.rpc("match_care_chunks",
                      {"query_embedding": v, "match_count": PER_QUERY + 3, "min_similarity": MIN_SIM}).execute()
         rows = res.data or []
+        if not rows:
+            continue
+        rows = [r for r in rows if not _institutional(r)]
         if not rows:
             continue
         floor = rows[0]["similarity"] * REL_CUT

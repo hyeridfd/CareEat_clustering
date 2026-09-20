@@ -22,6 +22,8 @@ from . import nutrition as nutri
 from . import retrieval
 from .priority import LEVEL_LABEL
 
+PROMPT_VERSION = "2026-09-20-cite3"   # 프롬프트를 고칠 때마다 올린다 (배포 확인용)
+
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-5")
 TIMEOUT = float(os.getenv("LLM_TIMEOUT", "60"))
@@ -44,7 +46,12 @@ def _key(name: str):
 
 
 def llm_status():
-    return {"default_provider": os.getenv("LLM_PROVIDER", "none"), "env_file": str(ENV_FILE),
+    return {"prompt_version": PROMPT_VERSION,
+            "prompt_has_cite_example": "[G1]" in SYSTEM_PROMPT,
+            "rag_enabled": os.getenv("RAG_ENABLED", "1") not in ("0", "false", "False", ""),
+            "rag_min_sim": os.getenv("RAG_MIN_SIM", "0.33"),
+            "rag_rel_cut": os.getenv("RAG_REL_CUT", "0.93"),
+            "default_provider": os.getenv("LLM_PROVIDER", "none"), "env_file": str(ENV_FILE),
             "env_file_exists": ENV_FILE.exists(), "openai_key": bool(_key("OPENAI_API_KEY")),
             "anthropic_key": bool(_key("ANTHROPIC_API_KEY")),
             "openai_model": os.getenv("OPENAI_MODEL", OPENAI_MODEL),
@@ -80,7 +87,7 @@ SYSTEM_PROMPT = """당신은 요양원 식사·영양 돌봄 코디네이터를 
 3-2. '참고 지침' 이 주어지면 그 발췌 안의 내용을 근거로 삼습니다. 지침에 근거한 문장은 끝에 [G1] 처럼 해당 발췌 번호를 붙입니다. 발췌에 없는 내용을 지침인 것처럼 쓰거나, 없는 번호를 지어내지 않습니다. 여러 발췌가 근거면 [G1][G3] 처럼 이어 붙입니다.
 3-3. 참고 지침이 후보 조치와 다른 방향을 가리키면, 조치 자체는 후보 목록을 따릅니다(후보는 이 어르신의 상태를 이미 반영해 고른 것입니다). 대신 지침이 경고하는 위험을 관찰 항목이나 주의사항에 한 줄로 적습니다. 두 방향을 한 문장에 섞어 모순되게 쓰지 않습니다.
 4. guardian_message 는 보호자가 읽는 3~5문장의 쉬운 존댓말입니다. 점수·척도명(MNA, GDS 등)·유형 코드와 [G1] 같은 인용 표기를 쓰지 않고, 불안을 주지 않되 사실대로 씁니다. 350자 이내.
-5. '참고 지침' 이 주어졌다면 staff_actions 와 meal_guidance 를 통틀어 **최소 두 문장에는 [G#] 표기를 답니다.** 발췌 내용과 정말로 맞는 문장이 하나도 없을 때만 표기를 생략합니다.
+5. [G#] 표기는 **그 발췌가 그 문장의 내용을 실제로 뒷받침할 때만** 답니다. 개수를 채우려고 관련 없는 발췌 번호를 붙이지 않습니다. 예를 들어 인력 배치나 시설 운영에 관한 발췌를 개별 식사 조치의 근거로 달면 안 됩니다. 맞는 발췌가 하나도 없으면 표기를 전혀 달지 않는 편이 맞습니다.
 6. 반드시 아래 JSON 한 개만 출력합니다.
 
 {"summary": "담당자용 2~3문장 요약",
@@ -163,8 +170,8 @@ def build_context(features: dict, type_info: dict, priority: dict, candidates: l
     }
     if guidelines:
         ctx["참고 지침"] = {
-            "사용법": "각 발췌의 id(G1, G2 …)를, 그 발췌에 근거한 문장 끝에 [G1] 형태로 붙이세요. "
-                    "staff_actions 와 meal_guidance 를 합쳐 최소 두 문장에 답니다. "
+            "사용법": "각 발췌의 id(G1, G2 …)를, 그 발췌가 실제로 뒷받침하는 문장 끝에 [G1] 형태로 붙이세요. "
+                    "내용이 맞지 않는 발췌는 그냥 쓰지 마세요. 개수를 채울 필요는 없습니다. "
                     "발췌에 없는 내용에는 붙이지 않고, 없는 id 를 만들지 않습니다.",
             "발췌": guidelines,
         }
@@ -338,7 +345,9 @@ def generate(features, type_info, priority, transition, is_borderline, provider:
         raw, gen = call_openai(ctx) if provider == "openai" else call_anthropic(ctx)
         clean, flags = validate(raw, candidates, fallback, refs)
         if refs and not clean.get("references"):
-            flags.append({"type": "no_citation", "detail": f"지침 {len(refs)}개를 전달했으나 인용되지 않음"})
+            flags.append({"type": "no_citation",
+                          "detail": f"지침 {len(refs)}개를 전달했으나 인용되지 않음 "
+                                    f"(맞는 근거가 없었을 수 있습니다 — 조치 내용은 규칙 근거로 유효합니다)"})
         if snippets:
             gen = f"{gen}+rag{len(snippets)}"
     except httpx.HTTPStatusError as e:  # API 오류 (키 오류 401, 한도 429 등)
