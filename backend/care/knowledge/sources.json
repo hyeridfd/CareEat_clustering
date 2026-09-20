@@ -45,30 +45,6 @@
       "short": "ESPEN 치매영양 2024"
     },
     {
-      "id": "LTC_FACILITY_MANUAL",
-      "title": "장기요양기관 시설급여 제공 매뉴얼",
-      "org": "국민건강보험공단",
-      "year": 2024,
-      "doc_type": "manual",
-      "license": "공공누리",
-      "url": "https://www.nhis.or.kr",
-      "citation": "장기요양기관 시설급여 제공 매뉴얼 (국민건강보험공단)",
-      "note": "국내 요양시설 급식·영양관리 운영 근거. 잔반 관련 조치의 현장 근거.",
-      "short": "건보공단 시설급여 매뉴얼"
-    },
-    {
-      "id": "ELDER_DIET_GUIDE",
-      "title": "어르신을 위한 식생활 지침",
-      "org": "보건복지부",
-      "year": 2021,
-      "doc_type": "guideline",
-      "license": "공공누리",
-      "url": "https://www.mohw.go.kr",
-      "citation": "어르신을 위한 식생활 지침 (보건복지부)",
-      "note": "보호자 안내 문구의 톤과 근거.",
-      "short": "복지부 어르신 식생활 지침"
-    },
-    {
       "id": "IDDSI",
       "title": "IDDSI 국제 연하조정식 표준 프레임워크",
       "org": "International Dysphagia Diet Standardisation Initiative",
@@ -79,6 +55,54 @@
       "citation": "IDDSI Framework (IDDSI)",
       "note": "식사 형태 0–7단계·점도. texture_level 과 연결. 한국어판 있음.",
       "short": "IDDSI 프레임워크"
+    },
+    {
+      "id": "LTC_MEAL_GUIDE",
+      "title": "어르신을 위한 함께하는 건강식사 길라잡이 — 노인복지시설 급식관리 매뉴얼",
+      "short": "복지부 급식관리 매뉴얼",
+      "org": "보건복지부",
+      "year": 2015,
+      "doc_type": "manual",
+      "license": "공공누리",
+      "url": "https://www.mohw.go.kr",
+      "citation": "어르신을 위한 함께하는 건강식사 길라잡이 (보건복지부, 발간등록번호 11-1471000-000117-01)",
+      "note": "국내 노인복지·요양시설 급식 현장 기준. 영양강화·삼삼한·먹기 쉬운 조리 전략이 핵심."
+    },
+    {
+      "id": "KSH_HTN_2026",
+      "title": "2026년 고혈압 진료지침 (제6판)",
+      "short": "고혈압학회 2026",
+      "org": "대한고혈압학회",
+      "year": 2026,
+      "doc_type": "guideline",
+      "license": "학회 공개 배포",
+      "url": "https://www.koreanhypertension.org",
+      "citation": "2026년 고혈압 진료지침 제6판 (대한고혈압학회)",
+      "note": "제3장 11. 비약물치료 및 생활요법만 적재. 염분감수성이 고령자에서 높다는 근거 포함."
+    },
+    {
+      "id": "KDA_DM_2025",
+      "title": "2025 당뇨병 진료지침",
+      "short": "당뇨병학회 2025",
+      "org": "대한당뇨병학회",
+      "year": 2025,
+      "doc_type": "guideline",
+      "license": "학회 공개 배포",
+      "url": "https://www.diabetes.or.kr",
+      "citation": "2025 당뇨병 진료지침 (대한당뇨병학회)",
+      "note": "5-3 의학영양요법·5-4 운동요법만 적재. 단백질 제한 금지, 나트륨 1,500mg 미만 제한 비권장 근거 포함."
+    },
+    {
+      "id": "SARCOPENIA_KR",
+      "title": "근감소증의 진단과 관리",
+      "short": "근감소증 종설 2024",
+      "org": "최정연·김광일, 대한의사협회지",
+      "year": 2024,
+      "doc_type": "paper",
+      "license": "CC BY-NC 4.0 오픈액세스",
+      "url": "https://doi.org/10.5124/jkma.2024.67.7.461",
+      "citation": "최정연, 김광일. 근감소증의 진단과 관리. J Korean Med Assoc 2024;67(7):461-466",
+      "note": "AWGS 2019 기준과 국내 학회 단백질 권고(1.2 g/kg 이상, 세 끼 분배) 정리."
     }
   ]
 }
