@@ -24,7 +24,7 @@ EMBED_MODEL = os.getenv("EMBED_MODEL", "text-embedding-3-small")   # 1536차원
 EMBED_DIM = 1536
 TIMEOUT = float(os.getenv("EMBED_TIMEOUT", "30"))
 
-MAX_QUERIES = int(os.getenv("RAG_QUERIES", "4"))        # 질의 수 (임베딩 1회에 묶어 보낸다)
+MAX_QUERIES = int(os.getenv("RAG_QUERIES", "5"))        # 질의 수 (임베딩 1회에 묶어 보낸다)
 PER_QUERY = int(os.getenv("RAG_PER_QUERY", "2"))        # 질의당 문단 수
 MAX_SNIPPETS = int(os.getenv("RAG_SNIPPETS", "6"))      # 프롬프트에 넣을 문단 총수
 SNIPPET_CHARS = int(os.getenv("RAG_SNIPPET_CHARS", "420"))
@@ -88,22 +88,56 @@ NUT_QUERY = {
 
 TEXTURE_QUERY = "요양시설 다진식 갈은식 제공 기준 식사 형태 단계"
 
+# 선택된 후보 조치 → 검색 질의.
+# 질의는 '이 어르신에게 무엇을 하기로 했는가'에서 나와야 한다.
+# 진단·영양소만으로 질의를 만들면 저영양·식사도움 같은 핵심 조치가 검색에서 빠진다.
+RULE_QUERY = [
+    (("R_MALNUT", "R_LOW_BMI", "R_WEIGHT", "R_UNDER"),
+     "노인 저체중 영양불량 에너지 단백질 보충 영양 강화식 간식 추가"),
+    (("R_DEPEND", "R_ASSIST"),
+     "노인 식사 돕기 식사 보조 식사 환경 함께 먹기"),
+    (("R_CHEW", "R_SWALLOW", "R_TEXTURE"),
+     "씹기 삼킴 어려움 식사 형태 조정 영양 강화 안전한 삼킴"),
+    (("R_DEMENTIA", "R_DX_DEMENTIA"),
+     "치매 어르신 식사 거부 식사 환경 조성 개인 선호 식기"),
+    (("R_LEFT_",),
+     "남기는 반찬 대체 제공 음식 선택권 다양한 반찬"),
+    (("R_ORAL", "R_DENT"),
+     "노인 구강 관리 의치 치아 식사"),
+    (("R_ACT", "R_IPAQ", "R_SARCO"),
+     "노인 신체 활동 운동 근육량 유지 단백질 함께 제공"),
+    (("R_DEPRESS", "R_GDS", "R_MOOD"),
+     "노인 우울 식욕 저하 식사 환경 함께 식사"),
+    (("R_MED", "R_POLY"),
+     "노인 약물 부작용 식욕 저하 약물 검토"),
+]
+
 
 def build_queries(features: dict, candidates: list, ctx_rules: dict) -> list[str]:
-    """규칙·진단·부족 영양소에서 검색 질의를 만든다 (개인 식별정보 제외)."""
+    """후보 조치·진단·부족 영양소에서 검색 질의를 만든다 (개인 식별정보 제외).
+
+    순서가 중요하다. 질의 수가 제한돼 있으므로, 이 어르신에게 실제로 하기로 한
+    조치(후보 규칙)에서 먼저 뽑고 진단·영양소는 그 뒤를 채운다.
+    """
     qs: list[str] = []
 
     def add(q):
         if q and q not in qs:
             qs.append(q)
 
-    # 1) 진단 질환 — 질환별 식사 조정 지침
+    # 1) 후보 조치에서 — 가장 먼저
+    ids = [c["id"] for c in candidates]
+    for prefixes, q in RULE_QUERY:
+        if any(i.startswith(p) for i in ids for p in prefixes):
+            add(q)
+
+    # 2) 진단 질환 — 질환별 식사 조정 지침
     names = " ".join(str(x) for x in (features.get("diseases") or []))
     for keys, q in DX_QUERY:
         if any(k in names for k in keys):
             add(q)
 
-    # 2) 기준 미달·초과 영양소
+    # 3) 기준 미달·초과 영양소
     pct = ctx_rules.get("nutrition_pct") or {}
     low = sorted(((v, k) for k, v in pct.items() if k != "na" and isinstance(v, (int, float)) and v < 80))
     for _, k in low[:2]:
@@ -111,11 +145,11 @@ def build_queries(features: dict, candidates: list, ctx_rules: dict) -> list[str
     if isinstance(pct.get("na"), (int, float)) and pct["na"] > 120:
         add(NUT_QUERY["na"])
 
-    # 3) 식사 형태·삼킴
+    # 4) 식사 형태·삼킴
     if (features.get("texture_level") or 0) >= 1 or features.get("swallowing_difficulty") == 1:
         add(TEXTURE_QUERY)
 
-    # 4) 그래도 비면 선택된 규칙 문장으로
+    # 5) 그래도 비면 규칙 문장 그대로
     if not qs:
         for c in candidates[:2]:
             add(f"{c.get('category', '')} {c.get('staff', '')}".strip())
