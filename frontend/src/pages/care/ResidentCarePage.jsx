@@ -153,15 +153,50 @@ function NutritionCard({ n }) {
   )
 }
 
+/* 편집창(textarea) 안에서는 위첨자를 그릴 수 없다.
+   그래서 본문에 박힌 [1] 같은 근거 표기를 떼어내 배지로 따로 보여주고,
+   저장할 때 다시 문장 끝에 붙여 근거가 유실되지 않게 한다. */
+const CITE_RE = /\s*\[G?(\d+)\]/g
+
+function splitCites(text) {
+  const cites = []
+  const body = String(text || '').replace(CITE_RE, (_m, n) => { cites.push(Number(n)); return '' }).trim()
+  return { body, cites: [...new Set(cites)].sort((a, b) => a - b) }
+}
+
+function joinCites(body, cites) {
+  const clean = String(body || '').replace(CITE_RE, '').trim()
+  return cites?.length ? `${clean} ${cites.map((n) => `[${n}]`).join('')}` : clean
+}
+
+function CiteBadges({ cites }) {
+  if (!cites?.length) return null
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-1">
+      <span className="text-[10px] text-gray-400">근거</span>
+      {cites.map((n) => (
+        <span key={n} className="inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded bg-navy-100 text-navy-700 text-[10px] font-bold tabular-nums">{n}</span>
+      ))}
+    </div>
+  )
+}
+
 function ListEditor({ items, onChange, placeholder }) {
   return (
     <div className="space-y-2">
-      {items.map((x, i) => (
-        <div key={i} className="flex gap-2">
-          <textarea rows={2} className="form-input text-sm" value={x} onChange={(e) => onChange(items.map((y, j) => (j === i ? e.target.value : y)))} />
-          <button type="button" onClick={() => onChange(items.filter((_, j) => j !== i))} className="text-gray-300 hover:text-red-500 text-lg leading-none">×</button>
-        </div>
-      ))}
+      {items.map((x, i) => {
+        const { body, cites } = splitCites(x)
+        return (
+          <div key={i} className="flex gap-2">
+            <div className="flex-1 min-w-0">
+              <textarea rows={2} className="form-input text-sm" value={body}
+                onChange={(e) => onChange(items.map((y, j) => (j === i ? joinCites(e.target.value, cites) : y)))} />
+              <CiteBadges cites={cites} />
+            </div>
+            <button type="button" onClick={() => onChange(items.filter((_, j) => j !== i))} className="text-gray-300 hover:text-red-500 text-lg leading-none">×</button>
+          </div>
+        )
+      })}
       <button type="button" onClick={() => onChange([...items, ''])} className="text-xs text-blue-600 hover:underline">+ {placeholder}</button>
     </div>
   )
@@ -406,7 +441,8 @@ export default function ResidentCarePage() {
               <div className="space-y-5">
                 <div>
                   <label className="form-label">담당자용 요약</label>
-                  <textarea rows={2} className="form-input" value={draft.summary} disabled={!editable} onChange={(e) => setDraft({ ...draft, summary: e.target.value })} />
+                  <textarea rows={2} className="form-input" value={splitCites(draft.summary).body} disabled={!editable}
+                    onChange={(e) => setDraft({ ...draft, summary: joinCites(e.target.value, splitCites(draft.summary).cites) })} />
                 </div>
                 <div>
                   <label className="form-label">돌봄 조치</label>
@@ -417,9 +453,10 @@ export default function ResidentCarePage() {
                           <span className="text-xs font-semibold text-blue-700">{x.category}</span>
                           <span className="text-[10px] text-gray-400">{x.rule_id}</span>
                         </div>
-                        <textarea rows={2} className="form-input text-sm" value={x.action} disabled={!editable}
-                          onChange={(e) => setDraft({ ...draft, staff_actions: draft.staff_actions.map((y, j) => (j === i ? { ...y, action: e.target.value } : y)) })} />
-                        {x.why && <p className="mt-1 text-xs text-gray-500">이유: {x.why}</p>}
+                        <textarea rows={2} className="form-input text-sm" value={splitCites(x.action).body} disabled={!editable}
+                          onChange={(e) => setDraft({ ...draft, staff_actions: draft.staff_actions.map((y, j) => (j === i ? { ...y, action: joinCites(e.target.value, splitCites(x.action).cites) } : y)) })} />
+                        <CiteBadges cites={[...new Set([...splitCites(x.action).cites, ...splitCites(x.why).cites])].sort((a, b) => a - b)} />
+                        {x.why && <p className="mt-1 text-xs text-gray-500">이유: {splitCites(x.why).body}</p>}
                       </div>
                     ))}
                   </div>
@@ -460,7 +497,7 @@ export default function ResidentCarePage() {
                         </li>
                       ))}
                     </ol>
-                    <p className="mt-2 text-[11px] text-gray-400">조치·지침 문장 끝의 위첨자 번호가 이 목록을 가리킵니다.</p>
+                    <p className="mt-2 text-[11px] text-gray-400">각 조치·지침 아래 '근거' 배지의 번호가 이 목록을 가리킵니다. 상세 리포트에서는 문장 끝 위첨자로 표시됩니다.</p>
                   </div>
                 )}
                 {editable && (
