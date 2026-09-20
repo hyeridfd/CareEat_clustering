@@ -22,7 +22,7 @@ from . import nutrition as nutri
 from . import retrieval
 from .priority import LEVEL_LABEL
 
-PROMPT_VERSION = "2026-09-20-cite3"   # 프롬프트를 고칠 때마다 올린다 (배포 확인용)
+PROMPT_VERSION = "2026-09-20-cite4"   # 프롬프트를 고칠 때마다 올린다 (배포 확인용)
 
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-5")
@@ -268,6 +268,46 @@ def _cite_fix(text: str, valid: set, used: set, flags: list):
     return re.sub(r"\s{2,}", " ", out).strip()
 
 
+def _renumber(clean: dict, refs: list) -> list:
+    """실제로 인용된 근거만 남기고 본문에 나온 순서대로 1, 2, 3 … 으로 다시 번호를 매긴다.
+
+    검색 결과 6개 중 2개만 인용되면 [G1], [G5] 가 되어 목록에 1, 5 만 남는다.
+    읽는 사람에게는 중간 번호가 빠진 것처럼 보이므로 연속 번호로 정리한다.
+    """
+    by_tag = {r["tag"]: r for r in refs}
+
+    def texts():
+        yield clean.get("summary", "")
+        for a in clean.get("staff_actions") or []:
+            yield a.get("action", "")
+            yield a.get("why", "")
+        for key in ("meal_guidance", "monitoring", "cautions"):
+            for x in clean.get(key) or []:
+                yield x
+
+    order: list[str] = []
+    for t in texts():
+        for m in CITE.finditer(str(t or "")):
+            tag = f"G{m.group(1)}"
+            if tag in by_tag and tag not in order:
+                order.append(tag)
+    if not order:
+        return []
+
+    remap = {old_tag: i for i, old_tag in enumerate(order, 1)}
+    sub = lambda t: CITE.sub(lambda m: (f"[{remap['G' + m.group(1)]}]"
+                                        if f"G{m.group(1)}" in remap else ""), str(t or ""))
+
+    clean["summary"] = sub(clean.get("summary", ""))
+    for a in clean.get("staff_actions") or []:
+        a["action"] = sub(a.get("action", ""))
+        a["why"] = sub(a.get("why", ""))
+    for key in ("meal_guidance", "monitoring", "cautions"):
+        clean[key] = [sub(x) for x in (clean.get(key) or [])]
+
+    return [{**by_tag[tag], "tag": str(n), "orig_tag": tag} for tag, n in remap.items()]
+
+
 def validate(out: dict, candidates: list, fallback: dict, refs: list | None = None):
     flags = []
     allowed = {c["id"] for c in candidates}
@@ -325,7 +365,7 @@ def validate(out: dict, candidates: list, fallback: dict, refs: list | None = No
         flags.append({"type": "guardian_message", "detail": f"보호자 문장 대체 ({', '.join(problems) or '비어 있음'})"})
         g = fallback["guardian_message"]
     clean["guardian_message"] = g
-    clean["references"] = [r for r in (refs or []) if r["tag"] in used_tags]
+    clean["references"] = _renumber(clean, [r for r in (refs or []) if r["tag"] in used_tags])
     return clean, flags
 
 

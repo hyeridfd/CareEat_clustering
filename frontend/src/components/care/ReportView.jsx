@@ -101,14 +101,16 @@ function CompareRow({ label, value, avg, min = 0, max = 100, unit = '' }) {
 
 /* 근거 표기 [G1] 을 작은 칩으로 바꿔 그린다 (담당자용 리포트에서만 들어온다) */
 function Cited({ text }) {
-  const parts = String(text || '').split(/(\[G\d+\])/g)
+  const parts = String(text || '').split(/(\[G?\d+\])/g)
   if (parts.length === 1) return <>{text}</>
   return (
     <>
-      {parts.map((p, i) =>
-        /^\[G\d+\]$/.test(p)
-          ? <sup key={i} className="ml-0.5 align-super text-[10px] font-bold text-navy-500">{p.slice(1, -1)}</sup>
-          : <span key={i}>{p}</span>)}
+      {parts.map((p, i) => {
+        const m = /^\[G?(\d+)\]$/.exec(p)
+        return m
+          ? <sup key={i} className="ml-0.5 align-super text-[10px] font-bold text-navy-500 tabular-nums">{m[1]}</sup>
+          : <span key={i}>{p}</span>
+      })}
     </>
   )
 }
@@ -122,7 +124,7 @@ function RefList({ refs }) {
       <ol className="space-y-1">
         {refs.map((x) => (
           <li key={x.tag} className="flex gap-2 text-[11px] leading-5">
-            <span className="font-bold text-navy-500 shrink-0 tabular-nums">{x.tag.replace('G', '')}</span>
+            <span className="font-bold text-navy-500 shrink-0 tabular-nums">{String(x.tag).replace('G', '')}</span>
             <span className="min-w-0">
               <b className="font-semibold text-navy-900">{x.locator || x.title}</b>
               <span className="ml-1.5 text-slate-400">{x.short || x.citation}</span>
