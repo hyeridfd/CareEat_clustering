@@ -25,6 +25,7 @@ from collections import Counter, defaultdict
 
 from .data import fetch_all
 from . import nutrition as nutri
+from . import facility_rules as frules
 
 _CACHE: dict = {}
 _TTL = 120.0
@@ -187,14 +188,36 @@ def _menu_block(featlist: list, meal_forms: dict | None = None) -> dict:
         })
     menus.sort(key=lambda x: (x["rate"], -x["n"]))
 
+    # 같은 메뉴가 여러 날 나오면 하나로 묶는다 — 식단 개편은 메뉴 단위로 판단한다
+    agg = defaultdict(lambda: {"vals": [], "n": 0, "cells": 0, "slots": set(), "meals": set(), "days": set()})
+    for m in menus:
+        key = m["menu"] or f"{m['slot_label']} (메뉴명 없음)"
+        a = agg[key]
+        a["vals"].append(m["rate"] * m["n"])
+        a["n"] += m["n"]
+        a["cells"] += 1
+        a["slots"].add(m["slot_label"])
+        a["meals"].add(m["meal_label"])
+        a["days"].add(m["day"])
+    by_menu = [{"menu": k,
+                "rate": round(sum(a["vals"]) / a["n"], 1) if a["n"] else None,
+                "n": a["n"], "cells": a["cells"],
+                "slot_label": " · ".join(sorted(a["slots"])),
+                "meal_label": " · ".join(sorted(a["meals"])),
+                "days": sorted(a["days"])}
+               for k, a in agg.items() if a["n"]]
+    by_menu.sort(key=lambda x: (x["rate"], -x["n"]))
+
     return {
         "by_meal": [{"meal": m, "label": MEAL_LABEL.get(m, m),
                      "rate": round(sum(v) / len(v), 1), "n": len(v)}
                     for m, v in sorted(meal_rate.items()) if v],
         "by_day": [{"day": d, "rate": round(sum(v) / len(v), 1), "n": len(v)}
                    for d, v in sorted(day_rate.items()) if v],
-        "worst": menus[:10],
-        "best": list(reversed(menus[-5:])) if menus else [],
+        "worst": by_menu[:10],           # 메뉴 단위 (식단 개편 후보)
+        "best": list(reversed(by_menu[-5:])) if by_menu else [],
+        "worst_cells": menus[:10],       # 일자×끼니 단위 (언제 문제였는지)
+        "n_menus": len(by_menu),
         "n_cells": len(menus),
     }
 
@@ -306,5 +329,6 @@ def build_profile(sb, home: str, use_cache: bool = True) -> dict:
         "groups": _group_block(featlist),
         "types": [{"name": k, "n": v, "pct": _pct(v, len(latest))} for k, v in types.most_common()],
     }
+    out["priorities"] = frules.analyze(out)
     _CACHE[home] = (time.time(), out)
     return out

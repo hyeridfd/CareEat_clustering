@@ -21,6 +21,44 @@ function Stat({ label, value, unit, sub, tone }) {
   )
 }
 
+const SEV = {
+  3: { label: '시급', chip: 'bg-rose-100 text-rose-800', bar: 'bg-rose-500' },
+  2: { label: '주의', chip: 'bg-amber-100 text-amber-900', bar: 'bg-amber-500' },
+  1: { label: '관찰', chip: 'bg-slate-100 text-slate-600', bar: 'bg-slate-400' },
+}
+
+/* 관리 우선순위 — "왜 이 순위인가"를 점수 산식까지 드러낸다 */
+function PriorityCard({ x }) {
+  const sev = SEV[x.severity] || SEV[1]
+  return (
+    <li className="rounded-2xl ring-1 ring-navy-100 bg-white p-5">
+      <div className="flex items-start gap-3">
+        <span className="mt-0.5 flex items-center justify-center w-7 h-7 shrink-0 rounded-lg bg-navy-900 text-white text-xs font-extrabold tabular-nums">{x.rank}</span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="badge bg-navy-50 text-navy-700">{x.area_label}</span>
+            <span className={`badge ${sev.chip}`}>{sev.label}</span>
+            <span className="ml-auto text-[11px] text-muted tabular-nums">
+              규모 {x.impact}% × {sev.label} = <b className="text-navy-900">{x.score}점</b>
+            </span>
+          </div>
+          <p className="mt-2 text-[15px] font-bold leading-6 text-navy-900">{x.title}</p>
+          <p className="mt-1.5 text-sm leading-6 text-slate-700">{x.detail}</p>
+          {x.basis && <p className="mt-0.5 text-xs text-muted">{x.basis}</p>}
+          <div className="mt-2 h-1.5 rounded-full bg-navy-50">
+            <div className={`h-1.5 rounded-full ${sev.bar}`} style={{ width: `${Math.max(3, Math.min(100, x.score))}%` }} />
+          </div>
+          {x.action && (
+            <p className="mt-3 rounded-xl bg-navy-50/70 px-4 py-2.5 text-sm leading-6 text-navy-900">
+              <b className="text-navy-500 text-xs mr-1.5">해야 할 일</b>{x.action}
+            </p>
+          )}
+        </div>
+      </div>
+    </li>
+  )
+}
+
 function Section({ title, sub, right, children }) {
   return (
     <section className="surface p-6">
@@ -130,6 +168,19 @@ export default function FacilityPage() {
             )}
           </Section>
 
+          <Section title="관리 우선순위"
+            sub="규모(해당 어르신 비율)와 심각도를 곱해 매긴 순서입니다. 위에서부터 손대는 것이 효율적입니다."
+            right={d.priorities?.length ? <span className="text-xs text-muted">{d.priorities.length}건</span> : null}>
+            {d.priorities?.length ? (
+              <ol className="space-y-3">{d.priorities.slice(0, 8).map((x) => <PriorityCard key={x.id} x={x} />)}</ol>
+            ) : (
+              <p className="text-sm text-muted py-2">기준을 넘는 문제가 탐지되지 않았습니다.</p>
+            )}
+            {d.priorities?.length > 8 && (
+              <p className="mt-3 text-xs text-muted">아래 {d.priorities.length - 8}건은 기준을 넘었지만 규모가 작아 개별 대응으로 충분합니다.</p>
+            )}
+          </Section>
+
           <div className="grid lg:grid-cols-2 gap-5">
             <Section title="위험군 분포" sub="평가 완료자 기준. 비율이 높을수록 시설 차원의 대응이 필요합니다.">
               <RatioRows rows={d.risks || []} cut={[15, 30]} denom={d.n_assessed} />
@@ -187,24 +238,23 @@ export default function FacilityPage() {
           </div>
 
           <Section title="잔반이 많은 메뉴"
-            sub="일자·끼니·음식군 단위로 시설 전체 평균 섭취율이 낮은 순입니다. 식단 개편 후보입니다."
-            right={d.menus?.n_cells ? <span className="text-xs text-muted">전체 {d.menus.n_cells}칸</span> : null}>
+            sub="메뉴 단위 시설 평균 섭취율이 낮은 순입니다. 같은 메뉴가 여러 날 나오면 합산했습니다. 식단 개편 후보입니다."
+            right={d.menus?.n_menus ? <span className="text-xs text-muted">전체 {d.menus.n_menus}종</span> : null}>
             {d.menus?.worst?.length ? (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm min-w-[520px]">
                   <thead>
                     <tr className="text-left text-[11px] text-muted border-b border-navy-100">
-                      <th className="py-2">일자</th><th className="py-2">끼니</th><th className="py-2">음식군</th>
-                      <th className="py-2">메뉴</th><th className="py-2 text-right">평균 섭취율</th><th className="py-2 text-right">인원</th>
+                      <th className="py-2">메뉴</th><th className="py-2">음식군</th><th className="py-2">제공</th>
+                      <th className="py-2 text-right">평균 섭취율</th><th className="py-2 text-right">연인원</th>
                     </tr>
                   </thead>
                   <tbody>
                     {d.menus.worst.map((m, i) => (
                       <tr key={i} className="border-b border-navy-50 last:border-0">
-                        <td className="py-2 whitespace-nowrap">{m.day}일차</td>
-                        <td className="py-2 whitespace-nowrap">{m.meal_label}</td>
+                        <td className="py-2 font-semibold text-navy-900">{m.menu}</td>
                         <td className="py-2 whitespace-nowrap text-muted">{m.slot_label}</td>
-                        <td className="py-2 font-semibold text-navy-900">{m.menu || '—'}</td>
+                        <td className="py-2 whitespace-nowrap text-muted text-xs">{m.cells}회 · {m.meal_label}</td>
                         <td className={`py-2 text-right tabular-nums font-bold ${m.rate < 60 ? 'text-rose-600' : m.rate < 80 ? 'text-amber-700' : 'text-navy-900'}`}>{m.rate}%</td>
                         <td className="py-2 text-right tabular-nums text-muted">{m.n}</td>
                       </tr>
@@ -216,8 +266,8 @@ export default function FacilityPage() {
           </Section>
 
           <p className="text-[11px] text-muted px-1">
-            이 화면은 Care-Eat Scan 단계입니다. 다음 단계(Insight)에서는 여기 지표를 근거로
-            시설의 관리 우선순위를 자동으로 매기고, 지침에 근거한 운영 개선안을 제시합니다.
+Scan(시설 프로파일)과 Insight(관리 우선순위) 단계입니다. 다음 단계(Action)에서는 각 우선순위에
+            공식 지침 근거와 식품·메뉴 DB를 연결해 바꿀 메뉴까지 구체적으로 제시합니다.
           </p>
         </div>
       )}
