@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from care import engine, priority as prio, solution as sol, notify, nutrition as nutri, retrieval as rag
+from care import facility as fac
 from care.report import build_report
 from care.data import fetch_all, fetch_surveys
 from dependencies import create_token, get_supabase, require_staff, get_kst_now
@@ -94,6 +95,17 @@ def solution_preview(eid: str, user: dict = Depends(require_staff)):
         "refs": refs,
         "context": ctx,
     })
+
+
+@router.get("/facility/profile")
+def facility_profile(refresh: bool = False, user: dict = Depends(require_staff)):
+    """Care-Eat Scan — 시설 영양 프로파일.
+
+    개인 평가를 시설 단위 위험군 비율·영양소 미달률·질환 분포·
+    끼니/메뉴별 섭취율로 집계한다. Insight(문제 랭킹)의 입력이 된다.
+    """
+    sb, home = get_supabase(), user["scope_home"]
+    return jsonable(fac.build_profile(sb, home, use_cache=not refresh))
 
 
 @router.get("/knowledge-status")
