@@ -7,6 +7,7 @@
 """
 from __future__ import annotations
 
+import re
 import copy
 import time
 from statistics import mean
@@ -293,6 +294,7 @@ def build_report(sb, home: str, eid: str, audience: str = "guardian",
     nutrition_out = None
     if nsum:
         gender = resident.get("gender")
+        age = resident.get("age")
         fld = nutri.fields()
         keys = ["energy", "protein", "fat", "carb", "fiber", "na", "ca", "fe", "k", "vc", "vd", "b12"]
         if not staff:
@@ -305,8 +307,9 @@ def build_report(sb, home: str, eid: str, audience: str = "guardian",
             "n_days": nsum.get("n_days"),
             "n_meals": nsum.get("n_meals"),
             "partial": bool(nsum.get("partial")),
-            "targets": [t for t in nutri.compare_targets(nsum.get("avg_day"), gender)
+            "targets": [t for t in nutri.compare_targets(nsum.get("avg_day"), gender, age)
                         if staff or t["key"] in keys],
+            "target_basis": f"2025 한국인 영양소 섭취기준 · {nutri.band_label(age)}",
         }
 
     # ── 급식 만족·선호 ──
@@ -335,17 +338,25 @@ def build_report(sb, home: str, eid: str, audience: str = "guardian",
     # ── 돌봄 제안 ──
     sol = solution or {}
     content = sol.get("content") or {}
+
+    # 근거 표기([G1])는 담당자용에서만 남기고 보호자용에서는 지운다
+    def _cite(t):
+        t = str(t or "")
+        return t if staff else re.sub(r"\s*\[G\d+\]", "", t).strip()
+
     solution_out = {
         "guardian_message": sol.get("guardian_message"),
-        "meal_guidance": content.get("meal_guidance") or [],
-        "monitoring": content.get("monitoring") or [],
-        "actions": [{"category": x.get("category"), "action": x.get("action"), "why": x.get("why")}
+        "meal_guidance": [_cite(x) for x in (content.get("meal_guidance") or [])],
+        "monitoring": [_cite(x) for x in (content.get("monitoring") or [])],
+        "actions": [{"category": x.get("category"), "action": _cite(x.get("action")), "why": _cite(x.get("why"))}
                     for x in (content.get("staff_actions") or [])],
         "status": sol.get("status"),
         "updated_at": sol.get("updated_at") or sol.get("created_at"),
     }
     if staff:
         solution_out["summary"] = content.get("summary")
+        solution_out["cautions"] = content.get("cautions") or []
+        solution_out["references"] = content.get("references") or []
 
     out = {
         "audience": audience,

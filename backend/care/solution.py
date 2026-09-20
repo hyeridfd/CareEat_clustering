@@ -19,6 +19,7 @@ import httpx
 
 from . import care_rules
 from . import nutrition as nutri
+from . import retrieval
 from .priority import LEVEL_LABEL
 
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
@@ -76,7 +77,8 @@ SYSTEM_PROMPT = """당신은 요양원 식사·영양 돌봄 코디네이터를 
 3. 후보 문장을 어르신의 지표·선호에 맞게 구체화하고, 중요도 순으로 정렬합니다(최대 6개).
 3-0. '진단 질환'과 '잔반이 많은 음식군'을 반드시 함께 봅니다. 질환에 맞는 식사 조정(예: 고혈압이면 국물·절임, 당뇨면 단 간식 시간)과 어느 음식군을 남기는지에 대한 대응을 각각 한 줄 이상 씁니다. 약 이름을 근거로 효능·부작용을 설명하지 않습니다.
 3-1. '실제 섭취 영양소(하루 평균)'가 주어지면 그 수치를 근거로 씁니다. 기준 대비 80% 미만인 영양소는 무엇을 늘릴지, 나트륨이 기준을 넘으면 무엇을 줄일지 식사 지침에 구체적으로 적습니다. 특정 끼니가 유난히 적으면 그 끼니를 짚습니다. 영양제·보충제 제품명이나 용량은 쓰지 않습니다.
-4. guardian_message 는 보호자가 읽는 3~5문장의 쉬운 존댓말입니다. 점수·척도명(MNA, GDS 등)·유형 코드를 쓰지 않고, 불안을 주지 않되 사실대로 씁니다. 350자 이내.
+3-2. '참고 지침' 이 주어지면 그 발췌 안의 내용을 근거로 삼습니다. 지침에 근거한 문장은 끝에 [G1] 처럼 해당 발췌 번호를 붙입니다. 발췌에 없는 내용을 지침인 것처럼 쓰거나, 없는 번호를 지어내지 않습니다. 여러 발췌가 근거면 [G1][G3] 처럼 이어 붙입니다.
+4. guardian_message 는 보호자가 읽는 3~5문장의 쉬운 존댓말입니다. 점수·척도명(MNA, GDS 등)·유형 코드와 [G1] 같은 인용 표기를 쓰지 않고, 불안을 주지 않되 사실대로 씁니다. 350자 이내.
 5. 반드시 아래 JSON 한 개만 출력합니다.
 
 {"summary": "담당자용 2~3문장 요약",
@@ -106,7 +108,7 @@ def nutrition_summary(features: dict):
     if not isinstance(n, dict) or not n.get("avg_day"):
         return None, {}, None
     gender = "여자" if features.get("female") == 1 else "남자"
-    pct = {t["key"]: t["pct"] for t in nutri.compare_targets(n.get("avg_day"), gender)}
+    pct = {t["key"]: t["pct"] for t in nutri.compare_targets(n.get("avg_day"), gender, features.get("age"))}
     meals = [m for m in (n.get("meals") or []) if m.get("energy") is not None]
     low = None
     if len(meals) >= 2:
@@ -134,9 +136,10 @@ def nutrition_ctx(features: dict):
     return out
 
 
-def build_context(features: dict, type_info: dict, priority: dict, candidates: list, transition: dict):
+def build_context(features: dict, type_info: dict, priority: dict, candidates: list, transition: dict,
+                  guidelines: list | None = None):
     ind = {FEATURE_LABELS[k]: features.get(k) for k in FEATURE_LABELS if features.get(k) is not None}
-    return {
+    ctx = {
         "유형": {"이름": type_info.get("name"), "설명": type_info.get("description"),
                "보호자용 표현": type_info.get("guardian_label")},
         "우선순위": {"점수": priority["score"], "등급": LEVEL_LABEL[priority["level"]],
@@ -154,6 +157,9 @@ def build_context(features: dict, type_info: dict, priority: dict, candidates: l
         "후보 조치 목록": [{"rule_id": c["id"], "category": c["category"], "staff": c["staff"], "meal": c["meal"],
                        "monitor": c["monitor"]} for c in candidates],
     }
+    if guidelines:
+        ctx["참고 지침"] = guidelines
+    return ctx
 
 
 # ─────────────────────────── 규칙 기반 ───────────────────────────
@@ -173,6 +179,7 @@ def rules_solution(type_info, priority, candidates):
         "meal_guidance": [c["meal"] for c in candidates if c["meal"]][:5],
         "monitoring": [c["monitor"] for c in candidates if c["monitor"]][:5],
         "cautions": [],
+        "references": [],
         "guardian_message": guardian[:GUARDIAN_MAX],
     }
 
@@ -222,9 +229,34 @@ def _scan(text: str):
     return [label for pat, label in BANNED if pat.search(text or "")]
 
 
-def validate(out: dict, candidates: list, fallback: dict):
+CITE = re.compile(r"\[G(\d+)\]")
+
+
+def _cite_fix(text: str, valid: set, used: set, flags: list):
+    """없는 번호의 인용 표기를 지운다. 실제로 쓰인 번호는 used 에 모은다."""
+    if not text:
+        return text
+    bad = []
+
+    def sub(m):
+        tag = f"G{m.group(1)}"
+        if tag in valid:
+            used.add(tag)
+            return m.group(0)
+        bad.append(tag)
+        return ""
+
+    out = CITE.sub(sub, text)
+    if bad:
+        flags.append({"type": "bad_citation", "detail": f"없는 근거 표기 제거: {', '.join(sorted(set(bad)))}"})
+    return re.sub(r"\s{2,}", " ", out).strip()
+
+
+def validate(out: dict, candidates: list, fallback: dict, refs: list | None = None):
     flags = []
     allowed = {c["id"] for c in candidates}
+    valid_tags = {r["tag"] for r in (refs or [])}
+    used_tags: set = set()
     clean = {"summary": str(out.get("summary", "")).strip() or fallback["summary"]}
 
     acts = []
@@ -241,7 +273,8 @@ def validate(out: dict, candidates: list, fallback: dict):
             a = {"rule_id": rid, "category": care_rules.RULE_BY_ID[rid]["category"],
                  "action": care_rules.RULE_BY_ID[rid]["staff"], "why": ""}
         acts.append({"rule_id": rid, "category": a.get("category") or care_rules.RULE_BY_ID[rid]["category"],
-                     "action": a.get("action", ""), "why": a.get("why", "")})
+                     "action": _cite_fix(a.get("action", ""), valid_tags, used_tags, flags),
+                     "why": _cite_fix(a.get("why", ""), valid_tags, used_tags, flags)})
     if not acts:
         flags.append({"type": "empty_actions", "detail": "유효한 조치가 없어 규칙 기반 조치 사용"})
         acts = fallback["staff_actions"]
@@ -251,13 +284,14 @@ def validate(out: dict, candidates: list, fallback: dict):
         items = [str(x) for x in (out.get(key) or []) if str(x).strip()]
         kept = []
         for x in items:
+            x = _cite_fix(x, valid_tags, used_tags, flags)
             if _scan(x):
                 flags.append({"type": "banned_expression", "detail": f"{key} 항목 제거: {x[:40]}"})
-            else:
+            elif x:
                 kept.append(x)
         clean[key] = kept[:6] if kept else fallback.get(key, [])
 
-    g = str(out.get("guardian_message", "")).strip()
+    g = CITE.sub("", str(out.get("guardian_message", ""))).strip()
     problems = _scan(g)
     if JARGON.search(g):
         problems.append("전문용어·코드")
@@ -267,6 +301,7 @@ def validate(out: dict, candidates: list, fallback: dict):
         flags.append({"type": "guardian_message", "detail": f"보호자 문장 대체 ({', '.join(problems) or '비어 있음'})"})
         g = fallback["guardian_message"]
     clean["guardian_message"] = g
+    clean["references"] = [r for r in (refs or []) if r["tag"] in used_tags]
     return clean, flags
 
 
@@ -280,10 +315,15 @@ def generate(features, type_info, priority, transition, is_borderline, provider:
     provider = (provider or os.getenv("LLM_PROVIDER", "none")).lower()
     if provider in ("", "none", "rules"):
         return fallback, "rules", [], candidates
-    ctx = build_context(features, type_info, priority, candidates, transition)
+    snippets, refs = retrieval.guideline_context(features, candidates, ctx_rules)
+    ctx = build_context(features, type_info, priority, candidates, transition, snippets)
     try:
         raw, gen = call_openai(ctx) if provider == "openai" else call_anthropic(ctx)
-        clean, flags = validate(raw, candidates, fallback)
+        clean, flags = validate(raw, candidates, fallback, refs)
+        if refs and not clean.get("references"):
+            flags.append({"type": "no_citation", "detail": f"지침 {len(refs)}개를 전달했으나 인용되지 않음"})
+        if snippets:
+            gen = f"{gen}+rag{len(snippets)}"
     except httpx.HTTPStatusError as e:  # API 오류 (키 오류 401, 한도 429 등)
         body = e.response.text[:200] if e.response is not None else ""
         log.warning("[care] LLM %s 실패: %s %s", provider, e.response.status_code if e.response is not None else "", body)

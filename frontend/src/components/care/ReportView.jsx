@@ -99,6 +99,41 @@ function CompareRow({ label, value, avg, min = 0, max = 100, unit = '' }) {
   )
 }
 
+/* 근거 표기 [G1] 을 작은 칩으로 바꿔 그린다 (담당자용 리포트에서만 들어온다) */
+function Cited({ text }) {
+  const parts = String(text || '').split(/(\[G\d+\])/g)
+  if (parts.length === 1) return <>{text}</>
+  return (
+    <>
+      {parts.map((p, i) =>
+        /^\[G\d+\]$/.test(p)
+          ? <sup key={i} className="ml-0.5 align-super text-[10px] font-bold text-navy-500">{p.slice(1, -1)}</sup>
+          : <span key={i}>{p}</span>)}
+    </>
+  )
+}
+
+/* 인용된 지침 출처 목록 */
+function RefList({ refs }) {
+  if (!refs?.length) return null
+  return (
+    <div className="pb-avoid mt-6 rounded-2xl bg-navy-50/50 px-5 py-4">
+      <p className="text-[11px] font-bold text-navy-900 mb-2">근거 문헌</p>
+      <ol className="space-y-1">
+        {refs.map((x) => (
+          <li key={x.tag} className="flex gap-2 text-[11px] leading-5 text-muted">
+            <span className="font-bold text-navy-500 shrink-0">{x.tag.replace('G', '')}</span>
+            <span>
+              {x.citation || x.title}
+              {x.locator && <span className="text-slate-400"> — {x.locator}</span>}
+            </span>
+          </li>
+        ))}
+      </ol>
+    </div>
+  )
+}
+
 /* 세로 막대 (px 높이 고정) */
 function RateBars({ items, height = 132 }) {
   const list = items || []
@@ -277,7 +312,7 @@ function NutritionBlock({ n, staff }) {
           )}
           <p className="pb-keep-next text-xs font-bold text-navy-900 mb-1">권장 섭취 기준 대비</p>
           <p className="text-[11px] text-muted mb-3">
-            2020 한국인 영양소 섭취기준(65세 이상) 대비 하루 평균 섭취량입니다. 나트륨은 적을수록 좋습니다.
+            {n.target_basis || '2025 한국인 영양소 섭취기준'} 대비 하루 평균 섭취량입니다. 나트륨은 적을수록 좋습니다.
           </p>
           <div className="space-y-2.5">
             {n.targets.map((t) => (
@@ -627,8 +662,8 @@ export default function ReportView({ r }) {
                   <span className="flex items-center justify-center w-6 h-6 rounded-lg bg-navy-600 text-white text-xs font-bold tabular-nums">{i + 1}</span>
                   <span className="text-xs font-bold text-navy-600">{a.category}</span>
                 </div>
-                <p className="mt-2.5 text-[15px] leading-7 text-navy-900">{a.action}</p>
-                {a.why && <p className="mt-2 text-xs leading-5 text-muted"><b className="text-navy-500">WHY</b> {a.why}</p>}
+                <p className="mt-2.5 text-[15px] leading-7 text-navy-900"><Cited text={a.action} /></p>
+                {a.why && <p className="mt-2 text-xs leading-5 text-muted"><b className="text-navy-500">WHY</b> <Cited text={a.why} /></p>}
               </li>
             ))}
           </ol>
@@ -640,7 +675,7 @@ export default function ReportView({ r }) {
               <p className="text-xs font-bold text-navy-900 mb-2">식사는 이렇게 준비합니다</p>
               <ul className="space-y-1.5">
                 {sol.meal_guidance.map((x, i) => (
-                  <li key={i} className="flex gap-2 text-sm leading-6 text-slate-700"><span className="text-navy-500">•</span><span>{x}</span></li>
+                  <li key={i} className="flex gap-2 text-sm leading-6 text-slate-700"><span className="text-navy-500">•</span><span><Cited text={x} /></span></li>
                 ))}
               </ul>
             </div>
@@ -650,12 +685,13 @@ export default function ReportView({ r }) {
               <p className="text-xs font-bold text-navy-900 mb-2">이렇게 지켜보고 있습니다</p>
               <ul className="space-y-1.5">
                 {sol.monitoring.map((x, i) => (
-                  <li key={i} className="flex gap-2 text-sm leading-6 text-slate-700"><span className="text-navy-500">•</span><span>{x}</span></li>
+                  <li key={i} className="flex gap-2 text-sm leading-6 text-slate-700"><span className="text-navy-500">•</span><span><Cited text={x} /></span></li>
                 ))}
               </ul>
             </div>
           )}
         </div>
+        <RefList refs={sol.references} />
         {!sol.actions?.length && !sol.guardian_message && <p className="text-sm text-muted">아직 만들어진 돌봄 계획이 없습니다.</p>}
       </Section>
 

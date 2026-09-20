@@ -189,18 +189,47 @@ def _sum_all(dicts):
     return out
 
 
-def targets(gender=None):
+def age_band(age=None) -> str:
+    """나이 → 섭취기준 연령 구간 id. 모르면 65~74세로 본다."""
+    t = _targets()
+    bands = t.get("bands") or []
+    if not bands:
+        return ""
+    try:
+        a = float(age)
+    except (TypeError, ValueError):
+        return bands[0]["id"]
+    for b in bands:
+        if b["min_age"] <= a <= b["max_age"]:
+            return b["id"]
+    return bands[-1]["id"]
+
+
+def band_label(age=None) -> str:
+    t = _targets()
+    bid = age_band(age)
+    for b in (t.get("bands") or []):
+        if b["id"] == bid:
+            return b.get("label") or bid
+    return ""
+
+
+def targets(gender=None, age=None):
+    """성별·연령 구간에 맞는 섭취기준. (기준값 dict, kind dict)"""
     t = _targets()
     base = t["female"] if str(gender or "").startswith("여") else t["male"]
+    bid = age_band(age)
+    if bid and isinstance(base.get(bid), dict):        # 연령 구간이 있는 형식
+        base = base[bid]
     return base, t["kind"]
 
 
-def compare_targets(avg_day, gender=None):
+def compare_targets(avg_day, gender=None, age=None):
     """1일 평균 섭취량을 권장섭취량과 비교. [{key,label,unit,value,target,pct,kind,band}]"""
     if not avg_day:
         return []
     fld = fields()
-    base, kind = targets(gender)
+    base, kind = targets(gender, age)
     out = []
     for k, tgt in base.items():
         v = avg_day.get(k)

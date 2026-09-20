@@ -201,7 +201,8 @@ export default function ResidentCarePage() {
     const s = r.data.solutions?.[0]
     setDraft(s ? { id: s.id, summary: s.content.summary || '', staff_actions: s.content.staff_actions || [],
       meal_guidance: s.content.meal_guidance || [], monitoring: s.content.monitoring || [],
-      cautions: s.content.cautions || [], guardian_message: s.guardian_message } : null)
+      cautions: s.content.cautions || [], references: s.content.references || [],
+      guardian_message: s.guardian_message } : null)
   }).catch((e) => setErr(errMsg(e)))
   useEffect(() => { load() }, [elderlyId])
 
@@ -235,7 +236,8 @@ export default function ResidentCarePage() {
     (r) => `솔루션 초안을 만들었습니다 (${r.data.generator}). 검토 후 승인하세요.`)
   const save = () => act('save', () => api.put(`/care/solutions/${draft.id}`, {
     content: { summary: draft.summary, staff_actions: draft.staff_actions, meal_guidance: draft.meal_guidance.filter(Boolean),
-      monitoring: draft.monitoring.filter(Boolean), cautions: draft.cautions.filter(Boolean) },
+      monitoring: draft.monitoring.filter(Boolean), cautions: draft.cautions.filter(Boolean),
+      references: draft.references || [] },
     guardian_message: draft.guardian_message,
   }), (r) => (r.data.warnings?.length ? `저장했습니다. 확인 필요: ${r.data.warnings.join(', ')}` : '저장했습니다. 수정 후에는 다시 승인해야 합니다.'))
   const approve = () => act('approve', () => api.post(`/care/solutions/${draft.id}/approve`), () => '승인했습니다. 보호자에게 보낼 수 있습니다.')
@@ -443,6 +445,24 @@ export default function ResidentCarePage() {
                     onChange={(e) => setDraft({ ...draft, guardian_message: e.target.value })} />
                   <p className="mt-1 text-xs text-gray-400">점수·척도명·약 이름은 쓰지 마세요. 보호자 리포트 화면에 그대로 보입니다.</p>
                 </div>
+                {draft.references?.length > 0 && (
+                  <div className="rounded-xl bg-navy-50/60 px-4 py-3">
+                    <p className="text-xs font-bold text-navy-900 mb-1.5">근거 문헌</p>
+                    <ol className="space-y-1">
+                      {draft.references.map((x) => (
+                        <li key={x.tag} className="flex gap-2 text-xs leading-5 text-gray-600">
+                          <span className="font-bold text-navy-500 shrink-0">{String(x.tag).replace('G', '')}</span>
+                          <span>
+                            {x.citation || x.title}
+                            {x.locator && <span className="text-gray-400"> — {x.locator}</span>}
+                            {x.url && <a href={x.url} target="_blank" rel="noreferrer" className="ml-1.5 text-navy-500 underline">원문</a>}
+                          </span>
+                        </li>
+                      ))}
+                    </ol>
+                    <p className="mt-2 text-[11px] text-gray-400">조치·지침 문장 끝의 위첨자 번호가 이 목록을 가리킵니다.</p>
+                  </div>
+                )}
                 {editable && (
                   <div className="flex flex-wrap gap-2 pt-1">
                     <button onClick={save} disabled={!!busy} className="btn-secondary text-sm">{busy === 'save' ? '저장 중…' : '수정 저장'}</button>

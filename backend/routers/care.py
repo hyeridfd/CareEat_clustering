@@ -9,7 +9,7 @@ import numpy as np
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from care import engine, priority as prio, solution as sol, notify, nutrition as nutri
+from care import engine, priority as prio, solution as sol, notify, nutrition as nutri, retrieval as rag
 from care.report import build_report
 from care.data import fetch_all, fetch_surveys
 from dependencies import create_token, get_supabase, require_staff, get_kst_now
@@ -63,6 +63,12 @@ def kakao_template(user: dict = Depends(require_staff)):
     """솔라피/카카오 템플릿 등록 화면에 입력할 내용 (현재 REPORT_BASE_URL 기준)"""
     return {**notify.template_for_registration(), "mode": notify._env("KAKAO_MODE", "dry_run"),
             "provider": notify._env("KAKAO_PROVIDER", "solapi")}
+
+
+@router.get("/knowledge-status")
+def knowledge_status(user: dict = Depends(require_staff)):
+    """근거 문헌(RAG) 적재 현황 — 문헌별 문단 수·임베딩 수"""
+    return rag.status()
 
 
 @router.get("/llm-status")
