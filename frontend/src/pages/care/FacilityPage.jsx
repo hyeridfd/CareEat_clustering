@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import api from '../../lib/api'
 import CareLayout from '../../components/care/CareLayout'
 import { errMsg } from '../../components/care/CareUI'
@@ -56,6 +56,33 @@ function PriorityCard({ x }) {
         </div>
       </div>
     </li>
+  )
+}
+
+const TABS = [
+  { key: 'scan', label: '시설 진단', desc: '지금 우리 시설은 어떤가' },
+  { key: 'priority', label: '관리 우선순위', desc: '무엇부터 바꿔야 하는가' },
+]
+
+function Tabs({ tab, onChange, counts }) {
+  return (
+    <div className="surface p-1.5 flex gap-1.5">
+      {TABS.map((t) => {
+        const on = tab === t.key
+        return (
+          <button key={t.key} onClick={() => onChange(t.key)}
+            className={`flex-1 rounded-xl px-4 py-2.5 text-left transition ${on ? 'bg-navy-900 text-white' : 'hover:bg-navy-50'}`}>
+            <span className="flex items-center gap-2">
+              <span className={`text-sm font-bold ${on ? 'text-white' : 'text-navy-900'}`}>{t.label}</span>
+              {counts?.[t.key] != null && (
+                <span className={`badge ${on ? 'bg-white/20 text-white' : 'bg-navy-50 text-navy-700'}`}>{counts[t.key]}</span>
+              )}
+            </span>
+            <span className={`block mt-0.5 text-[11px] ${on ? 'text-navy-100/80' : 'text-muted'}`}>{t.desc}</span>
+          </button>
+        )
+      })}
+    </div>
   )
 }
 
@@ -126,6 +153,8 @@ export default function FacilityPage() {
   const [d, setD] = useState(null)
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
+  const [tab, setTab] = useState('scan')
+  const [area, setArea] = useState('all')
 
   const load = (refresh = false) => {
     setBusy(true)
@@ -139,6 +168,12 @@ export default function FacilityPage() {
   const risk = (k) => d?.risks?.find((x) => x.key === k)?.pct
   const nutDenom = d?.nutrients?.length ? Math.max(...d.nutrients.map((x) => x.denom || 0)) : null
   const g = d?.data_gaps
+  const areas = useMemo(() => {
+    const m = new Map()
+    for (const x of d?.priorities || []) m.set(x.area, x.area_label)
+    return [...m].map(([key, label]) => ({ key, label }))
+  }, [d])
+  const shownPriorities = (d?.priorities || []).filter((x) => area === 'all' || x.area === area)
 
   return (
     <CareLayout
@@ -151,6 +186,41 @@ export default function FacilityPage() {
 
       {d && (
         <div className="space-y-5">
+          <Tabs tab={tab} onChange={setTab} counts={{ priority: d.priorities?.length || 0 }} />
+
+          {tab === 'priority' && (
+            <>
+              <Section title="관리 우선순위"
+                sub="규모(해당 어르신 비율)와 심각도를 곱해 매긴 순서입니다. 위에서부터 손대는 것이 효율적입니다."
+                right={areas.length > 1 && (
+                  <div className="flex flex-wrap gap-1">
+                    <button onClick={() => setArea('all')}
+                      className={`badge ${area === 'all' ? 'bg-navy-900 text-white' : 'bg-navy-50 text-navy-700'}`}>전체 {d.priorities.length}</button>
+                    {areas.map((a) => (
+                      <button key={a.key} onClick={() => setArea(a.key)}
+                        className={`badge ${area === a.key ? 'bg-navy-900 text-white' : 'bg-navy-50 text-navy-700'}`}>
+                        {a.label} {d.priorities.filter((x) => x.area === a.key).length}
+                      </button>
+                    ))}
+                  </div>
+                )}>
+                {shownPriorities.length ? (
+                  <ol className="space-y-3">{shownPriorities.map((x) => <PriorityCard key={x.id} x={x} />)}</ol>
+                ) : (
+                  <p className="text-sm text-muted py-2">
+                    {d.priorities?.length ? '이 영역에는 해당 항목이 없습니다.' : '기준을 넘는 문제가 탐지되지 않았습니다.'}
+                  </p>
+                )}
+              </Section>
+              <p className="text-[11px] text-muted px-1">
+                점수는 규모(해당 어르신 비율) × 심각도(시급 3 / 주의 2 / 관찰 1) ÷ 3 입니다.
+                다음 단계(Action)에서는 각 항목에 공식 지침 근거와 식품·메뉴 DB를 연결해 바꿀 메뉴까지 제시합니다.
+              </p>
+            </>
+          )}
+
+          {tab === 'scan' && (
+          <>
           <Section title="한눈에 보기"
             sub={`어르신 ${d.n_residents}명 중 ${d.n_assessed}명 평가 완료${d.assessed_on ? ` · 최근 평가 ${d.assessed_on}` : ''}`}>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -165,19 +235,6 @@ export default function FacilityPage() {
                   <span key={t.name} className="badge bg-navy-50 text-navy-700">{t.name} {t.n}명 ({t.pct}%)</span>
                 ))}
               </div>
-            )}
-          </Section>
-
-          <Section title="관리 우선순위"
-            sub="규모(해당 어르신 비율)와 심각도를 곱해 매긴 순서입니다. 위에서부터 손대는 것이 효율적입니다."
-            right={d.priorities?.length ? <span className="text-xs text-muted">{d.priorities.length}건</span> : null}>
-            {d.priorities?.length ? (
-              <ol className="space-y-3">{d.priorities.slice(0, 8).map((x) => <PriorityCard key={x.id} x={x} />)}</ol>
-            ) : (
-              <p className="text-sm text-muted py-2">기준을 넘는 문제가 탐지되지 않았습니다.</p>
-            )}
-            {d.priorities?.length > 8 && (
-              <p className="mt-3 text-xs text-muted">아래 {d.priorities.length - 8}건은 기준을 넘었지만 규모가 작아 개별 대응으로 충분합니다.</p>
             )}
           </Section>
 
@@ -266,9 +323,10 @@ export default function FacilityPage() {
           </Section>
 
           <p className="text-[11px] text-muted px-1">
-Scan(시설 프로파일)과 Insight(관리 우선순위) 단계입니다. 다음 단계(Action)에서는 각 우선순위에
-            공식 지침 근거와 식품·메뉴 DB를 연결해 바꿀 메뉴까지 구체적으로 제시합니다.
+            여기 지표가 '관리 우선순위' 탭의 점수 근거가 됩니다.
           </p>
+          </>
+          )}
         </div>
       )}
     </CareLayout>
