@@ -121,11 +121,11 @@ function RefList({ refs }) {
       <p className="text-[11px] font-bold text-navy-900 mb-2">근거 문헌</p>
       <ol className="space-y-1">
         {refs.map((x) => (
-          <li key={x.tag} className="flex gap-2 text-[11px] leading-5 text-muted">
-            <span className="font-bold text-navy-500 shrink-0">{x.tag.replace('G', '')}</span>
-            <span>
-              {x.citation || x.title}
-              {x.locator && <span className="text-slate-400"> — {x.locator}</span>}
+          <li key={x.tag} className="flex gap-2 text-[11px] leading-5">
+            <span className="font-bold text-navy-500 shrink-0 tabular-nums">{x.tag.replace('G', '')}</span>
+            <span className="min-w-0">
+              <b className="font-semibold text-navy-900">{x.locator || x.title}</b>
+              <span className="ml-1.5 text-slate-400">{x.short || x.citation}</span>
             </span>
           </li>
         ))}

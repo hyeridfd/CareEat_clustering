@@ -450,11 +450,11 @@ export default function ResidentCarePage() {
                     <p className="text-xs font-bold text-navy-900 mb-1.5">근거 문헌</p>
                     <ol className="space-y-1">
                       {draft.references.map((x) => (
-                        <li key={x.tag} className="flex gap-2 text-xs leading-5 text-gray-600">
-                          <span className="font-bold text-navy-500 shrink-0">{String(x.tag).replace('G', '')}</span>
-                          <span>
-                            {x.citation || x.title}
-                            {x.locator && <span className="text-gray-400"> — {x.locator}</span>}
+                        <li key={x.tag} className="flex gap-2 text-xs leading-5">
+                          <span className="font-bold text-navy-500 shrink-0 tabular-nums">{String(x.tag).replace('G', '')}</span>
+                          <span className="min-w-0">
+                            <b className="font-semibold text-navy-900">{x.locator || x.title}</b>
+                            <span className="ml-1.5 text-gray-400">{x.short || x.citation}</span>
                             {x.url && <a href={x.url} target="_blank" rel="noreferrer" className="ml-1.5 text-navy-500 underline">원문</a>}
                           </span>
                         </li>

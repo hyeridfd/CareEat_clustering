@@ -4,7 +4,8 @@
     "python scripts/ingest_guidelines.py 를 실행하면 문단으로 쪼개 임베딩해 Supabase 에 올린다.",
     "citation 은 리포트 각주에 그대로 찍히는 문구다.",
     "license: 시중 서적 전문을 그대로 넣지 말 것. 공공누리·오픈액세스 자료이거나,",
-    "        유료 자료는 '권고 요지를 자체 문장으로 재작성(내부요약)' 한 문서만 넣는다."
+    "        유료 자료는 '권고 요지를 자체 문장으로 재작성(내부요약)' 한 문서만 넣는다.",
+    "short: 리포트 근거 목록에 찍히는 짧은 이름. 없으면 citation 이 쓰인다."
   ],
   "sources": [
     {
@@ -16,7 +17,8 @@
       "license": "공공누리",
       "url": "https://www.kns.or.kr/fileroom/fileroom_view.asp?idx=167&BoardID=Kdr",
       "citation": "2025 한국인 영양소 섭취기준 (보건복지부·한국영양학회, 2025)",
-      "note": "nutrition_targets.json 의 근거. 65~74세 / 75세 이상 구간 분리. 정오표 적용본 요약표 사용."
+      "note": "nutrition_targets.json 의 근거. 65~74세 / 75세 이상 구간 분리. 정오표 적용본 요약표 사용.",
+      "short": "2025 영양소 섭취기준"
     },
     {
       "id": "ESPEN_GERIATRIC",
@@ -27,7 +29,8 @@
       "license": "오픈액세스",
       "url": "https://www.espen.org/files/ESPEN-Guidelines/ESPEN_practical_guideline_Clinical_nutrition_and_hydration_in_geriatrics.pdf",
       "citation": "ESPEN practical guideline: Clinical nutrition and hydration in geriatrics (2022)",
-      "note": "저영양·저체중·식사 돕기·경구영양보충. 권고 번호(R1, R26 …)를 section 으로 쓴다."
+      "note": "저영양·저체중·식사 돕기·경구영양보충. 권고 번호(R1, R26 …)를 section 으로 쓴다.",
+      "short": "ESPEN 노인영양 2022"
     },
     {
       "id": "ESPEN_DEMENTIA",
@@ -38,7 +41,8 @@
       "license": "오픈액세스",
       "url": "https://www.espen.org/files/ESPEN-Guidelines/ESPEN-guideline-on-nutrition-and-hydration-in-dementia-update-2024.pdf",
       "citation": "ESPEN guideline on nutrition and hydration in dementia, Update 2024",
-      "note": "치매 어르신 식사 거부·식사 환경·수분. dx_dementia / K-MMSE-2 저하와 연결."
+      "note": "치매 어르신 식사 거부·식사 환경·수분. dx_dementia / K-MMSE-2 저하와 연결.",
+      "short": "ESPEN 치매영양 2024"
     },
     {
       "id": "LTC_FACILITY_MANUAL",
@@ -49,7 +53,8 @@
       "license": "공공누리",
       "url": "https://www.nhis.or.kr",
       "citation": "장기요양기관 시설급여 제공 매뉴얼 (국민건강보험공단)",
-      "note": "국내 요양시설 급식·영양관리 운영 근거. 잔반 관련 조치의 현장 근거."
+      "note": "국내 요양시설 급식·영양관리 운영 근거. 잔반 관련 조치의 현장 근거.",
+      "short": "건보공단 시설급여 매뉴얼"
     },
     {
       "id": "ELDER_DIET_GUIDE",
@@ -60,7 +65,8 @@
       "license": "공공누리",
       "url": "https://www.mohw.go.kr",
       "citation": "어르신을 위한 식생활 지침 (보건복지부)",
-      "note": "보호자 안내 문구의 톤과 근거."
+      "note": "보호자 안내 문구의 톤과 근거.",
+      "short": "복지부 어르신 식생활 지침"
     },
     {
       "id": "IDDSI",
@@ -71,7 +77,8 @@
       "license": "비영리 이용 허용(출처 표기 조건)",
       "url": "https://www.iddsi.org/resources/framework-documents",
       "citation": "IDDSI Framework (IDDSI)",
-      "note": "식사 형태 0–7단계·점도. texture_level 과 연결. 한국어판 있음."
+      "note": "식사 형태 0–7단계·점도. texture_level 과 연결. 한국어판 있음.",
+      "short": "IDDSI 프레임워크"
     }
   ]
 }

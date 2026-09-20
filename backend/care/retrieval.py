@@ -171,7 +171,7 @@ def _institutional(row: dict) -> bool:
 def _sources_by_id(sb, ids) -> dict:
     if not ids:
         return {}
-    res = sb.table("care_sources").select("id,title,org,year,citation,url").in_("id", list(ids)).execute()
+    res = sb.table("care_sources").select("id,title,short,org,year,citation,url").in_("id", list(ids)).execute()
     return {r["id"]: r for r in (res.data or [])}
 
 
@@ -236,6 +236,7 @@ def guideline_context(features: dict, candidates: list, ctx_rules: dict):
         text = re.sub(r"\s+", " ", row["text"]).strip()[:SNIPPET_CHARS]
         snippets.append({"id": tag, "출처": f"{label}{(' — ' + loc) if loc else ''}", "내용": text})
         refs.append({"tag": tag, "source_id": row["source_id"], "title": src.get("title") or row["source_id"],
+                     "short": src.get("short") or src.get("title") or row["source_id"],
                      "org": src.get("org"), "year": src.get("year"), "citation": label,
                      "locator": loc, "url": src.get("url"), "similarity": round(float(row["similarity"]), 3)})
     return snippets, refs

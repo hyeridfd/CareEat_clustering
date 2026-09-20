@@ -151,6 +151,8 @@ def main():
     ap.add_argument("--only", nargs="*", help="적재할 문헌 id")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--replace", action="store_true", help="해당 문헌의 기존 청크를 지우고 다시 넣는다")
+    ap.add_argument("--sources-only", action="store_true",
+                    help="문헌 서지사항(sources.json)만 갱신한다. 문단 재적재·임베딩 없음")
     args = ap.parse_args()
 
     meta = json.loads((KNOW / "sources.json").read_text(encoding="utf-8"))["sources"]
@@ -165,6 +167,13 @@ def main():
         if not url or not key:
             raise SystemExit("SUPABASE_URL / SUPABASE_KEY 가 없습니다 (backend/.env 확인).")
         sb = create_client(url, key)
+
+    if args.sources_only:
+        for m in meta:
+            sb.table("care_sources").upsert({k: v for k, v in m.items()}).execute()
+            print(f"  · {m['id']}: 서지사항 갱신 ({m.get('short') or m['title']})")
+        print("\n완료 — 문단은 건드리지 않았습니다.")
+        return
 
     total = 0
     for m in meta:
