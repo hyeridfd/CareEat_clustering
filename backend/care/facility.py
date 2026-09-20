@@ -19,6 +19,7 @@ Care-Eat Scan — 시설 영양 프로파일
 """
 from __future__ import annotations
 
+import copy
 import time
 from collections import Counter, defaultdict
 
@@ -246,7 +247,37 @@ def build_profile(sb, home: str, use_cache: bool = True) -> dict:
                          eq={"nursing_home_id": home}, order="created_at", desc=True):
         latest.setdefault(row["elderly_id"], row)
 
-    featlist = [r["features"] for r in latest.values() if isinstance(r.get("features"), dict)]
+    # 예전 평가에는 섭취 영양소가 저장돼 있지 않다. 개인 리포트와 같은 방식으로
+    # 식사 기록에서 즉석 계산해 채운 뒤 집계한다 (저장은 재평가 때 이뤄진다).
+    featlist, healed = [], 0
+    gaps = {"no_assessment": [], "no_meal_log": [], "nutrition_failed": [], "ok": 0}
+    for r in residents:
+        if r["id"] not in latest:
+            gaps["no_assessment"].append(r["id"])
+
+    for eid, row in latest.items():
+        f = row.get("features")
+        if not isinstance(f, dict):
+            gaps["no_assessment"].append(eid)
+            continue
+        has_nut = isinstance(f.get("nutrition"), dict) and bool(f["nutrition"].get("avg_day"))
+        if not has_nut:
+            if not f.get("meal_log"):
+                gaps["no_meal_log"].append(eid)
+            else:
+                try:
+                    _log, live = nutri.enrich_meal_log(copy.deepcopy(f["meal_log"]), f.get("meal_form"), eid)
+                except Exception:
+                    live = None
+                if live:
+                    f = {**f, "nutrition": live}
+                    healed += 1
+                    has_nut = True
+                else:
+                    gaps["nutrition_failed"].append(eid)
+        if has_nut:
+            gaps["ok"] += 1
+        featlist.append(f)
     types = Counter(r.get("type_name") or r.get("type_code") for r in latest.values())
 
     out = {
@@ -257,6 +288,17 @@ def build_profile(sb, home: str, use_cache: bool = True) -> dict:
         "assessed_on": max((r.get("created_at") or "")[:10] for r in latest.values()) if latest else None,
         "risks": _risk_block(featlist),
         "nutrients": _nutrient_block(featlist),
+        "nutrition_recomputed": healed,
+        # 영양소 집계에서 누가 왜 빠졌는지 — 분모가 기대보다 작을 때 원인을 바로 본다
+        "data_gaps": {
+            "nutrition_ok": gaps["ok"],
+            "no_assessment": len(gaps["no_assessment"]),
+            "no_meal_log": len(gaps["no_meal_log"]),
+            "nutrition_failed": len(gaps["nutrition_failed"]),
+            "no_assessment_ids": sorted(gaps["no_assessment"])[:20],
+            "no_meal_log_ids": sorted(gaps["no_meal_log"])[:20],
+            "nutrition_failed_ids": sorted(gaps["nutrition_failed"])[:20],
+        },
         "diseases": _disease_block(featlist),
         "texture": _texture_block(featlist),
         "intake": _intake_block(featlist),

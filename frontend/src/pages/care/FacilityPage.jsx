@@ -37,23 +37,28 @@ function Section({ title, sub, right, children }) {
 }
 
 /* 비율 막대 — 위험군·질환처럼 '몇 %가 해당되는가' */
-function RatioRows({ rows, cut, empty = '해당 항목이 없습니다.' }) {
+function RatioRows({ rows, cut, denom, empty = '해당 항목이 없습니다.' }) {
   const shown = rows.filter((r) => r.pct)
   if (!shown.length) return <p className="text-sm text-muted py-2">{empty}</p>
   return (
     <div className="space-y-2">
-      {shown.map((r) => (
-        <div key={r.key || r.name} className="flex items-center gap-3">
-          <span className="w-52 shrink-0 text-xs text-gray-700 truncate">{r.label || r.name}</span>
-          <div className="relative h-3 flex-1 rounded-full bg-navy-50 min-w-0">
-            <div className={`absolute inset-y-0 left-0 rounded-full ${TONE(r.pct, cut)}`}
-              style={{ width: `${Math.max(2, Math.min(100, r.pct))}%` }} />
+      {shown.map((r) => {
+        const den = r.denom ?? denom
+        const thin = den != null && den < 5      // 분모가 작으면 비율을 믿을 수 없다
+        return (
+          <div key={r.key || r.name} className="flex items-center gap-3">
+            <span className="w-52 shrink-0 text-xs text-gray-700 truncate">{r.label || r.name}</span>
+            <div className="relative h-3 flex-1 rounded-full bg-navy-50 min-w-0">
+              <div className={`absolute inset-y-0 left-0 rounded-full ${thin ? 'bg-slate-300' : TONE(r.pct, cut)}`}
+                style={{ width: `${Math.max(2, Math.min(100, r.pct))}%` }} />
+            </div>
+            <span className="w-28 shrink-0 text-right text-[11px] tabular-nums text-muted">
+              <b className={thin ? 'text-slate-400' : 'text-navy-900'}>{r.pct}%</b>
+              <span className="ml-1">{r.n}{den != null ? `/${den}` : ''}명</span>
+            </span>
           </div>
-          <span className="w-24 shrink-0 text-right text-[11px] tabular-nums text-muted">
-            <b className="text-navy-900">{r.pct}%</b> · {r.n}명
-          </span>
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
@@ -94,6 +99,8 @@ export default function FacilityPage() {
   useEffect(() => { load() }, [])
 
   const risk = (k) => d?.risks?.find((x) => x.key === k)?.pct
+  const nutDenom = d?.nutrients?.length ? Math.max(...d.nutrients.map((x) => x.denom || 0)) : null
+  const g = d?.data_gaps
 
   return (
     <CareLayout
@@ -109,7 +116,7 @@ export default function FacilityPage() {
           <Section title="한눈에 보기"
             sub={`어르신 ${d.n_residents}명 중 ${d.n_assessed}명 평가 완료${d.assessed_on ? ` · 최근 평가 ${d.assessed_on}` : ''}`}>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <Stat label="평가 완료율" value={d.coverage_pct} unit="%" sub={`${d.n_assessed} / ${d.n_residents}명`} />
+              <Stat label="평가 완료" value={d.n_assessed} unit="명" sub={`전체 ${d.n_residents}명 · ${d.coverage_pct ?? '–'}%`} />
               <Stat label="평균 식사 섭취율" value={d.intake?.total} unit="%" sub={`기록 ${d.intake?.n}명`} />
               <Stat label="영양불량 위험" value={risk('malnutrition_risk')} unit="%" tone="bg-amber-50" />
               <Stat label="식형태 조정 필요" value={risk('texture_need')} unit="%" tone="bg-sky-50" />
@@ -125,17 +132,43 @@ export default function FacilityPage() {
 
           <div className="grid lg:grid-cols-2 gap-5">
             <Section title="위험군 분포" sub="평가 완료자 기준. 비율이 높을수록 시설 차원의 대응이 필요합니다.">
-              <RatioRows rows={d.risks || []} cut={[15, 30]} />
+              <RatioRows rows={d.risks || []} cut={[15, 30]} denom={d.n_assessed} />
             </Section>
 
             <Section title="진단 질환" sub="입소자에게 기록된 질환입니다.">
               <RatioRows rows={(d.diseases || []).map((x) => ({ ...x, key: x.name }))} cut={[20, 40]}
-                empty="기록된 질환이 없습니다." />
+                denom={d.n_assessed} empty="기록된 질환이 없습니다." />
             </Section>
           </div>
 
           <Section title="영양소 기준 미달·초과"
-            sub="2025 한국인 영양소 섭취기준 대비 80% 미만인 어르신의 비율입니다. 나트륨만 130% 초과 기준입니다.">
+            sub="2025 한국인 영양소 섭취기준 대비 80% 미만인 어르신의 비율입니다. 나트륨만 130% 초과 기준입니다."
+            right={nutDenom != null && (
+              <span className={`text-xs ${nutDenom < 5 ? 'text-rose-600 font-semibold' : 'text-muted'}`}>
+                계산된 어르신 {nutDenom}명 / 평가 {d.n_assessed}명
+              </span>
+            )}>
+            {g && (g.no_assessment || g.no_meal_log || g.nutrition_failed) > 0 && (
+              <div className="mb-3 text-xs rounded-xl bg-amber-50 text-amber-900 px-3 py-2.5 space-y-1">
+                <p className="font-semibold">
+                  어르신 {d.n_residents}명 중 {g.nutrition_ok}명만 영양소가 계산됐습니다. 빠진 이유:
+                </p>
+                <ul className="space-y-0.5">
+                  {g.no_assessment > 0 && (
+                    <li>· <b>{g.no_assessment}명</b> — 평가를 아직 실행하지 않았습니다 (기록 화면에서 평가 실행)</li>
+                  )}
+                  {g.no_meal_log > 0 && (
+                    <li>· <b>{g.no_meal_log}명</b> — 평가에 식사(잔반) 기록이 없습니다. 조사는 했는데 평가가 그 전이라면 재평가가 필요합니다</li>
+                  )}
+                  {g.nutrition_failed > 0 && (
+                    <li>· <b>{g.nutrition_failed}명</b> — 식사 기록은 있으나 식단표와 연결되지 않아 영양소를 계산하지 못했습니다
+                      {g.nutrition_failed_ids?.length > 0 && <span className="text-amber-700"> ({g.nutrition_failed_ids.join(', ')})</span>}
+                    </li>
+                  )}
+                </ul>
+                {nutDenom != null && nutDenom < 5 && <p className="font-semibold">표본이 너무 적어 비율을 시설 특성으로 읽으면 안 됩니다.</p>}
+              </div>
+            )}
             <RatioRows rows={(d.nutrients || []).map((x) => ({
               ...x, label: `${x.label} ${x.direction}`,
             }))} cut={[30, 50]} empty="섭취 영양소가 계산된 어르신이 없습니다." />
