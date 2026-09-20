@@ -80,14 +80,17 @@ SYSTEM_PROMPT = """당신은 요양원 식사·영양 돌봄 코디네이터를 
 3-2. '참고 지침' 이 주어지면 그 발췌 안의 내용을 근거로 삼습니다. 지침에 근거한 문장은 끝에 [G1] 처럼 해당 발췌 번호를 붙입니다. 발췌에 없는 내용을 지침인 것처럼 쓰거나, 없는 번호를 지어내지 않습니다. 여러 발췌가 근거면 [G1][G3] 처럼 이어 붙입니다.
 3-3. 참고 지침이 후보 조치와 다른 방향을 가리키면, 조치 자체는 후보 목록을 따릅니다(후보는 이 어르신의 상태를 이미 반영해 고른 것입니다). 대신 지침이 경고하는 위험을 관찰 항목이나 주의사항에 한 줄로 적습니다. 두 방향을 한 문장에 섞어 모순되게 쓰지 않습니다.
 4. guardian_message 는 보호자가 읽는 3~5문장의 쉬운 존댓말입니다. 점수·척도명(MNA, GDS 등)·유형 코드와 [G1] 같은 인용 표기를 쓰지 않고, 불안을 주지 않되 사실대로 씁니다. 350자 이내.
-5. 반드시 아래 JSON 한 개만 출력합니다.
+5. '참고 지침' 이 주어졌다면 staff_actions 와 meal_guidance 를 통틀어 **최소 두 문장에는 [G#] 표기를 답니다.** 발췌 내용과 정말로 맞는 문장이 하나도 없을 때만 표기를 생략합니다.
+6. 반드시 아래 JSON 한 개만 출력합니다.
 
 {"summary": "담당자용 2~3문장 요약",
- "staff_actions": [{"rule_id": "R_...", "category": "...", "action": "구체적 조치", "why": "이 어르신에게 필요한 이유"}],
- "meal_guidance": ["식사 지침", "..."],
+ "staff_actions": [{"rule_id": "R_...", "category": "...", "action": "구체적 조치 [G1]", "why": "이 어르신에게 필요한 이유 [G2]"}],
+ "meal_guidance": ["식사 지침 [G1]", "..."],
  "monitoring": ["관찰·재평가 항목", "..."],
- "cautions": ["담당자가 주의할 점"],
- "guardian_message": "보호자 안내 문장"}"""
+ "cautions": ["담당자가 주의할 점 [G3]"],
+ "guardian_message": "보호자 안내 문장 (인용 표기 없이)"}
+
+위 예시의 [G1] [G2] [G3] 은 '참고 지침' 발췌의 id 입니다. 지침이 주어졌다면 실제 발췌 내용에 근거하는 문장 끝에 그 id 를 붙이세요. 지침이 주어지지 않았으면 아무 표기도 하지 않습니다."""
 
 
 
@@ -159,7 +162,12 @@ def build_context(features: dict, type_info: dict, priority: dict, candidates: l
                        "monitor": c["monitor"]} for c in candidates],
     }
     if guidelines:
-        ctx["참고 지침"] = guidelines
+        ctx["참고 지침"] = {
+            "사용법": "각 발췌의 id(G1, G2 …)를, 그 발췌에 근거한 문장 끝에 [G1] 형태로 붙이세요. "
+                    "staff_actions 와 meal_guidance 를 합쳐 최소 두 문장에 답니다. "
+                    "발췌에 없는 내용에는 붙이지 않고, 없는 id 를 만들지 않습니다.",
+            "발췌": guidelines,
+        }
     return ctx
 
 
@@ -273,9 +281,17 @@ def validate(out: dict, candidates: list, fallback: dict, refs: list | None = No
             flags.append({"type": "banned_expression", "detail": f"{rid}: {', '.join(hits)} → 규칙 원문으로 대체"})
             a = {"rule_id": rid, "category": care_rules.RULE_BY_ID[rid]["category"],
                  "action": care_rules.RULE_BY_ID[rid]["staff"], "why": ""}
+        action = _cite_fix(a.get("action", ""), valid_tags, used_tags, flags)
+        why = _cite_fix(a.get("why", ""), valid_tags, used_tags, flags)
+        # 인라인 표기 대신 evidence 배열로 준 경우 문장 끝에 붙여 준다
+        extra = [t for t in (a.get("evidence") or []) if isinstance(t, str)]
+        extra = [t if t.startswith("G") else f"G{t}" for t in extra]
+        extra = [t for t in extra if t in valid_tags and f"[{t}]" not in action]
+        if extra:
+            used_tags.update(extra)
+            action = (action + " " + "".join(f"[{t}]" for t in extra)).strip()
         acts.append({"rule_id": rid, "category": a.get("category") or care_rules.RULE_BY_ID[rid]["category"],
-                     "action": _cite_fix(a.get("action", ""), valid_tags, used_tags, flags),
-                     "why": _cite_fix(a.get("why", ""), valid_tags, used_tags, flags)})
+                     "action": action, "why": why})
     if not acts:
         flags.append({"type": "empty_actions", "detail": "유효한 조치가 없어 규칙 기반 조치 사용"})
         acts = fallback["staff_actions"]
