@@ -51,6 +51,7 @@ import json
 import logging
 import os
 import re
+import threading
 import time
 import unicodedata
 from functools import lru_cache
@@ -86,7 +87,9 @@ RETURN r.id AS id, r.title AS title, c.name AS category, properties(n) AS nutrit
 Q_DISEASE = """
 MATCH (d:Disease)-[rel:RECOMMENDED_INGREDIENT|FORBIDDEN_INGREDIENT]->(r:Recipe)
 RETURN d.name AS disease, type(rel) AS direction, r.title AS ingredient,
-       rel.standard_key AS nutrient, rel.paper_titles AS papers, rel.paper_dois AS dois
+       rel.standard_key AS nutrient,
+       coalesce(rel.paper_titles, [])[0..4] AS papers,
+       coalesce(rel.paper_dois, [])[0..4] AS dois
 """
 
 # 스냅샷·라이브 양쪽에서 쓰는 영양 항목
@@ -115,6 +118,7 @@ def _fetch_live() -> dict | None:
         log.warning("[care] neo4j 드라이버가 없습니다 — 스냅샷을 씁니다")
         return None
 
+    drv = None
     try:
         drv = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD),
                                    connection_timeout=NEO4J_TIMEOUT)
@@ -124,10 +128,15 @@ def _fetch_live() -> dict | None:
             recipes = run(Q_RECIPE)
             edges = run(Q_EDGE)
             disease = run(Q_DISEASE)
-        drv.close()
     except Exception as e:
         log.warning("[care] Neo4j 읽기 실패 — 스냅샷으로 대체합니다: %r", e)
         return None
+    finally:
+        if drv is not None:
+            try:
+                drv.close()          # 실패해도 연결 풀을 반드시 닫는다
+            except Exception:
+                pass
 
     if not foods_raw or not recipes:
         log.warning("[care] Neo4j 결과가 비었습니다 — 스냅샷으로 대체합니다")
@@ -289,6 +298,9 @@ MEAL_CATS = ["밥", "국", "주찬", "부찬", "김치", "간식"]
 # 스냅샷 로딩
 # ══════════════════════════════════════════════════════════════════
 _CACHE: dict = {"data": None, "at": 0.0, "source": None, "error": None}
+# 첫 적재(또는 TTL 만료) 때 요청이 여러 개 겹치면 각자 Aura 전체를 읽어 메모리가
+# 몇 배로 튄다(Render 512 MB 초과 → 재시작). 적재는 한 번에 하나만 한다.
+_LOAD_LOCK = threading.Lock()
 
 
 def _read_snapshot() -> dict:
@@ -348,20 +360,33 @@ def _load():
     if _CACHE["data"] is not None and now - _CACHE["at"] < CACHE_TTL:
         return _CACHE["data"]
 
-    raw, source, err = None, None, None
-    if neo4j_configured():
-        raw = _fetch_live()
-        if raw:
-            source = "neo4j"
-        else:
-            err = "Neo4j를 읽지 못해 스냅샷을 사용합니다"
-    if raw is None:
-        raw = _read_snapshot()
-        source = "snapshot"
+    # 이미 다른 요청이 적재 중이고 이전 캐시가 있으면, 기다리지 않고 이전 것을 쓴다
+    if _CACHE["data"] is not None and not _LOAD_LOCK.acquire(blocking=False):
+        return _CACHE["data"]
+    if _CACHE["data"] is None:
+        _LOAD_LOCK.acquire()          # 첫 적재는 기다린다 — 끝나면 아래에서 바로 반환
+    try:
+        now = time.time()
+        if _CACHE["data"] is not None and now - _CACHE["at"] < CACHE_TTL:
+            return _CACHE["data"]     # 기다리는 동안 다른 요청이 채웠다
 
-    data = _index(raw)
-    _CACHE.update({"data": data, "at": now, "source": source, "error": err})
-    return data
+        raw, source, err = None, None, None
+        if neo4j_configured():
+            raw = _fetch_live()
+            if raw:
+                source = "neo4j"
+            else:
+                err = "Neo4j를 읽지 못해 스냅샷을 사용합니다"
+        if raw is None:
+            raw = _read_snapshot()
+            source = "snapshot"
+
+        data = _index(raw)
+        del raw
+        _CACHE.update({"data": data, "at": time.time(), "source": source, "error": err})
+        return data
+    finally:
+        _LOAD_LOCK.release()
 
 
 def available() -> bool:
