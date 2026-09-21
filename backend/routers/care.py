@@ -125,10 +125,14 @@ def facility_action(top: int = 5, rag_on: bool = True, refresh: bool = False,
 
 
 @router.get("/facility/graph-status")
-def facility_graph_status(user: dict = Depends(require_staff)):
-    """식품·메뉴 DB 스냅샷 적재 현황"""
+def facility_graph_status(refresh: bool = False, user: dict = Depends(require_staff)):
+    """식품·메뉴 DB 적재 현황. refresh=true 면 Neo4j에서 다시 읽는다."""
     from care import graph
-    return {"available": graph.available(), **(graph.stats() if graph.available() else {})}
+    if not graph.available():
+        return {"available": False, "neo4j_configured": graph.neo4j_configured()}
+    if refresh:
+        graph.reload(force=True)
+    return {"available": True, **graph.stats()}
 
 
 @router.get("/knowledge-status")

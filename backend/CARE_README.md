@@ -41,6 +41,11 @@ python -m care.train fit --version v2-n200 --k 3 --activate
 - `models/` 폴더는 서버 배포에 포함되어야 합니다(Dockerfile은 `COPY . .` 로 포함).
 
 ### ④ 환경 변수 (`.env`)
+
+식품·메뉴 그래프(Neo4j Aura)를 쓰려면 아래 네 개가 필요합니다. 비워 두면 스냅샷으로 동작합니다.
+`NEO4J_URI` · `NEO4J_USER` · `NEO4J_PASSWORD` · `NEO4J_DATABASE`
+(Render 환경변수에도 같은 값을 넣어야 배포본이 라이브로 붙습니다.)
+
 ```
 LLM_PROVIDER=none            # openai | anthropic | none(규칙 기반)
 OPENAI_API_KEY= / OPENAI_MODEL=gpt-4o-mini
@@ -94,7 +99,12 @@ REPORT_BASE_URL=https://bluefood-survey.vercel.app   # 보호자 리포트 링�
 
 **식품·메뉴 DB 연결** (`care/graph.py`, `care/graph_data/*.json`, `scripts/export_graph.py`)
 - Neo4j 스키마는 **이름이 뒤집혀 있습니다**: `Food` = 요리(859), `Recipe` = 식재료(415), `Meal_Category` = 밥·국·주찬·부찬·김치·간식(6).
-- 전체 DB(578,462 노드)에서 Care-Eat가 쓰는 범위는 0.3%뿐이라 **라이브 접속 대신 스냅샷**을 씁니다. 갱신은 `python scripts/export_graph.py --cypher` 로 쿼리를 받아 실행한 뒤 `--raw <폴더>`.
+- **Neo4j Aura에서 직접 읽습니다.** 식품·메뉴 데이터가 주 단위로 갱신되기 때문입니다. 다만 개선안 하나에 집계 쿼리가 10번 넘게 돌고 Aura Free는 3일 미사용 시 일시정지되므로, **한 번 읽어 메모리에 얹어 두고 씁니다**(TTL 6시간, `GRAPH_TTL`로 조절).
+  - Aura가 안 되면 `care/graph_data/*.json` 스냅샷으로 자동 폴백합니다 — 앱은 계속 돕니다. 화면 배지에 `실시간 연결` / `스냅샷`으로 표시됩니다.
+  - 즉시 갱신: `GET /care/facility/graph-status?refresh=true`
+  - 연결 진단: `python scripts/check_graph.py` — 설정·적재·표본 계산·안전장치를 한 번에 확인합니다.
+  - 전체 DB(578,462 노드)에서 Care-Eat가 쓰는 범위는 0.3%(1,865 노드 / 15,311 관계)뿐이라 **Aura Free 한도(200k/400k)에 여유롭게 들어갑니다.** 원본에서 `Bioactivity`·`Compound`·`Species`·`Target`을 지우고 올린 서브그래프입니다.
+  - 스냅샷 파일 갱신은 `python scripts/export_graph.py --cypher`.
 - `Disease -RECOMMENDED_INGREDIENT-> Recipe` 관계는 **영양소를 매개로** 만들어져서, 예컨대 **'소금'이 고혈압 권장 재료로 들어와 있습니다**(마그네슘·칼슘을 함유하므로). 그래서 네 가지 안전장치를 강제합니다.
   1. **영양소가 1급 근거, 재료는 급원일 뿐** — `standard_key`가 `NUT:`이고 Nutrition 노드에 실제로 있는 영양소만 랭킹에 씁니다. 마그네슘은 Nutrition에 없어 검증 불가 → 소금이 걸러지는 지점이 바로 여기입니다. `GPT:`(LLM 추출 문구)·`CAT:`(식품군)은 참고용으로만 둡니다.
   2. **함량 기준 필터** — 100 kcal당 함량으로 줄 세우되 분모에 하한(30 kcal)을 둬 곤약·해조류가 밀도 랭킹을 독식하지 않게 합니다.

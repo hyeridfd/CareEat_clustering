@@ -388,6 +388,14 @@ export default function FacilityPage() {
                       <span className={`badge ${act.graph ? 'bg-navy-50 text-navy-700' : 'bg-slate-100 text-slate-500'}`}>
                         식품 DB {act.graph ? `요리 ${act.graph.foods}개` : '미연결'}
                       </span>
+                      {act.graph && (
+                        <span className={`badge ${act.graph.source === 'neo4j' ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-900'}`}
+                          title={act.graph.source === 'neo4j'
+                            ? `Neo4j에서 직접 읽음${act.graph.age_sec != null ? ` · ${Math.round(act.graph.age_sec / 60)}분 전 갱신` : ''}`
+                            : act.graph.note || '저장된 스냅샷으로 동작 중입니다'}>
+                          {act.graph.source === 'neo4j' ? '실시간 연결' : '스냅샷'}
+                        </span>
+                      )}
                       {act.diseases_applied?.length > 0 && (
                         <span className="badge bg-amber-50 text-amber-900">금기 검증 {act.diseases_applied.join(' · ')}</span>
                       )}
