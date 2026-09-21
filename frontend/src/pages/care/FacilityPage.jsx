@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import api from '../../lib/api'
 import CareLayout from '../../components/care/CareLayout'
 import { errMsg } from '../../components/care/CareUI'
+import { MenuExplorer, MenuDrawer } from '../../components/care/FoodGraph'
 
 /* Care-Eat Scan — 시설 영양 프로파일
    개인 평가를 시설 단위로 집계해 "우리 시설은 무엇이 문제인가"를 보여준다. */
@@ -63,6 +64,7 @@ const TABS = [
   { key: 'scan', label: '시설 진단', desc: '지금 우리 시설은 어떤가' },
   { key: 'priority', label: '관리 우선순위', desc: '무엇부터 바꿔야 하는가' },
   { key: 'action', label: '개선안', desc: '다음 주 식단을 어떻게 바꾸나' },
+  { key: 'food', label: '식품 DB', desc: '메뉴를 재료·영양으로 뜯어보기' },
 ]
 
 function Tabs({ tab, onChange, counts }) {
@@ -90,7 +92,7 @@ function Tabs({ tab, onChange, counts }) {
 /* ── Care-Eat Action ──────────────────────────────────────────────
    우선순위 하나에 ① 공식 지침 근거 ② 식품 DB 메뉴 후보 ③ 잔반 메뉴 대체안을 붙인다. */
 
-function MenuChip({ it, delta }) {
+function MenuChip({ it, delta, onOpen }) {
   const metric =
     it.amount != null ? `${it.amount}${it.unit || ''}`
       : it.sodium_mg != null ? `나트륨 ${it.sodium_mg}mg`
@@ -100,7 +102,10 @@ function MenuChip({ it, delta }) {
   if (it.amount_outlier) warn.push('레시피 분량 확인 필요')
   if (it.broth_missing) warn.push('국물 미등록 — 중량은 건더기뿐')
   return (
-    <li className="rounded-xl ring-1 ring-navy-100 bg-white px-3.5 py-2.5">
+    <li className={`rounded-xl ring-1 ring-navy-100 bg-white px-3.5 py-2.5 ${onOpen ? 'cursor-pointer hover:ring-navy-300 hover:bg-navy-50/40' : ''}`}
+      onClick={onOpen ? () => onOpen(it.title) : undefined}
+      onKeyDown={onOpen ? (e) => { if (e.key === 'Enter') onOpen(it.title) } : undefined}
+      tabIndex={onOpen ? 0 : undefined} role={onOpen ? 'button' : undefined}>
       <div className="flex items-center gap-1.5">
         {it.meal_cat && <span className="badge bg-navy-50 text-navy-700">{it.meal_cat}</span>}
         <span className="text-sm font-bold text-navy-900 truncate">{it.title}</span>
@@ -140,8 +145,9 @@ function MenuChip({ it, delta }) {
   )
 }
 
-function MenuBlock({ m }) {
+function MenuBlock({ m, onOpen }) {
   if (!m) return null
+  const open = onOpen ? (title) => onOpen(title, m.kind === 'boost' ? m.nutrient : 'na') : undefined
   if (m.kind === 'replace') {
     return (
       <div className="mt-3 rounded-xl bg-navy-50/50 p-4">
@@ -164,7 +170,7 @@ function MenuBlock({ m }) {
               )}
               {s.note
                 ? <p className="mt-1 text-[11px] text-amber-700">{s.note}</p>
-                : <ul className="mt-1.5 grid sm:grid-cols-2 gap-1.5">{s.candidates.map((c) => <MenuChip key={c.id} it={c} delta={c.delta} />)}</ul>}
+                : <ul className="mt-1.5 grid sm:grid-cols-2 gap-1.5">{s.candidates.map((c) => <MenuChip key={c.id} it={c} delta={c.delta} onOpen={open} />)}</ul>}
             </li>
           ))}
         </ul>
@@ -176,13 +182,13 @@ function MenuBlock({ m }) {
       <p className="text-xs font-bold text-navy-900">{m.purpose}</p>
       {m.basis && <p className="mt-0.5 text-[11px] text-muted">{m.basis}</p>}
       <ul className="mt-2.5 grid sm:grid-cols-2 gap-1.5">
-        {m.items.map((it) => <MenuChip key={it.id} it={it} />)}
+        {m.items.map((it) => <MenuChip key={it.id} it={it} onOpen={open} />)}
       </ul>
     </div>
   )
 }
 
-function ActionCard({ x }) {
+function ActionCard({ x, onOpen }) {
   return (
     <li className="rounded-2xl ring-1 ring-navy-100 bg-white p-5">
       <div className="flex items-start gap-3">
@@ -216,7 +222,7 @@ function ActionCard({ x }) {
             </div>
           )}
 
-          <MenuBlock m={x.menus} />
+          <MenuBlock m={x.menus} onOpen={onOpen} />
         </div>
       </div>
     </li>
@@ -295,6 +301,7 @@ export default function FacilityPage() {
   const [act, setAct] = useState(null)
   const [actBusy, setActBusy] = useState(false)
   const [actErr, setActErr] = useState('')
+  const [drawer, setDrawer] = useState(null)   // { name, nutrient }
 
   // 개선안은 지침 검색(RAG)이 들어가 느리다 → 탭을 열 때 한 번만 만든다
   const loadAction = (force = false) => {
@@ -400,8 +407,9 @@ export default function FacilityPage() {
                         <span className="badge bg-amber-50 text-amber-900">금기 검증 {act.diseases_applied.join(' · ')}</span>
                       )}
                     </div>
+                    <p className="mb-3 text-[11px] text-muted">후보 메뉴를 누르면 재료 구성과 추천 근거(질환 → 영양소 → 재료)를 그래프로 볼 수 있습니다.</p>
                     {act.plans?.length
-                      ? <ol className="space-y-3">{act.plans.map((x) => <ActionCard key={x.id} x={x} />)}</ol>
+                      ? <ol className="space-y-3">{act.plans.map((x) => <ActionCard key={x.id} x={x} onOpen={(name, nutrient) => setDrawer({ name, nutrient })} />)}</ol>
                       : <p className="text-sm text-muted py-2">개선안을 만들 우선순위가 없습니다.</p>}
                   </>
                 )}
@@ -538,8 +546,17 @@ export default function FacilityPage() {
           </p>
           </>
           )}
+
+          {tab === 'food' && (
+            <Section title="식품·메뉴 DB"
+              sub={`메뉴를 골라 재료별 분량과 영양 기여, 질환별 권장·금기 근거를 확인합니다.${act?.graph ? ` · 요리 ${act.graph.foods}개 · ${act.graph.source === 'neo4j' ? '실시간 연결' : '스냅샷'}` : ''}`}>
+              <MenuExplorer diseases={act?.diseases_applied || []} />
+            </Section>
+          )}
         </div>
       )}
+      <MenuDrawer open={!!drawer} name={drawer?.name} nutrient={drawer?.nutrient}
+        diseases={act?.diseases_applied || []} onClose={() => setDrawer(null)} />
     </CareLayout>
   )
 }

@@ -135,6 +135,40 @@ def facility_graph_status(refresh: bool = False, user: dict = Depends(require_st
     return {"available": True, **graph.stats()}
 
 
+def _disease_list(diseases: Optional[str]) -> list:
+    return [d.strip() for d in (diseases or "").split(",") if d.strip()]
+
+
+@router.get("/facility/graph/search")
+def facility_graph_search(q: str = "", meal_cat: Optional[str] = None, limit: int = 30,
+                          user: dict = Depends(require_staff)):
+    """식품 DB 메뉴 검색"""
+    from care import graph
+    return {"items": graph.search_menus(q, meal_cat=meal_cat or None, limit=min(limit, 100))}
+
+
+@router.get("/facility/graph/menu")
+def facility_graph_menu(name: str, nutrient: str = "na", diseases: Optional[str] = None,
+                        user: dict = Depends(require_staff)):
+    """메뉴 한 그릇 → 재료별 분량과 영양 기여"""
+    from care import graph
+    out = graph.menu_graph(name, nutrient=nutrient, diseases=_disease_list(diseases))
+    if not out:
+        raise HTTPException(404, f"식품 DB에 '{name}' 메뉴가 없습니다")
+    return out
+
+
+@router.get("/facility/graph/evidence")
+def facility_graph_evidence(name: str, nutrient: str = "protein", diseases: Optional[str] = None,
+                            user: dict = Depends(require_staff)):
+    """추천 근거 경로: 질환 → 영양소 → 재료 → 메뉴"""
+    from care import graph
+    out = graph.evidence_graph(name, nutrient=nutrient, diseases=_disease_list(diseases) or None)
+    if not out:
+        raise HTTPException(404, f"식품 DB에 '{name}' 메뉴가 없습니다")
+    return out
+
+
 @router.get("/knowledge-status")
 def knowledge_status(user: dict = Depends(require_staff)):
     """근거 문헌(RAG) 적재 현황 — 문헌별 문단 수·임베딩 수"""

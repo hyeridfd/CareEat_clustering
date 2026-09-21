@@ -746,3 +746,254 @@ def alternatives_for(menu: str, nutrient: str | None = None, limit: int = 6,
         "basis": "1인분 실측 함량" if nutrient else "1인분 나트륨",
         "candidates": cands,
     }
+
+
+# ══════════════════════════════════════════════════════════════════
+# 화면용 그래프 — 메뉴 뜯어보기 / 추천 근거 경로
+# ══════════════════════════════════════════════════════════════════
+NUT_LABEL = {
+    "energy_kcal": "에너지", "protein_g": "단백질", "fat_g": "지방", "carbo_g": "탄수화물",
+    "fiber_g": "식이섬유", "sugar_g": "당류", "sodium_mg": "나트륨", "potassium_mg": "칼륨",
+    "calcium_mg": "칼슘", "iron_mg": "철", "phosphorus_mg": "인",
+    "saturated_fat_g": "포화지방", "trans_fat_g": "트랜스지방", "cholesterol_mg": "콜레스테롤",
+    "vitD_ug": "비타민 D", "vitC_mg": "비타민 C", "thiamin_mg": "티아민",
+}
+
+
+FORB_MIN_SHARE = 0.10     # 메뉴의 그 영양소 중 10% 이상을 내고,
+FORB_MIN_DAILY = 0.05     # 그 양이 하루 기준치의 5% 이상인 재료만 금기로 표시한다
+FORB_DAILY = {**DAILY_REF, "sodium_mg": 2000, "sugar_g": 50, "fat_g": 50,
+              "saturated_fat_g": 15, "trans_fat_g": 2, "cholesterol_mg": 300, "carbo_g": 300}
+
+
+def _field(nutrient: str) -> str:
+    return CARE_NUT.get(nutrient, nutrient)
+
+
+def _nut_short(key: str) -> str:
+    """'NUT:칼륨(mg)' → '칼륨'"""
+    return re.sub(r"\(.*?\)", "", key.replace("NUT:", "")).strip()
+
+
+def search_menus(q: str = "", meal_cat: str | None = None, limit: int = 30) -> list[dict]:
+    """식품 DB 탭의 메뉴 검색."""
+    g = _load()
+    key = _norm(q)
+    rows = []
+    for fid, v in g["foods"].items():
+        if meal_cat and v["m"] != meal_cat:
+            continue
+        if key and key not in _norm(v["t"]):
+            continue
+        n = v.get("n") or {}
+        rows.append({"id": fid, "title": v["t"], "meal_cat": v["m"],
+                     "serving_g": v.get("g"),
+                     "energy_kcal": round(n.get("energy_kcal") or 0),
+                     "protein_g": round(n.get("protein_g") or 0, 1),
+                     "sodium_mg": round(n.get("sodium_mg") or 0),
+                     "sodium_underestimated": bool(v.get("na_missing"))})
+    rows.sort(key=lambda x: (0 if _norm(x["title"]) == key else 1, len(x["title"]), x["title"]))
+    return rows[:limit]
+
+
+def _verified_forbidden(g, disease: str, name: str) -> list[dict]:
+    """① 검증 가능한 NUT: 근거가 있는 금기 관계만."""
+    return [r for r in g["forbidden"].get(disease, {}).get(name, [])
+            if (r.get("n") or "").startswith("NUT:") and r["n"] not in UNVERIFIABLE]
+
+
+def _material_forbidden(g, disease: str, iv: dict, nw: float, menu_n: dict) -> list[dict]:
+    """금기 근거 중, 이 재료가 메뉴의 해당 영양소를 10% 이상 내는 것만.
+    (후춧가루 0.2 g의 칼륨까지 금기로 칠하면 진간장 같은 진짜 원인이 묻힌다.)"""
+    out = []
+    for r in _verified_forbidden(g, disease, iv["t"]):
+        fk = NUT_KEY.get(r["n"])
+        if not fk:
+            continue
+        tot = menu_n.get(fk) or 0
+        contrib = (iv["n"].get(fk) or 0) * nw / 100.0
+        ref = FORB_DAILY.get(fk)
+        if tot > 0 and contrib / tot >= FORB_MIN_SHARE and (not ref or contrib >= ref * FORB_MIN_DAILY):
+            out.append(r)
+    return out
+
+
+def menu_graph(menu: str, nutrient: str = "na", diseases: list[str] | None = None) -> dict | None:
+    """메뉴 한 그릇 → 재료별 분량과 선택 영양소 기여 (방사형 그래프·표 공용)."""
+    m = match_menu(menu, limit=1)
+    if not m:
+        return None
+    g = _load()
+    v = g["foods"][m[0]["id"]]
+    field = _field(nutrient)
+    n = v.get("n") or {}
+    total = n.get(field) or 0
+    ds = diseases or []
+
+    ings = []
+    for rid, w, nw in v.get("i") or []:
+        iv = g["ing"].get(rid)
+        if not iv:
+            continue
+        amt = (iv["n"].get(field) or 0) * nw / 100.0
+        ings.append({
+            "id": rid, "name": iv["t"], "category": iv["c"],
+            "g": w, "edible_g": nw,
+            "amount": round(amt, 2),
+            "share": round(amt / total * 100, 1) if total > 0 else 0,
+            "per_100g": iv["n"].get(field) or 0,
+            "seasoning": iv["seasoning"],
+            "broth": nw == 0 and w > 0,
+            "sodium_missing": (iv["t"] or "") in NA_MISSING,
+            "forbidden_for": [d for d in ds if _material_forbidden(g, d, iv, nw, n)],
+            "forbidden_why": sorted({NUT_LABEL.get(NUT_KEY.get(r["n"]), _nut_short(r["n"]))
+                                     for d in ds for r in _material_forbidden(g, d, iv, nw, n)}),
+        })
+    ings.sort(key=lambda x: (-x["amount"], -x["g"]))
+
+    return {
+        "menu": {"id": m[0]["id"], "title": v["t"], "meal_cat": v["m"],
+                 "serving_g": v.get("g"), "broth_g": v.get("broth_g")},
+        "nutrient": field, "label": NUT_LABEL.get(field, field), "unit": _unit(field),
+        "total": round(total, 2),
+        "nutrition": {k: round(n.get(k) or 0, 1) for k in
+                      ("energy_kcal", "protein_g", "fat_g", "carbo_g", "fiber_g",
+                       "sodium_mg", "potassium_mg", "calcium_mg", "iron_mg")},
+        "ingredients": ings,
+        "diseases": ds,
+        "sodium_underestimated": v.get("na_missing") or None,
+        "broth_missing": (v["m"] == "국" and not (v.get("broth_g") or 0)) or None,
+    }
+
+
+def evidence_graph(menu: str, nutrient: str = "protein",
+                   diseases: list[str] | None = None, top: int = 5) -> dict | None:
+    """추천 근거 경로: 질환 → 영양소 → 재료 → 메뉴.
+
+    · 목표 영양소를 실제로 많이 내는 재료 상위 N개와, 그 재료에 걸린
+      질환 권장 근거(NUT: 만)를 잇는다.
+    · 시설 질환의 금기 근거가 걸린 재료는 목표 영양소와 상관없이 함께 그린다.
+    · 검증할 수 없는 근거(마그네슘 등, GPT:/CAT:)는 그리지 않고 개수만 알린다.
+    """
+    m = match_menu(menu, limit=1)
+    if not m:
+        return None
+    g = _load()
+    fid = m[0]["id"]
+    v = g["foods"][fid]
+    field = _field(nutrient)
+    target_keys = {k for k, f in NUT_KEY.items() if f == field}
+    ds = diseases or sorted({r["d"] for r in g["ev"]})
+
+    nodes, edges = {}, {}
+    menu_id = "M:" + fid
+    nodes[menu_id] = {"id": menu_id, "type": "menu", "label": v["t"],
+                      "sub": f"1인분 {v.get('g')}g", "meal_cat": v["m"]}
+
+    def add_node(nid, **kw):
+        nodes.setdefault(nid, {"id": nid, **kw})
+
+    def add_edge(src, dst, kind, **kw):
+        key = (src, dst, kind)
+        e = edges.setdefault(key, {"source": src, "target": dst, "kind": kind,
+                                   "papers": set(), "ingredients": set(), **kw})
+        return e
+
+    # 재료별 목표 영양소 기여
+    parts = []
+    for rid, w, nw in v.get("i") or []:
+        iv = g["ing"].get(rid)
+        if not iv or nw <= 0:
+            continue
+        amt = (iv["n"].get(field) or 0) * nw / 100.0
+        parts.append((amt, rid, iv, w, nw))
+    parts.sort(key=lambda x: -x[0])
+    total = sum(p[0] for p in parts) or 0
+
+    tgt_nid = "N:" + field
+    add_node(tgt_nid, type="nutrient", label=NUT_LABEL.get(field, field),
+             sub=f"1인분 {round(total, 1)}{_unit(field)}", target=True)
+
+    excluded = 0
+    shown = set()
+    for amt, rid, iv, w, nw in parts:
+        if amt <= 0 or len(shown) >= top or iv["seasoning"] and field not in REVERSE:
+            continue
+        shown.add(rid)
+
+    # 금기 근거가 걸린 재료는 함께 보인다 (③ 금기가 권장을 이긴다).
+    # 단, 그 재료가 메뉴의 해당 영양소를 실제로 의미 있게 내는 경우만 —
+    # 후춧가루 0.2 g의 칼륨까지 그리면 그림이 근거가 아니라 잡음이 된다.
+    menu_n = v.get("n") or {}
+    forb_hits = {}
+    for amt, rid, iv, w, nw in parts:
+        for d in ds:
+            rows = _material_forbidden(g, d, iv, nw, menu_n)
+            if rows:
+                forb_hits.setdefault(rid, []).append((d, rows))
+                shown.add(rid)
+
+    for amt, rid, iv, w, nw in parts:
+        if rid not in shown:
+            continue
+        iid = "I:" + rid
+        add_node(iid, type="ingredient", label=iv["t"],
+                 sub=f"{w:g}g" + (f" (먹는 부분 {nw:g}g)" if nw != w else ""),
+                 seasoning=iv["seasoning"], sodium_missing=(iv["t"] or "") in NA_MISSING)
+        add_edge(iid, menu_id, "in", value=nw, label=f"{nw:g}g")
+        # ④ 조미료는 '급원'이 될 수 없다 — 간장이 고혈압 칼륨 권장 재료로 이어지는 것 방지
+        as_source = not (iv["seasoning"] and field not in REVERSE)
+        if amt > 0 and as_source:
+            e = add_edge(tgt_nid, iid, "contains",
+                         value=round(amt, 2),
+                         share=round(amt / total * 100, 1) if total else 0,
+                         label=f"{round(amt, 1)}{_unit(field)}")
+
+        # 권장 근거 — 목표 영양소로 이어진 것만, 조미료 제외
+        for d in (ds if as_source else []):
+            for r in g["recommended"].get(d, {}).get(iv["t"], []):
+                nk = r.get("n") or ""
+                if nk in target_keys:
+                    did = "D:" + d
+                    add_node(did, type="disease", label=d)
+                    e = add_edge(did, tgt_nid, "rec")
+                    e["papers"].update(r.get("p") or [])
+                    e["ingredients"].add(iv["t"])
+                elif nk in UNVERIFIABLE or not nk.startswith("NUT:"):
+                    excluded += 1
+
+        # 금기 근거
+        for d, rows in forb_hits.get(rid, []):
+            did = "D:" + d
+            add_node(did, type="disease", label=d)
+            for r in rows:
+                fk = NUT_KEY.get(r["n"])
+                if not fk:
+                    continue
+                nid = "N:" + fk
+                add_node(nid, type="nutrient", label=NUT_LABEL.get(fk, _nut_short(r["n"])),
+                         sub="", target=(fk == field))
+                e = add_edge(did, nid, "forb")
+                e["papers"].update(r.get("p") or [])
+                e["ingredients"].add(iv["t"])
+                if nid != tgt_nid or amt <= 0:
+                    add_edge(nid, iid, "contains",
+                             value=round((iv["n"].get(fk) or 0) * nw / 100.0, 2),
+                             label=f"{round((iv['n'].get(fk) or 0) * nw / 100.0, 1)}{_unit(fk)}")
+
+    out_edges = []
+    for e in edges.values():
+        pids = sorted(e.pop("papers"))
+        e["ingredients"] = sorted(e.pop("ingredients"))
+        e["n_papers"] = len(pids)
+        e["papers"] = [g["papers"][p] for p in pids[:3]]
+        out_edges.append(e)
+
+    return {
+        "menu": v["t"], "meal_cat": v["m"],
+        "nutrient": field, "label": NUT_LABEL.get(field, field), "unit": _unit(field),
+        "total": round(total, 2),
+        "diseases": ds,
+        "nodes": list(nodes.values()), "edges": out_edges,
+        "excluded_unverifiable": excluded,
+    }
