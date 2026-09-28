@@ -14,8 +14,9 @@ export default function LoginPage() {
   const navigate = useNavigate()
   const setAuth = useAuthStore((s) => s.setAuth)
 
-  const [selectedNH, setSelectedNH] = useState(NURSING_HOMES[0])
-  const [surveyorId, setSurveyorId] = useState(NURSING_HOMES[0].surveyors[0])
+  const DEFAULT_NH = NURSING_HOMES.find(n => n.id === 'NH002')   // 마리아의 집
+  const [selectedNH, setSelectedNH] = useState(DEFAULT_NH)
+  const [surveyorId, setSurveyorId] = useState(DEFAULT_NH.surveyors[0])
   const [elNum, setElNum] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
