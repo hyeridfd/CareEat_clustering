@@ -219,7 +219,8 @@ def plan_metrics(problem, chrom, F_front=None, F_all=None, inv_model=None) -> di
 # ══════════════════════════════════════════════════════════════
 # ④⑤ 개인화 · 배식
 # ══════════════════════════════════════════════════════════════
-def personalize_and_serve(pool, records, profiles, meta, inv_model=None, product_scores=None, progress=None) -> dict:
+def personalize_and_serve(pool, records, profiles, meta, inv_model=None, product_scores=None, progress=None,
+                          inventory=None) -> dict:
     from . import substitute_agent as SA
     from .meal_form import build_meal_form
     from .serving_agent import serving_agent
@@ -310,7 +311,14 @@ def personalize_and_serve(pool, records, profiles, meta, inv_model=None, product
         m = meta[p.name]
         residents.append({"elderly_id": p.name, **m, "substitutions": sub_by_res[p.name]["건수"],
                           "reasons": dict(sub_by_res[p.name]["사유"]), "serving": per_res.get(p.name, {})})
+    # ── 주간 발주 (식재료 · 고령친화식품) ──
+    from .purchase import weekly_purchase
+    if progress: progress("주간 발주량 계산")
+    products = json.load(open(os.path.join(DATA_DIR, "products.json"), encoding="utf-8"))
+    purchase = weekly_purchase(dict(by_res), pool, subs, products, inventory, n_days=N_DAYS)
+
     return {
+        "purchase": purchase,
         "substitutions": subs, "orders": order_rows, "product_totals": total_rows, "porridge": mf["porridge"],
         "residents": residents, "servings": dict(by_res),
         "serving_summary": dict(tot), "substitution_reasons": dict(reason_tot),
@@ -347,7 +355,7 @@ def run_design(residents, assessments, settings, inventory=None, preference=None
         metrics["selection_rule"] = rule
         metrics["optimize_sec"] = round((dt.datetime.now() - t0).total_seconds(), 1)
         metrics["preset"] = {"name": preset, "pop": pop, "gen": gen}
-        pers = personalize_and_serve(pool, records, profiles, meta, inv_model, pref.get("product_scores"), say)
+        pers = personalize_and_serve(pool, records, profiles, meta, inv_model, pref.get("product_scores"), say, inv)
         return {"menu": records, "metrics": metrics, "skipped": skipped, "n_residents": len(profiles),
                 "inventory_used": inv is not None, "preference_used": bool(pref.get("pool_scores")), **pers}
 
@@ -365,7 +373,7 @@ def redo_personalization(menu: list, residents, assessments, settings, inventory
         chrom = records_to_chrom(problem, menu)
         records = menu_records(problem, chrom)
         metrics = plan_metrics(problem, chrom, None, None, inv_model)
-        pers = personalize_and_serve(pool, records, profiles, meta, inv_model, pref.get("product_scores"), progress)
+        pers = personalize_and_serve(pool, records, profiles, meta, inv_model, pref.get("product_scores"), progress, inv)
         return {"menu": records, "metrics": metrics, "skipped": skipped, "n_residents": len(profiles), **pers}
 
 

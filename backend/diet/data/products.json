@@ -15,7 +15,10 @@
    "sat_fat": 3.81,
    "sugar": 1.21,
    "potassium": null
-  }
+  },
+  "pack_g": 300.0,
+  "pack_price": 6110,
+  "price_note": "6,110원 (부가세별도)"
  },
  {
   "name": "부추넣은 계란말이",
@@ -33,7 +36,10 @@
    "sat_fat": 3.75,
    "sugar": 1.48,
    "potassium": null
-  }
+  },
+  "pack_g": 300.0,
+  "pack_price": 6110,
+  "price_note": "6,110원 (부가세별도)"
  },
  {
   "name": "돼지고기장조림A(냉동)",
@@ -51,7 +57,10 @@
    "sat_fat": null,
    "sugar": null,
    "potassium": null
-  }
+  },
+  "pack_g": 210.0,
+  "pack_price": 3530,
+  "price_note": "3,530원 (부가세별도)"
  },
  {
   "name": "미트볼 데리야끼",
@@ -69,7 +78,10 @@
    "sat_fat": 3.87,
    "sugar": 6.44,
    "potassium": null
-  }
+  },
+  "pack_g": 300.0,
+  "pack_price": 5995,
+  "price_note": "5,995원(B2B제품으로 시설납품가)"
  },
  {
   "name": "미트볼칠리",
@@ -87,7 +99,10 @@
    "sat_fat": 3.29,
    "sugar": 11.7,
    "potassium": null
-  }
+  },
+  "pack_g": 300.0,
+  "pack_price": 5995,
+  "price_note": "5,995원(B2B제품으로 시설납품가)"
  },
  {
   "name": "동그랑땡칠리",
@@ -105,7 +120,10 @@
    "sat_fat": 3.4,
    "sugar": 13.23,
    "potassium": null
-  }
+  },
+  "pack_g": 300.0,
+  "pack_price": 5775,
+  "price_note": "5,775원(B2B제품으로 시설납품가)"
  },
  {
   "name": "너비아니야채조림",
@@ -123,7 +141,10 @@
    "sat_fat": 3.73,
    "sugar": 7.01,
    "potassium": null
-  }
+  },
+  "pack_g": 300.0,
+  "pack_price": 6402,
+  "price_note": "6,402원(B2B제품으로 시설납품가)"
  },
  {
   "name": "순살순한닭찜",
@@ -141,7 +162,10 @@
    "sat_fat": 1.56,
    "sugar": 6.64,
    "potassium": null
-  }
+  },
+  "pack_g": 300.0,
+  "pack_price": 7590,
+  "price_note": "7,590원"
  },
  {
   "name": "돈채굴소스볶음",
@@ -159,7 +183,10 @@
    "sat_fat": 2.98,
    "sugar": 5.54,
    "potassium": null
-  }
+  },
+  "pack_g": 300.0,
+  "pack_price": 7370,
+  "price_note": "7,370원"
  },
  {
   "name": "돈육피망볶음",
@@ -177,7 +204,10 @@
    "sat_fat": 4.09,
    "sugar": 6.34,
    "potassium": null
-  }
+  },
+  "pack_g": 300.0,
+  "pack_price": 6930,
+  "price_note": "6,930원"
  },
  {
   "name": "해물동그랑땡조림",
@@ -195,7 +225,10 @@
    "sat_fat": 1.18,
    "sugar": 4.01,
    "potassium": null
-  }
+  },
+  "pack_g": 300.0,
+  "pack_price": 8800,
+  "price_note": "8,800원"
  },
  {
   "name": "베이컨크림야채볶음",
@@ -213,7 +246,10 @@
    "sat_fat": 3.69,
    "sugar": 7.77,
    "potassium": null
-  }
+  },
+  "pack_g": 300.0,
+  "pack_price": 10780,
+  "price_note": "10,780원"
  },
  {
   "name": "돼지목살간장조림",
@@ -231,7 +267,10 @@
    "sat_fat": 1.75,
    "sugar": 5.48,
    "potassium": null
-  }
+  },
+  "pack_g": 300.0,
+  "pack_price": 8580,
+  "price_note": "8,580원"
  },
  {
   "name": "효도쿡 마늘양념 닭갈비구이",
@@ -249,7 +288,10 @@
    "sat_fat": 3.4,
    "sugar": 0.8,
    "potassium": null
-  }
+  },
+  "pack_g": 300.0,
+  "pack_price": 9350,
+  "price_note": "9,350원"
  },
  {
   "name": "감자양파국",
@@ -267,7 +309,10 @@
    "sat_fat": null,
    "sugar": null,
    "potassium": 444.08
-  }
+  },
+  "pack_g": 750.0,
+  "pack_price": 4950,
+  "price_note": "4,950원"
  },
  {
   "name": "맛상 호박죽",
@@ -285,7 +330,10 @@
    "sat_fat": 0.0,
    "sugar": 11.0,
    "potassium": null
-  }
+  },
+  "pack_g": 1000.0,
+  "pack_price": 7480,
+  "price_note": "7,480원"
  },
  {
   "name": "효도쿡 돼지고기가지볶음",
@@ -303,7 +351,10 @@
    "sat_fat": null,
    "sugar": null,
    "potassium": null
-  }
+  },
+  "pack_g": 300.0,
+  "pack_price": 8030,
+  "price_note": "8,030원"
  },
  {
   "name": "효도쿡 촉촉한 갈릭닭볶음",
@@ -321,7 +372,10 @@
    "sat_fat": null,
    "sugar": null,
    "potassium": null
-  }
+  },
+  "pack_g": 300.0,
+  "pack_price": 8030,
+  "price_note": "8,030원"
  },
  {
   "name": "효도쿡 촉촉한 갈릭제육볶음",
@@ -339,7 +393,10 @@
    "sat_fat": null,
    "sugar": null,
    "potassium": null
-  }
+  },
+  "pack_g": 300.0,
+  "pack_price": 8580,
+  "price_note": "8,580원"
  },
  {
   "name": "효도쿡 청국장",
@@ -357,7 +414,10 @@
    "sat_fat": null,
    "sugar": null,
    "potassium": null
-  }
+  },
+  "pack_g": 750.0,
+  "pack_price": 12100,
+  "price_note": "12,100원"
  },
  {
   "name": "설렁탕",
@@ -375,7 +435,10 @@
    "sat_fat": null,
    "sugar": null,
    "potassium": null
-  }
+  },
+  "pack_g": 750.0,
+  "pack_price": 7040,
+  "price_note": "7,040원"
  },
  {
   "name": "효도쿡 마파두부",
@@ -393,6 +456,9 @@
    "sat_fat": null,
    "sugar": null,
    "potassium": null
-  }
+  },
+  "pack_g": 750.0,
+  "pack_price": 12320,
+  "price_note": "12,320원"
  }
 ]

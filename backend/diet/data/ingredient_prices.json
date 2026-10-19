@@ -1,0 +1,3547 @@
+{
+ "배추": [
+  {
+   "unit": "1포기",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.911000000+00:00",
+   "price_1month": 3247.0,
+   "name": "양배추",
+   "price_1year": 4903.0,
+   "unit_g": 2000,
+   "price_1week": 3483.0,
+   "price_today": 3021.0,
+   "kind": "양배추(1포기)",
+   "price_per_g": 1.5105
+  },
+  {
+   "unit": "1포기",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.909000000+00:00",
+   "price_1month": 5122.0,
+   "name": "배추",
+   "price_1year": 5599.0,
+   "unit_g": 3000,
+   "price_1week": 4713.0,
+   "price_today": 4574.0,
+   "kind": "월동(1포기)",
+   "price_per_g": 1.5246666666666666
+  },
+  {
+   "unit": "1포기",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.948000000+00:00",
+   "price_1month": 2166.0,
+   "name": "알배기배추",
+   "price_1year": 2231.0,
+   "unit_g": 700,
+   "price_1week": 1995.0,
+   "price_today": 1995.0,
+   "kind": "알배기배추(1포기)",
+   "price_per_g": 2.85
+  },
+  {
+   "unit": "1kg",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.914000000+00:00",
+   "price_1month": 4294.0,
+   "name": "얼갈이배추",
+   "price_1year": 3576.0,
+   "unit_g": 1000,
+   "price_1week": 3021.0,
+   "price_today": 3096.0,
+   "kind": "얼갈이배추(1kg)",
+   "price_per_g": 3.096
+  }
+ ],
+ "얼갈이배추": [
+  {
+   "unit": "1포기",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.909000000+00:00",
+   "price_1month": 5122.0,
+   "name": "배추",
+   "price_1year": 5599.0,
+   "unit_g": 3000,
+   "price_1week": 4713.0,
+   "price_today": 4574.0,
+   "kind": "월동(1포기)",
+   "price_per_g": 1.5246666666666666
+  },
+  {
+   "unit": "1kg",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.914000000+00:00",
+   "price_1month": 4294.0,
+   "name": "얼갈이배추",
+   "price_1year": 3576.0,
+   "unit_g": 1000,
+   "price_1week": 3021.0,
+   "price_today": 3096.0,
+   "kind": "얼갈이배추(1kg)",
+   "price_per_g": 3.096
+  }
+ ],
+ "오이": [
+  {
+   "unit": "10개",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.920000000+00:00",
+   "price_1month": 8785.0,
+   "name": "오이",
+   "price_1year": 8523.0,
+   "unit_g": 2000,
+   "price_1week": 8427.0,
+   "price_today": 7667.0,
+   "kind": "다다기계통(10개)",
+   "price_per_g": 3.8335
+  },
+  {
+   "unit": "10개",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.920000000+00:00",
+   "price_1month": 16617.0,
+   "name": "오이",
+   "price_1year": 17934.0,
+   "unit_g": 2000,
+   "price_1week": 14317.0,
+   "price_today": 13972.0,
+   "kind": "취청(10개)",
+   "price_per_g": 6.986
+  },
+  {
+   "unit": "10개",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.918000000+00:00",
+   "price_1month": 15893.0,
+   "name": "오이",
+   "price_1year": 17533.0,
+   "unit_g": 2000,
+   "price_1week": 19900.0,
+   "price_today": 19900.0,
+   "kind": "가시계통(10개)",
+   "price_per_g": 9.95
+  }
+ ],
+ "오이지(염절임)": [
+  {
+   "unit": "10개",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.920000000+00:00",
+   "price_1month": 8785.0,
+   "name": "오이",
+   "price_1year": 8523.0,
+   "unit_g": 2000,
+   "price_1week": 8427.0,
+   "price_today": 7667.0,
+   "kind": "다다기계통(10개)",
+   "price_per_g": 3.8335
+  },
+  {
+   "unit": "10개",
+   "category": "과일류",
+   "updated_at": "2026-03-25T14:21:19.968000000+00:00",
+   "price_1month": 18454.0,
+   "name": "오렌지",
+   "price_1year": 12566.0,
+   "unit_g": 2400,
+   "price_1week": 11800.0,
+   "price_today": 11800.0,
+   "kind": "네이블 미국(10개)",
+   "price_per_g": 4.916666666666667
+  },
+  {
+   "unit": "10개",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.920000000+00:00",
+   "price_1month": 16617.0,
+   "name": "오이",
+   "price_1year": 17934.0,
+   "unit_g": 2000,
+   "price_1week": 14317.0,
+   "price_today": 13972.0,
+   "kind": "취청(10개)",
+   "price_per_g": 6.986
+  },
+  {
+   "unit": "10개",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.918000000+00:00",
+   "price_1month": 15893.0,
+   "name": "오이",
+   "price_1year": 17533.0,
+   "unit_g": 2000,
+   "price_1week": 19900.0,
+   "price_today": 19900.0,
+   "kind": "가시계통(10개)",
+   "price_per_g": 9.95
+  }
+ ],
+ "오이고추": [
+  {
+   "unit": "10개",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.920000000+00:00",
+   "price_1month": 8785.0,
+   "name": "오이",
+   "price_1year": 8523.0,
+   "unit_g": 2000,
+   "price_1week": 8427.0,
+   "price_today": 7667.0,
+   "kind": "다다기계통(10개)",
+   "price_per_g": 3.8335
+  },
+  {
+   "unit": "10개",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.920000000+00:00",
+   "price_1month": 16617.0,
+   "name": "오이",
+   "price_1year": 17934.0,
+   "unit_g": 2000,
+   "price_1week": 14317.0,
+   "price_today": 13972.0,
+   "kind": "취청(10개)",
+   "price_per_g": 6.986
+  },
+  {
+   "unit": "10개",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.918000000+00:00",
+   "price_1month": 15893.0,
+   "name": "오이",
+   "price_1year": 17533.0,
+   "unit_g": 2000,
+   "price_1week": 19900.0,
+   "price_today": 19900.0,
+   "kind": "가시계통(10개)",
+   "price_per_g": 9.95
+  }
+ ],
+ "오이피클": [
+  {
+   "unit": "10개",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.920000000+00:00",
+   "price_1month": 8785.0,
+   "name": "오이",
+   "price_1year": 8523.0,
+   "unit_g": 2000,
+   "price_1week": 8427.0,
+   "price_today": 7667.0,
+   "kind": "다다기계통(10개)",
+   "price_per_g": 3.8335
+  },
+  {
+   "unit": "10개",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.920000000+00:00",
+   "price_1month": 16617.0,
+   "name": "오이",
+   "price_1year": 17934.0,
+   "unit_g": 2000,
+   "price_1week": 14317.0,
+   "price_today": 13972.0,
+   "kind": "취청(10개)",
+   "price_per_g": 6.986
+  },
+  {
+   "unit": "10개",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.918000000+00:00",
+   "price_1month": 15893.0,
+   "name": "오이",
+   "price_1year": 17533.0,
+   "unit_g": 2000,
+   "price_1week": 19900.0,
+   "price_today": 19900.0,
+   "kind": "가시계통(10개)",
+   "price_per_g": 9.95
+  }
+ ],
+ "닭(뼈포함)": [
+  {
+   "unit": "1kg",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.991000000+00:00",
+   "price_1month": 6060.0,
+   "name": "닭",
+   "price_1year": 5823.0,
+   "unit_g": 1000,
+   "price_1week": 6270.0,
+   "price_today": 6650.0,
+   "kind": "육계(kg)",
+   "price_per_g": 6.65
+  }
+ ],
+ "애호박": [
+  {
+   "unit": "1개",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.922000000+00:00",
+   "price_1month": 1798.0,
+   "name": "호박",
+   "price_1year": 1655.0,
+   "unit_g": 400,
+   "price_1week": 1410.0,
+   "price_today": 1330.0,
+   "kind": "애호박(1개)",
+   "price_per_g": 3.325
+  },
+  {
+   "unit": "1개",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.923000000+00:00",
+   "price_1month": 1772.0,
+   "name": "호박",
+   "price_1year": 1895.0,
+   "unit_g": 400,
+   "price_1week": 1990.0,
+   "price_today": 1990.0,
+   "kind": "쥬키니(1개)",
+   "price_per_g": 4.975
+  }
+ ],
+ "단호박": [
+  {
+   "unit": "1개",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.922000000+00:00",
+   "price_1month": 1798.0,
+   "name": "호박",
+   "price_1year": 1655.0,
+   "unit_g": 400,
+   "price_1week": 1410.0,
+   "price_today": 1330.0,
+   "kind": "애호박(1개)",
+   "price_per_g": 3.325
+  },
+  {
+   "unit": "1개",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.923000000+00:00",
+   "price_1month": 1772.0,
+   "name": "호박",
+   "price_1year": 1895.0,
+   "unit_g": 400,
+   "price_1week": 1990.0,
+   "price_today": 1990.0,
+   "kind": "쥬키니(1개)",
+   "price_per_g": 4.975
+  }
+ ],
+ "늙은호박": [
+  {
+   "unit": "1개",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.922000000+00:00",
+   "price_1month": 1798.0,
+   "name": "호박",
+   "price_1year": 1655.0,
+   "unit_g": 400,
+   "price_1week": 1410.0,
+   "price_today": 1330.0,
+   "kind": "애호박(1개)",
+   "price_per_g": 3.325
+  },
+  {
+   "unit": "1개",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.923000000+00:00",
+   "price_1month": 1772.0,
+   "name": "호박",
+   "price_1year": 1895.0,
+   "unit_g": 400,
+   "price_1week": 1990.0,
+   "price_today": 1990.0,
+   "kind": "쥬키니(1개)",
+   "price_per_g": 4.975
+  }
+ ],
+ "호박고구마": [
+  {
+   "unit": "1개",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.922000000+00:00",
+   "price_1month": 1798.0,
+   "name": "호박",
+   "price_1year": 1655.0,
+   "unit_g": 400,
+   "price_1week": 1410.0,
+   "price_today": 1330.0,
+   "kind": "애호박(1개)",
+   "price_per_g": 3.325
+  },
+  {
+   "unit": "1kg",
+   "category": "식량작물",
+   "updated_at": "2026-03-25T14:21:19.892000000+00:00",
+   "price_1month": 4204.0,
+   "name": "고구마",
+   "price_1year": 4365.0,
+   "unit_g": 1000,
+   "price_1week": 3960.0,
+   "price_today": 3883.0,
+   "kind": "밤(1kg)",
+   "price_per_g": 3.883
+  },
+  {
+   "unit": "1개",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.923000000+00:00",
+   "price_1month": 1772.0,
+   "name": "호박",
+   "price_1year": 1895.0,
+   "unit_g": 400,
+   "price_1week": 1990.0,
+   "price_today": 1990.0,
+   "kind": "쥬키니(1개)",
+   "price_per_g": 4.975
+  }
+ ],
+ "호박잎": [
+  {
+   "unit": "1개",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.922000000+00:00",
+   "price_1month": 1798.0,
+   "name": "호박",
+   "price_1year": 1655.0,
+   "unit_g": 400,
+   "price_1week": 1410.0,
+   "price_today": 1330.0,
+   "kind": "애호박(1개)",
+   "price_per_g": 3.325
+  },
+  {
+   "unit": "1개",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.923000000+00:00",
+   "price_1month": 1772.0,
+   "name": "호박",
+   "price_1year": 1895.0,
+   "unit_g": 400,
+   "price_1week": 1990.0,
+   "price_today": 1990.0,
+   "kind": "쥬키니(1개)",
+   "price_per_g": 4.975
+  }
+ ],
+ "쥬키니호박": [
+  {
+   "unit": "1개",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.922000000+00:00",
+   "price_1month": 1798.0,
+   "name": "호박",
+   "price_1year": 1655.0,
+   "unit_g": 400,
+   "price_1week": 1410.0,
+   "price_today": 1330.0,
+   "kind": "애호박(1개)",
+   "price_per_g": 3.325
+  },
+  {
+   "unit": "1개",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.923000000+00:00",
+   "price_1month": 1772.0,
+   "name": "호박",
+   "price_1year": 1895.0,
+   "unit_g": 400,
+   "price_1week": 1990.0,
+   "price_today": 1990.0,
+   "kind": "쥬키니(1개)",
+   "price_per_g": 4.975
+  }
+ ],
+ "토마토": [
+  {
+   "unit": "1kg",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.923000000+00:00",
+   "price_1month": 5544.0,
+   "name": "토마토",
+   "price_1year": 5985.0,
+   "unit_g": 1000,
+   "price_1week": 4917.0,
+   "price_today": 5093.0,
+   "kind": "토마토(1kg)",
+   "price_per_g": 5.093
+  },
+  {
+   "unit": "1kg",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.949000000+00:00",
+   "price_1month": 8657.0,
+   "name": "방울토마토",
+   "price_1year": 10503.0,
+   "unit_g": 1000,
+   "price_1week": 8343.0,
+   "price_today": 8448.0,
+   "kind": "대추방울토마토(1kg)",
+   "price_per_g": 8.448
+  },
+  {
+   "unit": "1kg",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.949000000+00:00",
+   "price_1month": 10957.0,
+   "name": "방울토마토",
+   "price_1year": 12377.0,
+   "unit_g": 1000,
+   "price_1week": 11453.0,
+   "price_today": 10350.0,
+   "kind": "방울토마토(1kg)",
+   "price_per_g": 10.35
+  }
+ ],
+ "토마토케첩": [
+  {
+   "unit": "1kg",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.923000000+00:00",
+   "price_1month": 5544.0,
+   "name": "토마토",
+   "price_1year": 5985.0,
+   "unit_g": 1000,
+   "price_1week": 4917.0,
+   "price_today": 5093.0,
+   "kind": "토마토(1kg)",
+   "price_per_g": 5.093
+  },
+  {
+   "unit": "1kg",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.949000000+00:00",
+   "price_1month": 8657.0,
+   "name": "방울토마토",
+   "price_1year": 10503.0,
+   "unit_g": 1000,
+   "price_1week": 8343.0,
+   "price_today": 8448.0,
+   "kind": "대추방울토마토(1kg)",
+   "price_per_g": 8.448
+  },
+  {
+   "unit": "1kg",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.949000000+00:00",
+   "price_1month": 10957.0,
+   "name": "방울토마토",
+   "price_1year": 12377.0,
+   "unit_g": 1000,
+   "price_1week": 11453.0,
+   "price_today": 10350.0,
+   "kind": "방울토마토(1kg)",
+   "price_per_g": 10.35
+  }
+ ],
+ "방울토마토": [
+  {
+   "unit": "1kg",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.923000000+00:00",
+   "price_1month": 5544.0,
+   "name": "토마토",
+   "price_1year": 5985.0,
+   "unit_g": 1000,
+   "price_1week": 4917.0,
+   "price_today": 5093.0,
+   "kind": "토마토(1kg)",
+   "price_per_g": 5.093
+  },
+  {
+   "unit": "1kg",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.949000000+00:00",
+   "price_1month": 8657.0,
+   "name": "방울토마토",
+   "price_1year": 10503.0,
+   "unit_g": 1000,
+   "price_1week": 8343.0,
+   "price_today": 8448.0,
+   "kind": "대추방울토마토(1kg)",
+   "price_per_g": 8.448
+  },
+  {
+   "unit": "1kg",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.949000000+00:00",
+   "price_1month": 10957.0,
+   "name": "방울토마토",
+   "price_1year": 12377.0,
+   "unit_g": 1000,
+   "price_1week": 11453.0,
+   "price_today": 10350.0,
+   "kind": "방울토마토(1kg)",
+   "price_per_g": 10.35
+  }
+ ],
+ "토마토페이스트": [
+  {
+   "unit": "1kg",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.923000000+00:00",
+   "price_1month": 5544.0,
+   "name": "토마토",
+   "price_1year": 5985.0,
+   "unit_g": 1000,
+   "price_1week": 4917.0,
+   "price_today": 5093.0,
+   "kind": "토마토(1kg)",
+   "price_per_g": 5.093
+  }
+ ],
+ "토마토소스(시판)": [
+  {
+   "unit": "1kg",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.923000000+00:00",
+   "price_1month": 5544.0,
+   "name": "토마토",
+   "price_1year": 5985.0,
+   "unit_g": 1000,
+   "price_1week": 4917.0,
+   "price_today": 5093.0,
+   "kind": "토마토(1kg)",
+   "price_per_g": 5.093
+  },
+  {
+   "unit": "1kg",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.949000000+00:00",
+   "price_1month": 8657.0,
+   "name": "방울토마토",
+   "price_1year": 10503.0,
+   "unit_g": 1000,
+   "price_1week": 8343.0,
+   "price_today": 8448.0,
+   "kind": "대추방울토마토(1kg)",
+   "price_per_g": 8.448
+  },
+  {
+   "unit": "1kg",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.949000000+00:00",
+   "price_1month": 10957.0,
+   "name": "방울토마토",
+   "price_1year": 12377.0,
+   "unit_g": 1000,
+   "price_1week": 11453.0,
+   "price_today": 10350.0,
+   "kind": "방울토마토(1kg)",
+   "price_per_g": 10.35
+  }
+ ],
+ "딸기": [
+  {
+   "unit": "100g",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.926000000+00:00",
+   "price_1month": 1360.0,
+   "name": "딸기",
+   "price_1year": 1101.0,
+   "unit_g": 100,
+   "price_1week": 916.0,
+   "price_today": 859.0,
+   "kind": "딸기(100g)",
+   "price_per_g": 8.59
+  }
+ ],
+ "무": [
+  {
+   "unit": "1개",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.927000000+00:00",
+   "price_1month": 1962.0,
+   "name": "무",
+   "price_1year": 2852.0,
+   "unit_g": 1000,
+   "price_1week": 1876.0,
+   "price_today": 1725.0,
+   "kind": "월동(1개)",
+   "price_per_g": 1.725
+  }
+ ],
+ "당근": [
+  {
+   "unit": "1kg",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.928000000+00:00",
+   "name": "당근",
+   "price_1year": 5277.0,
+   "unit_g": 1000,
+   "price_1week": 2700.0,
+   "price_today": 2905.0,
+   "kind": "무세척(1kg)",
+   "price_per_g": 2.905
+  }
+ ],
+ "감자": [
+  {
+   "unit": "100g",
+   "category": "식량작물",
+   "updated_at": "2026-03-25T14:21:19.906000000+00:00",
+   "price_1month": 314.0,
+   "name": "감자",
+   "unit_g": 100,
+   "price_1week": 398.0,
+   "price_today": 404.0,
+   "kind": "수미(노지)(100g)",
+   "price_per_g": 4.04
+  },
+  {
+   "unit": "100g",
+   "category": "식량작물",
+   "updated_at": "2026-03-25T14:21:19.909000000+00:00",
+   "price_1month": 652.0,
+   "name": "감자",
+   "price_1year": 460.0,
+   "unit_g": 100,
+   "price_1week": 608.0,
+   "price_today": 525.0,
+   "kind": "수미(시설)(100g)",
+   "price_per_g": 5.25
+  }
+ ],
+ "감자수제비(시판)": [
+  {
+   "unit": "100g",
+   "category": "식량작물",
+   "updated_at": "2026-03-25T14:21:19.906000000+00:00",
+   "price_1month": 314.0,
+   "name": "감자",
+   "unit_g": 100,
+   "price_1week": 398.0,
+   "price_today": 404.0,
+   "kind": "수미(노지)(100g)",
+   "price_per_g": 4.04
+  },
+  {
+   "unit": "100g",
+   "category": "식량작물",
+   "updated_at": "2026-03-25T14:21:19.909000000+00:00",
+   "price_1month": 652.0,
+   "name": "감자",
+   "price_1year": 460.0,
+   "unit_g": 100,
+   "price_1week": 608.0,
+   "price_today": 525.0,
+   "kind": "수미(시설)(100g)",
+   "price_per_g": 5.25
+  }
+ ],
+ "감자전분": [
+  {
+   "unit": "100g",
+   "category": "식량작물",
+   "updated_at": "2026-03-25T14:21:19.906000000+00:00",
+   "price_1month": 314.0,
+   "name": "감자",
+   "unit_g": 100,
+   "price_1week": 398.0,
+   "price_today": 404.0,
+   "kind": "수미(노지)(100g)",
+   "price_per_g": 4.04
+  },
+  {
+   "unit": "100g",
+   "category": "식량작물",
+   "updated_at": "2026-03-25T14:21:19.909000000+00:00",
+   "price_1month": 652.0,
+   "name": "감자",
+   "price_1year": 460.0,
+   "unit_g": 100,
+   "price_1week": 608.0,
+   "price_today": 525.0,
+   "kind": "수미(시설)(100g)",
+   "price_per_g": 5.25
+  }
+ ],
+ "감자고로케": [
+  {
+   "unit": "100g",
+   "category": "식량작물",
+   "updated_at": "2026-03-25T14:21:19.906000000+00:00",
+   "price_1month": 314.0,
+   "name": "감자",
+   "unit_g": 100,
+   "price_1week": 398.0,
+   "price_today": 404.0,
+   "kind": "수미(노지)(100g)",
+   "price_per_g": 4.04
+  },
+  {
+   "unit": "100g",
+   "category": "식량작물",
+   "updated_at": "2026-03-25T14:21:19.909000000+00:00",
+   "price_1month": 652.0,
+   "name": "감자",
+   "price_1year": 460.0,
+   "unit_g": 100,
+   "price_1week": 608.0,
+   "price_today": 525.0,
+   "kind": "수미(시설)(100g)",
+   "price_per_g": 5.25
+  }
+ ],
+ "고등어": [
+  {
+   "unit": "1마리",
+   "category": "수산물",
+   "updated_at": "2026-03-25T14:21:19.995000000+00:00",
+   "price_1month": 3136.0,
+   "name": "고등어",
+   "price_1year": 3853.0,
+   "unit_g": 400,
+   "price_1week": 3003.0,
+   "price_today": 2843.0,
+   "kind": "국산(신선 냉장)(1마리)",
+   "price_per_g": 7.1075
+  },
+  {
+   "unit": "1손",
+   "category": "수산물",
+   "updated_at": "2026-03-25T14:21:19.994000000+00:00",
+   "price_1month": 6430.0,
+   "name": "고등어",
+   "price_1year": 6498.0,
+   "unit_g": 800,
+   "price_1week": 5736.0,
+   "price_today": 5736.0,
+   "kind": "국산(염장)(1손)",
+   "price_per_g": 7.17
+  },
+  {
+   "unit": "1손",
+   "category": "수산물",
+   "updated_at": "2026-03-25T14:21:19.996000000+00:00",
+   "price_1month": 11011.0,
+   "name": "고등어",
+   "price_1year": 8421.0,
+   "unit_g": 800,
+   "price_1week": 9919.0,
+   "price_today": 9322.0,
+   "kind": "수입산(염장)(1손)",
+   "price_per_g": 11.6525
+  },
+  {
+   "unit": "1kg",
+   "category": "수산물",
+   "updated_at": "2026-03-25T14:21:20.023000000+00:00",
+   "price_1month": 17265.0,
+   "name": "고등어필렛",
+   "unit_g": 1000,
+   "price_1week": 15757.0,
+   "price_today": 16043.0,
+   "kind": "수입(1kg)",
+   "price_per_g": 16.043
+  },
+  {
+   "surge_rate": 13.6,
+   "unit": "1kg",
+   "category": "수산물",
+   "updated_at": "2026-03-25T14:21:20.025000000+00:00",
+   "price_1month": 19965.0,
+   "name": "고등어필렛",
+   "unit_g": 1000,
+   "price_1week": 18217.0,
+   "price_today": 20700.0,
+   "kind": "국산(1kg)",
+   "price_per_g": 20.7
+  }
+ ],
+ "열무(생것)": [
+  {
+   "unit": "1kg",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.930000000+00:00",
+   "price_1month": 4079.0,
+   "name": "열무",
+   "price_1year": 3571.0,
+   "unit_g": 1000,
+   "price_1week": 3067.0,
+   "price_today": 3187.0,
+   "kind": "열무(1kg)",
+   "price_per_g": 3.187
+  }
+ ],
+ "열무김치": [
+  {
+   "unit": "1kg",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.930000000+00:00",
+   "price_1month": 4079.0,
+   "name": "열무",
+   "price_1year": 3571.0,
+   "unit_g": 1000,
+   "price_1week": 3067.0,
+   "price_today": 3187.0,
+   "kind": "열무(1kg)",
+   "price_per_g": 3.187
+  }
+ ],
+ "풋고추": [
+  {
+   "unit": "100g",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.934000000+00:00",
+   "price_1month": 1726.0,
+   "name": "풋고추",
+   "price_1year": 978.0,
+   "unit_g": 100,
+   "price_1week": 1195.0,
+   "price_today": 1100.0,
+   "kind": "청양고추(100g)",
+   "price_per_g": 11.0
+  },
+  {
+   "unit": "100g",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.933000000+00:00",
+   "price_1month": 1430.0,
+   "name": "풋고추",
+   "unit_g": 100,
+   "price_1week": 1170.0,
+   "price_today": 1120.0,
+   "kind": "꽈리고추(100g)",
+   "price_per_g": 11.2
+  },
+  {
+   "unit": "100g",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.931000000+00:00",
+   "price_1month": 2253.0,
+   "name": "풋고추",
+   "price_1year": 2130.0,
+   "unit_g": 100,
+   "price_1week": 1944.0,
+   "price_today": 1824.0,
+   "kind": "풋고추(녹광 등)(100g)",
+   "price_per_g": 18.24
+  },
+  {
+   "unit": "600g",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.930000000+00:00",
+   "price_1month": 17045.0,
+   "name": "건고추",
+   "price_1year": 17680.0,
+   "unit_g": 600,
+   "price_1week": 19950.0,
+   "price_today": 19950.0,
+   "kind": "화건(600g)",
+   "price_per_g": 33.25
+  }
+ ],
+ "홍고추": [
+  {
+   "unit": "100g",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.934000000+00:00",
+   "price_1month": 1726.0,
+   "name": "풋고추",
+   "price_1year": 978.0,
+   "unit_g": 100,
+   "price_1week": 1195.0,
+   "price_today": 1100.0,
+   "kind": "청양고추(100g)",
+   "price_per_g": 11.0
+  },
+  {
+   "unit": "100g",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.933000000+00:00",
+   "price_1month": 1430.0,
+   "name": "풋고추",
+   "unit_g": 100,
+   "price_1week": 1170.0,
+   "price_today": 1120.0,
+   "kind": "꽈리고추(100g)",
+   "price_per_g": 11.2
+  },
+  {
+   "unit": "100g",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.931000000+00:00",
+   "price_1month": 2253.0,
+   "name": "풋고추",
+   "price_1year": 2130.0,
+   "unit_g": 100,
+   "price_1week": 1944.0,
+   "price_today": 1824.0,
+   "kind": "풋고추(녹광 등)(100g)",
+   "price_per_g": 18.24
+  },
+  {
+   "unit": "600g",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.930000000+00:00",
+   "price_1month": 17045.0,
+   "name": "건고추",
+   "price_1year": 17680.0,
+   "unit_g": 600,
+   "price_1week": 19950.0,
+   "price_today": 19950.0,
+   "kind": "화건(600g)",
+   "price_per_g": 33.25
+  }
+ ],
+ "고추장": [
+  {
+   "unit": "100g",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.934000000+00:00",
+   "price_1month": 1726.0,
+   "name": "풋고추",
+   "price_1year": 978.0,
+   "unit_g": 100,
+   "price_1week": 1195.0,
+   "price_today": 1100.0,
+   "kind": "청양고추(100g)",
+   "price_per_g": 11.0
+  },
+  {
+   "unit": "100g",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.933000000+00:00",
+   "price_1month": 1430.0,
+   "name": "풋고추",
+   "unit_g": 100,
+   "price_1week": 1170.0,
+   "price_today": 1120.0,
+   "kind": "꽈리고추(100g)",
+   "price_per_g": 11.2
+  },
+  {
+   "unit": "100g",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.931000000+00:00",
+   "price_1month": 2253.0,
+   "name": "풋고추",
+   "price_1year": 2130.0,
+   "unit_g": 100,
+   "price_1week": 1944.0,
+   "price_today": 1824.0,
+   "kind": "풋고추(녹광 등)(100g)",
+   "price_per_g": 18.24
+  },
+  {
+   "unit": "600g",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.930000000+00:00",
+   "price_1month": 17045.0,
+   "name": "건고추",
+   "price_1year": 17680.0,
+   "unit_g": 600,
+   "price_1week": 19950.0,
+   "price_today": 19950.0,
+   "kind": "화건(600g)",
+   "price_per_g": 33.25
+  }
+ ],
+ "시금치": [
+  {
+   "unit": "100g",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.912000000+00:00",
+   "price_1month": 1063.0,
+   "name": "시금치",
+   "price_1year": 762.0,
+   "unit_g": 100,
+   "price_1week": 791.0,
+   "price_today": 732.0,
+   "kind": "시금치(100g)",
+   "price_per_g": 7.32
+  }
+ ],
+ "양파": [
+  {
+   "unit": "1kg",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.937000000+00:00",
+   "price_1month": 2305.0,
+   "name": "양파",
+   "price_1year": 3187.0,
+   "unit_g": 1000,
+   "price_1week": 2097.0,
+   "price_today": 1859.0,
+   "kind": "양파(1kg)",
+   "price_per_g": 1.859
+  }
+ ],
+ "적양파": [
+  {
+   "unit": "1kg",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.937000000+00:00",
+   "price_1month": 2305.0,
+   "name": "양파",
+   "price_1year": 3187.0,
+   "unit_g": 1000,
+   "price_1week": 2097.0,
+   "price_today": 1859.0,
+   "kind": "양파(1kg)",
+   "price_per_g": 1.859
+  }
+ ],
+ "상추": [
+  {
+   "unit": "100g",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.912000000+00:00",
+   "price_1month": 1141.0,
+   "name": "상추",
+   "price_1year": 933.0,
+   "unit_g": 100,
+   "price_1week": 1016.0,
+   "price_today": 977.0,
+   "kind": "적(100g)",
+   "price_per_g": 9.77
+  },
+  {
+   "unit": "100g",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.913000000+00:00",
+   "price_1month": 1240.0,
+   "name": "상추",
+   "price_1year": 1036.0,
+   "unit_g": 100,
+   "price_1week": 1110.0,
+   "price_today": 1061.0,
+   "kind": "청(100g)",
+   "price_per_g": 10.61
+  }
+ ],
+ "양상추": [
+  {
+   "unit": "1포기",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.911000000+00:00",
+   "price_1month": 3247.0,
+   "name": "양배추",
+   "price_1year": 4903.0,
+   "unit_g": 2000,
+   "price_1week": 3483.0,
+   "price_today": 3021.0,
+   "kind": "양배추(1포기)",
+   "price_per_g": 1.5105
+  },
+  {
+   "unit": "100g",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.912000000+00:00",
+   "price_1month": 1141.0,
+   "name": "상추",
+   "price_1year": 933.0,
+   "unit_g": 100,
+   "price_1week": 1016.0,
+   "price_today": 977.0,
+   "kind": "적(100g)",
+   "price_per_g": 9.77
+  },
+  {
+   "unit": "100g",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.913000000+00:00",
+   "price_1month": 1240.0,
+   "name": "상추",
+   "price_1year": 1036.0,
+   "unit_g": 100,
+   "price_1week": 1110.0,
+   "price_today": 1061.0,
+   "kind": "청(100g)",
+   "price_per_g": 10.61
+  }
+ ],
+ "파(실파)": [
+  {
+   "unit": "1kg",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.938000000+00:00",
+   "price_1month": 3245.0,
+   "name": "파",
+   "price_1year": 3296.0,
+   "unit_g": 1000,
+   "price_1week": 3133.0,
+   "price_today": 2976.0,
+   "kind": "대파(1kg)",
+   "price_per_g": 2.976
+  }
+ ],
+ "고춧가루": [
+  {
+   "unit": "1kg",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.941000000+00:00",
+   "price_1month": 13436.0,
+   "name": "고춧가루",
+   "price_1year": 13505.0,
+   "unit_g": 1000,
+   "price_1week": 14150.0,
+   "price_today": 14150.0,
+   "kind": "중국(1kg)",
+   "price_per_g": 14.15
+  },
+  {
+   "unit": "1kg",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.941000000+00:00",
+   "price_1month": 33034.0,
+   "name": "고춧가루",
+   "price_1year": 32502.0,
+   "unit_g": 1000,
+   "price_1week": 36700.0,
+   "price_today": 36700.0,
+   "kind": "국산(1kg)",
+   "price_per_g": 36.7
+  }
+ ],
+ "후춧가루": [
+  {
+   "unit": "1kg",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.941000000+00:00",
+   "price_1month": 13436.0,
+   "name": "고춧가루",
+   "price_1year": 13505.0,
+   "unit_g": 1000,
+   "price_1week": 14150.0,
+   "price_today": 14150.0,
+   "kind": "중국(1kg)",
+   "price_per_g": 14.15
+  },
+  {
+   "unit": "1kg",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.941000000+00:00",
+   "price_1month": 33034.0,
+   "name": "고춧가루",
+   "price_1year": 32502.0,
+   "unit_g": 1000,
+   "price_1week": 36700.0,
+   "price_today": 36700.0,
+   "kind": "국산(1kg)",
+   "price_per_g": 36.7
+  }
+ ],
+ "흰후춧가루": [
+  {
+   "unit": "1kg",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.941000000+00:00",
+   "price_1month": 13436.0,
+   "name": "고춧가루",
+   "price_1year": 13505.0,
+   "unit_g": 1000,
+   "price_1week": 14150.0,
+   "price_today": 14150.0,
+   "kind": "중국(1kg)",
+   "price_per_g": 14.15
+  },
+  {
+   "unit": "1kg",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.941000000+00:00",
+   "price_1month": 33034.0,
+   "name": "고춧가루",
+   "price_1year": 32502.0,
+   "unit_g": 1000,
+   "price_1week": 36700.0,
+   "price_today": 36700.0,
+   "kind": "국산(1kg)",
+   "price_per_g": 36.7
+  }
+ ],
+ "생강": [
+  {
+   "unit": "1kg",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.940000000+00:00",
+   "price_1month": 15338.0,
+   "name": "생강",
+   "price_1year": 12979.0,
+   "unit_g": 1000,
+   "price_1week": 17225.0,
+   "price_today": 17150.0,
+   "kind": "국산(1kg)",
+   "price_per_g": 17.15
+  }
+ ],
+ "생강(분말)": [
+  {
+   "unit": "1kg",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.940000000+00:00",
+   "price_1month": 15338.0,
+   "name": "생강",
+   "price_1year": 12979.0,
+   "unit_g": 1000,
+   "price_1week": 17225.0,
+   "price_today": 17150.0,
+   "kind": "국산(1kg)",
+   "price_per_g": 17.15
+  }
+ ],
+ "생강발효액": [
+  {
+   "unit": "1kg",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.940000000+00:00",
+   "price_1month": 15338.0,
+   "name": "생강",
+   "price_1year": 12979.0,
+   "unit_g": 1000,
+   "price_1week": 17225.0,
+   "price_today": 17150.0,
+   "kind": "국산(1kg)",
+   "price_per_g": 17.15
+  }
+ ],
+ "생강소스": [
+  {
+   "unit": "1kg",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.940000000+00:00",
+   "price_1month": 15338.0,
+   "name": "생강",
+   "price_1year": 12979.0,
+   "unit_g": 1000,
+   "price_1week": 17225.0,
+   "price_today": 17150.0,
+   "kind": "국산(1kg)",
+   "price_per_g": 17.15
+  }
+ ],
+ "미나리": [
+  {
+   "unit": "100g",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.942000000+00:00",
+   "price_1month": 1909.0,
+   "name": "미나리",
+   "price_1year": 1483.0,
+   "unit_g": 100,
+   "price_1week": 1570.0,
+   "price_today": 1619.0,
+   "kind": "미나리(100g)",
+   "price_per_g": 16.19
+  }
+ ],
+ "깻잎": [
+  {
+   "unit": "100g",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.942000000+00:00",
+   "price_1month": 3126.0,
+   "name": "깻잎",
+   "price_1year": 2959.0,
+   "unit_g": 100,
+   "price_1week": 3103.0,
+   "price_today": 2974.0,
+   "kind": "깻잎(100g)",
+   "price_per_g": 29.74
+  }
+ ],
+ "깻잎순": [
+  {
+   "unit": "100g",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.942000000+00:00",
+   "price_1month": 3126.0,
+   "name": "깻잎",
+   "price_1year": 2959.0,
+   "unit_g": 100,
+   "price_1week": 3103.0,
+   "price_today": 2974.0,
+   "kind": "깻잎(100g)",
+   "price_per_g": 29.74
+  }
+ ],
+ "피망": [
+  {
+   "unit": "100g",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.943000000+00:00",
+   "price_1month": 1995.0,
+   "name": "피망",
+   "price_1year": 1809.0,
+   "unit_g": 100,
+   "price_1week": 1886.0,
+   "price_today": 1888.0,
+   "kind": "청(100g)",
+   "price_per_g": 18.88
+  }
+ ],
+ "파프리카(적색)": [
+  {
+   "unit": "200g",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.945000000+00:00",
+   "price_1month": 1959.0,
+   "name": "파프리카",
+   "price_1year": 1719.0,
+   "unit_g": 200,
+   "price_1week": 1660.0,
+   "price_today": 1500.0,
+   "kind": "파프리카(200g)",
+   "price_per_g": 7.5
+  }
+ ],
+ "미니파프리카(적색)": [
+  {
+   "unit": "200g",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.945000000+00:00",
+   "price_1month": 1959.0,
+   "name": "파프리카",
+   "price_1year": 1719.0,
+   "unit_g": 200,
+   "price_1week": 1660.0,
+   "price_today": 1500.0,
+   "kind": "파프리카(200g)",
+   "price_per_g": 7.5
+  }
+ ],
+ "마늘": [
+  {
+   "unit": "1kg",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.946000000+00:00",
+   "price_1month": 7963.0,
+   "name": "깐마늘(국산)",
+   "price_1year": 9156.0,
+   "unit_g": 1000,
+   "price_1week": 10450.0,
+   "price_today": 10933.0,
+   "kind": "깐마늘(국산)(1kg)",
+   "price_per_g": 10.933
+  }
+ ],
+ "마늘(분말)": [
+  {
+   "unit": "1kg",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.946000000+00:00",
+   "price_1month": 7963.0,
+   "name": "깐마늘(국산)",
+   "price_1year": 9156.0,
+   "unit_g": 1000,
+   "price_1week": 10450.0,
+   "price_today": 10933.0,
+   "kind": "깐마늘(국산)(1kg)",
+   "price_per_g": 10.933
+  }
+ ],
+ "마늘종": [
+  {
+   "unit": "1kg",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.946000000+00:00",
+   "price_1month": 7963.0,
+   "name": "깐마늘(국산)",
+   "price_1year": 9156.0,
+   "unit_g": 1000,
+   "price_1week": 10450.0,
+   "price_today": 10933.0,
+   "kind": "깐마늘(국산)(1kg)",
+   "price_per_g": 10.933
+  }
+ ],
+ "마늘즙": [
+  {
+   "unit": "1kg",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.946000000+00:00",
+   "price_1month": 7963.0,
+   "name": "깐마늘(국산)",
+   "price_1year": 9156.0,
+   "unit_g": 1000,
+   "price_1week": 10450.0,
+   "price_today": 10933.0,
+   "kind": "깐마늘(국산)(1kg)",
+   "price_per_g": 10.933
+  }
+ ],
+ "브로콜리": [
+  {
+   "surge_rate": 15.8,
+   "unit": "1개",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.948000000+00:00",
+   "price_1month": 2491.0,
+   "name": "브로콜리",
+   "price_1year": 2485.0,
+   "unit_g": 500,
+   "price_1week": 2269.0,
+   "price_today": 2628.0,
+   "kind": "브로콜리(국산)(1개)",
+   "price_per_g": 5.256
+  }
+ ],
+ "홍합(껍질포함)": [
+  {
+   "unit": "1kg",
+   "category": "수산물",
+   "updated_at": "2026-03-25T14:21:20.020000000+00:00",
+   "price_1month": 3738.0,
+   "name": "홍합",
+   "price_1year": 4914.0,
+   "unit_g": 1000,
+   "price_1week": 3737.0,
+   "price_today": 3843.0,
+   "kind": "안깐홍합(냉장)(1kg)",
+   "price_per_g": 3.843
+  },
+  {
+   "unit": "100g",
+   "category": "수산물",
+   "updated_at": "2026-03-25T14:21:20.019000000+00:00",
+   "price_1month": 3058.0,
+   "name": "홍합",
+   "price_1year": 2786.0,
+   "unit_g": 100,
+   "price_1week": 3343.0,
+   "price_today": 3224.0,
+   "kind": "깐홍합(냉장)(100g)",
+   "price_per_g": 32.24
+  }
+ ],
+ "새우살": [
+  {
+   "unit": "1kg",
+   "category": "수산물",
+   "updated_at": "2026-03-25T14:21:20.015000000+00:00",
+   "price_1month": 15782.0,
+   "name": "새우젓",
+   "price_1year": 14948.0,
+   "unit_g": 1000,
+   "price_1week": 13834.0,
+   "price_today": 14138.0,
+   "kind": "새우젓(1kg)",
+   "price_per_g": 14.138
+  },
+  {
+   "unit": "10마리",
+   "category": "수산물",
+   "updated_at": "2026-03-25T14:21:20.018000000+00:00",
+   "price_1month": 4723.0,
+   "name": "새우",
+   "price_1year": 4924.0,
+   "unit_g": 300,
+   "price_1week": 4383.0,
+   "price_today": 4598.0,
+   "kind": "흰다리(수입)(10마리)",
+   "price_per_g": 15.326666666666666
+  }
+ ],
+ "새우젓": [
+  {
+   "unit": "1kg",
+   "category": "수산물",
+   "updated_at": "2026-03-25T14:21:20.015000000+00:00",
+   "price_1month": 15782.0,
+   "name": "새우젓",
+   "price_1year": 14948.0,
+   "unit_g": 1000,
+   "price_1week": 13834.0,
+   "price_today": 14138.0,
+   "kind": "새우젓(1kg)",
+   "price_per_g": 14.138
+  },
+  {
+   "unit": "10마리",
+   "category": "수산물",
+   "updated_at": "2026-03-25T14:21:20.018000000+00:00",
+   "price_1month": 4723.0,
+   "name": "새우",
+   "price_1year": 4924.0,
+   "unit_g": 300,
+   "price_1week": 4383.0,
+   "price_today": 4598.0,
+   "kind": "흰다리(수입)(10마리)",
+   "price_per_g": 15.326666666666666
+  }
+ ],
+ "새우(말린것)": [
+  {
+   "unit": "1kg",
+   "category": "수산물",
+   "updated_at": "2026-03-25T14:21:20.015000000+00:00",
+   "price_1month": 15782.0,
+   "name": "새우젓",
+   "price_1year": 14948.0,
+   "unit_g": 1000,
+   "price_1week": 13834.0,
+   "price_today": 14138.0,
+   "kind": "새우젓(1kg)",
+   "price_per_g": 14.138
+  },
+  {
+   "unit": "10마리",
+   "category": "수산물",
+   "updated_at": "2026-03-25T14:21:20.018000000+00:00",
+   "price_1month": 4723.0,
+   "name": "새우",
+   "price_1year": 4924.0,
+   "unit_g": 300,
+   "price_1week": 4383.0,
+   "price_today": 4598.0,
+   "kind": "흰다리(수입)(10마리)",
+   "price_per_g": 15.326666666666666
+  }
+ ],
+ "칵테일새우": [
+  {
+   "unit": "10마리",
+   "category": "수산물",
+   "updated_at": "2026-03-25T14:21:20.018000000+00:00",
+   "price_1month": 4723.0,
+   "name": "새우",
+   "price_1year": 4924.0,
+   "unit_g": 300,
+   "price_1week": 4383.0,
+   "price_today": 4598.0,
+   "kind": "흰다리(수입)(10마리)",
+   "price_per_g": 15.326666666666666
+  }
+ ],
+ "민물새우(생것)": [
+  {
+   "unit": "10마리",
+   "category": "수산물",
+   "updated_at": "2026-03-25T14:21:20.018000000+00:00",
+   "price_1month": 4723.0,
+   "name": "새우",
+   "price_1year": 4924.0,
+   "unit_g": 300,
+   "price_1week": 4383.0,
+   "price_today": 4598.0,
+   "kind": "흰다리(수입)(10마리)",
+   "price_per_g": 15.326666666666666
+  }
+ ],
+ "참깨": [
+  {
+   "unit": "500g",
+   "category": "특용작물",
+   "updated_at": "2026-03-25T14:21:19.950000000+00:00",
+   "price_1month": 5080.0,
+   "name": "참깨",
+   "price_1year": 5028.0,
+   "unit_g": 500,
+   "price_1week": 4760.0,
+   "price_today": 4760.0,
+   "kind": "중국(500g)",
+   "price_per_g": 9.52
+  },
+  {
+   "unit": "500g",
+   "category": "특용작물",
+   "updated_at": "2026-03-25T14:21:19.950000000+00:00",
+   "price_1month": 17987.0,
+   "name": "참깨",
+   "price_1year": 18042.0,
+   "unit_g": 500,
+   "price_1week": 19250.0,
+   "price_today": 19250.0,
+   "kind": "백색(국산)(500g)",
+   "price_per_g": 38.5
+  }
+ ],
+ "땅콩": [
+  {
+   "unit": "100g",
+   "category": "특용작물",
+   "updated_at": "2026-03-25T14:21:19.951000000+00:00",
+   "price_1month": 1114.0,
+   "name": "땅콩",
+   "price_1year": 1095.0,
+   "unit_g": 100,
+   "price_1week": 1190.0,
+   "price_today": 1190.0,
+   "kind": "수입(100g)",
+   "price_per_g": 11.9
+  },
+  {
+   "unit": "100g",
+   "category": "특용작물",
+   "updated_at": "2026-03-25T14:21:19.951000000+00:00",
+   "price_1month": 3355.0,
+   "name": "땅콩",
+   "price_1year": 3847.0,
+   "unit_g": 100,
+   "price_1week": 3564.0,
+   "price_today": 3564.0,
+   "kind": "국산(100g)",
+   "price_per_g": 35.64
+  }
+ ],
+ "땅콩가루": [
+  {
+   "unit": "100g",
+   "category": "특용작물",
+   "updated_at": "2026-03-25T14:21:19.951000000+00:00",
+   "price_1month": 1114.0,
+   "name": "땅콩",
+   "price_1year": 1095.0,
+   "unit_g": 100,
+   "price_1week": 1190.0,
+   "price_today": 1190.0,
+   "kind": "수입(100g)",
+   "price_per_g": 11.9
+  },
+  {
+   "unit": "100g",
+   "category": "특용작물",
+   "updated_at": "2026-03-25T14:21:19.951000000+00:00",
+   "price_1month": 3355.0,
+   "name": "땅콩",
+   "price_1year": 3847.0,
+   "unit_g": 100,
+   "price_1week": 3564.0,
+   "price_today": 3564.0,
+   "kind": "국산(100g)",
+   "price_per_g": 35.64
+  }
+ ],
+ "새송이버섯": [
+  {
+   "surge_rate": 12.5,
+   "unit": "150g",
+   "category": "특용작물",
+   "updated_at": "2026-03-25T14:21:19.953000000+00:00",
+   "price_1month": 617.0,
+   "name": "팽이버섯",
+   "price_1year": 593.0,
+   "unit_g": 150,
+   "price_1week": 544.0,
+   "price_today": 612.0,
+   "kind": "팽이버섯(150g)",
+   "price_per_g": 4.08
+  },
+  {
+   "unit": "100g",
+   "category": "특용작물",
+   "updated_at": "2026-03-25T14:21:19.955000000+00:00",
+   "price_1month": 490.0,
+   "name": "새송이버섯",
+   "price_1year": 525.0,
+   "unit_g": 100,
+   "price_1week": 485.0,
+   "price_today": 415.0,
+   "kind": "새송이버섯(100g)",
+   "price_per_g": 4.15
+  }
+ ],
+ "팽이버섯": [
+  {
+   "surge_rate": 12.5,
+   "unit": "150g",
+   "category": "특용작물",
+   "updated_at": "2026-03-25T14:21:19.953000000+00:00",
+   "price_1month": 617.0,
+   "name": "팽이버섯",
+   "price_1year": 593.0,
+   "unit_g": 150,
+   "price_1week": 544.0,
+   "price_today": 612.0,
+   "kind": "팽이버섯(150g)",
+   "price_per_g": 4.08
+  },
+  {
+   "unit": "100g",
+   "category": "특용작물",
+   "updated_at": "2026-03-25T14:21:19.955000000+00:00",
+   "price_1month": 490.0,
+   "name": "새송이버섯",
+   "price_1year": 525.0,
+   "unit_g": 100,
+   "price_1week": 485.0,
+   "price_today": 415.0,
+   "kind": "새송이버섯(100g)",
+   "price_per_g": 4.15
+  }
+ ],
+ "양송이버섯": [
+  {
+   "surge_rate": 12.5,
+   "unit": "150g",
+   "category": "특용작물",
+   "updated_at": "2026-03-25T14:21:19.953000000+00:00",
+   "price_1month": 617.0,
+   "name": "팽이버섯",
+   "price_1year": 593.0,
+   "unit_g": 150,
+   "price_1week": 544.0,
+   "price_today": 612.0,
+   "kind": "팽이버섯(150g)",
+   "price_per_g": 4.08
+  },
+  {
+   "unit": "100g",
+   "category": "특용작물",
+   "updated_at": "2026-03-25T14:21:19.955000000+00:00",
+   "price_1month": 490.0,
+   "name": "새송이버섯",
+   "price_1year": 525.0,
+   "unit_g": 100,
+   "price_1week": 485.0,
+   "price_today": 415.0,
+   "kind": "새송이버섯(100g)",
+   "price_per_g": 4.15
+  }
+ ],
+ "목이버섯(불린것)": [
+  {
+   "surge_rate": 12.5,
+   "unit": "150g",
+   "category": "특용작물",
+   "updated_at": "2026-03-25T14:21:19.953000000+00:00",
+   "price_1month": 617.0,
+   "name": "팽이버섯",
+   "price_1year": 593.0,
+   "unit_g": 150,
+   "price_1week": 544.0,
+   "price_today": 612.0,
+   "kind": "팽이버섯(150g)",
+   "price_per_g": 4.08
+  },
+  {
+   "unit": "100g",
+   "category": "특용작물",
+   "updated_at": "2026-03-25T14:21:19.955000000+00:00",
+   "price_1month": 490.0,
+   "name": "새송이버섯",
+   "price_1year": 525.0,
+   "unit_g": 100,
+   "price_1week": 485.0,
+   "price_today": 415.0,
+   "kind": "새송이버섯(100g)",
+   "price_per_g": 4.15
+  }
+ ],
+ "목이버섯(생것)": [
+  {
+   "surge_rate": 12.5,
+   "unit": "150g",
+   "category": "특용작물",
+   "updated_at": "2026-03-25T14:21:19.953000000+00:00",
+   "price_1month": 617.0,
+   "name": "팽이버섯",
+   "price_1year": 593.0,
+   "unit_g": 150,
+   "price_1week": 544.0,
+   "price_today": 612.0,
+   "kind": "팽이버섯(150g)",
+   "price_per_g": 4.08
+  },
+  {
+   "unit": "100g",
+   "category": "특용작물",
+   "updated_at": "2026-03-25T14:21:19.955000000+00:00",
+   "price_1month": 490.0,
+   "name": "새송이버섯",
+   "price_1year": 525.0,
+   "unit_g": 100,
+   "price_1week": 485.0,
+   "price_today": 415.0,
+   "kind": "새송이버섯(100g)",
+   "price_per_g": 4.15
+  }
+ ],
+ "목이버섯(말린것)": [
+  {
+   "surge_rate": 12.5,
+   "unit": "150g",
+   "category": "특용작물",
+   "updated_at": "2026-03-25T14:21:19.953000000+00:00",
+   "price_1month": 617.0,
+   "name": "팽이버섯",
+   "price_1year": 593.0,
+   "unit_g": 150,
+   "price_1week": 544.0,
+   "price_today": 612.0,
+   "kind": "팽이버섯(150g)",
+   "price_per_g": 4.08
+  },
+  {
+   "unit": "100g",
+   "category": "특용작물",
+   "updated_at": "2026-03-25T14:21:19.955000000+00:00",
+   "price_1month": 490.0,
+   "name": "새송이버섯",
+   "price_1year": 525.0,
+   "unit_g": 100,
+   "price_1week": 485.0,
+   "price_today": 415.0,
+   "kind": "새송이버섯(100g)",
+   "price_per_g": 4.15
+  }
+ ],
+ "느타리버섯": [
+  {
+   "unit": "100g",
+   "category": "특용작물",
+   "updated_at": "2026-03-25T14:21:19.953000000+00:00",
+   "price_1month": 669.0,
+   "name": "느타리버섯",
+   "price_1year": 645.0,
+   "unit_g": 100,
+   "price_1week": 578.0,
+   "price_today": 556.0,
+   "kind": "애느타리버섯(100g)",
+   "price_per_g": 5.56
+  },
+  {
+   "unit": "100g",
+   "category": "특용작물",
+   "updated_at": "2026-03-25T14:21:19.952000000+00:00",
+   "price_1month": 990.0,
+   "name": "느타리버섯",
+   "price_1year": 905.0,
+   "unit_g": 100,
+   "price_1week": 1565.0,
+   "price_today": 1615.0,
+   "kind": "느타리버섯(100g)",
+   "price_per_g": 16.15
+  }
+ ],
+ "애느타리버섯": [
+  {
+   "unit": "100g",
+   "category": "특용작물",
+   "updated_at": "2026-03-25T14:21:19.953000000+00:00",
+   "price_1month": 669.0,
+   "name": "느타리버섯",
+   "price_1year": 645.0,
+   "unit_g": 100,
+   "price_1week": 578.0,
+   "price_today": 556.0,
+   "kind": "애느타리버섯(100g)",
+   "price_per_g": 5.56
+  },
+  {
+   "unit": "100g",
+   "category": "특용작물",
+   "updated_at": "2026-03-25T14:21:19.952000000+00:00",
+   "price_1month": 990.0,
+   "name": "느타리버섯",
+   "price_1year": 905.0,
+   "unit_g": 100,
+   "price_1week": 1565.0,
+   "price_today": 1615.0,
+   "kind": "느타리버섯(100g)",
+   "price_per_g": 16.15
+  }
+ ],
+ "찹쌀가루": [
+  {
+   "unit": "1kg",
+   "category": "식량작물",
+   "updated_at": "2026-03-25T14:21:19.863000000+00:00",
+   "price_1month": 5125.0,
+   "name": "찹쌀",
+   "price_1year": 5081.0,
+   "unit_g": 1000,
+   "price_1week": 5384.0,
+   "price_today": 5028.0,
+   "kind": "일반계(1kg)",
+   "price_per_g": 5.028
+  }
+ ],
+ "찹쌀": [
+  {
+   "unit": "1kg",
+   "category": "식량작물",
+   "updated_at": "2026-03-25T14:21:19.863000000+00:00",
+   "price_1month": 5125.0,
+   "name": "찹쌀",
+   "price_1year": 5081.0,
+   "unit_g": 1000,
+   "price_1week": 5384.0,
+   "price_today": 5028.0,
+   "kind": "일반계(1kg)",
+   "price_per_g": 5.028
+  }
+ ],
+ "호두": [
+  {
+   "unit": "100g",
+   "category": "특용작물",
+   "updated_at": "2026-03-25T14:21:19.955000000+00:00",
+   "price_1month": 2180.0,
+   "name": "호두",
+   "price_1year": 2035.0,
+   "unit_g": 100,
+   "price_1week": 2220.0,
+   "price_today": 2220.0,
+   "kind": "수입(100g)",
+   "price_per_g": 22.2
+  }
+ ],
+ "아몬드": [
+  {
+   "unit": "100g",
+   "category": "특용작물",
+   "updated_at": "2026-03-25T14:21:19.956000000+00:00",
+   "price_1month": 1899.0,
+   "name": "아몬드",
+   "price_1year": 1789.0,
+   "unit_g": 100,
+   "price_1week": 1983.0,
+   "price_today": 1983.0,
+   "kind": "수입(100g)",
+   "price_per_g": 19.83
+  }
+ ],
+ "조기": [
+  {
+   "unit": "1마리",
+   "category": "수산물",
+   "updated_at": "2026-03-25T14:21:20.002000000+00:00",
+   "price_1month": 1298.0,
+   "name": "조기",
+   "price_1year": 1226.0,
+   "unit_g": 350,
+   "price_1week": 1220.0,
+   "price_today": 1233.0,
+   "kind": "참조기(냉동)(1마리)",
+   "price_per_g": 3.5228571428571427
+  },
+  {
+   "unit": "1마리",
+   "category": "수산물",
+   "updated_at": "2026-03-25T14:21:20.002000000+00:00",
+   "price_1month": 2572.0,
+   "name": "조기",
+   "price_1year": 2342.0,
+   "unit_g": 350,
+   "price_1week": 2234.0,
+   "price_today": 2234.0,
+   "kind": "굴비(1마리)",
+   "price_per_g": 6.382857142857143
+  },
+  {
+   "unit": "1마리",
+   "category": "수산물",
+   "updated_at": "2026-03-25T14:21:20.014000000+00:00",
+   "price_1month": 4801.0,
+   "name": "수입조기",
+   "price_1year": 3928.0,
+   "unit_g": 350,
+   "price_1week": 4475.0,
+   "price_today": 4475.0,
+   "kind": "부세수입(냉동)(1마리)",
+   "price_per_g": 12.785714285714286
+  }
+ ],
+ "사과": [
+  {
+   "unit": "10개",
+   "category": "과일류",
+   "updated_at": "2026-03-25T14:21:19.957000000+00:00",
+   "price_1month": 20866.0,
+   "name": "사과",
+   "price_1year": 21206.0,
+   "unit_g": 2500,
+   "price_1week": 19600.0,
+   "price_today": 18033.0,
+   "kind": "후지(10개)",
+   "price_per_g": 7.2132
+  }
+ ],
+ "사과즙": [
+  {
+   "unit": "10개",
+   "category": "과일류",
+   "updated_at": "2026-03-25T14:21:19.957000000+00:00",
+   "price_1month": 20866.0,
+   "name": "사과",
+   "price_1year": 21206.0,
+   "unit_g": 2500,
+   "price_1week": 19600.0,
+   "price_today": 18033.0,
+   "kind": "후지(10개)",
+   "price_per_g": 7.2132
+  }
+ ],
+ "사과식초": [
+  {
+   "unit": "10개",
+   "category": "과일류",
+   "updated_at": "2026-03-25T14:21:19.957000000+00:00",
+   "price_1month": 20866.0,
+   "name": "사과",
+   "price_1year": 21206.0,
+   "unit_g": 2500,
+   "price_1week": 19600.0,
+   "price_today": 18033.0,
+   "kind": "후지(10개)",
+   "price_per_g": 7.2132
+  }
+ ],
+ "배": [
+  {
+   "unit": "10개",
+   "category": "과일류",
+   "updated_at": "2026-03-25T14:21:19.959000000+00:00",
+   "price_1month": 28380.0,
+   "name": "배",
+   "price_1year": 36148.0,
+   "unit_g": 5000,
+   "price_1week": 28767.0,
+   "price_today": 26267.0,
+   "kind": "신고(10개)",
+   "price_per_g": 5.2534
+  }
+ ],
+ "건포도": [
+  {
+   "unit": "2kg",
+   "category": "과일류",
+   "updated_at": "2026-03-25T14:21:19.959000000+00:00",
+   "price_1month": 16309.0,
+   "name": "포도",
+   "price_1year": 19261.0,
+   "unit_g": 2000,
+   "price_1week": 16800.0,
+   "price_today": 15616.0,
+   "kind": "샤인머스켓(2kg)",
+   "price_per_g": 7.808
+  }
+ ],
+ "포도씨유": [
+  {
+   "unit": "2kg",
+   "category": "과일류",
+   "updated_at": "2026-03-25T14:21:19.959000000+00:00",
+   "price_1month": 16309.0,
+   "name": "포도",
+   "price_1year": 19261.0,
+   "unit_g": 2000,
+   "price_1week": 16800.0,
+   "price_today": 15616.0,
+   "kind": "샤인머스켓(2kg)",
+   "price_per_g": 7.808
+  }
+ ],
+ "백포도주": [
+  {
+   "unit": "2kg",
+   "category": "과일류",
+   "updated_at": "2026-03-25T14:21:19.959000000+00:00",
+   "price_1month": 16309.0,
+   "name": "포도",
+   "price_1year": 19261.0,
+   "unit_g": 2000,
+   "price_1week": 16800.0,
+   "price_today": 15616.0,
+   "kind": "샤인머스켓(2kg)",
+   "price_per_g": 7.808
+  }
+ ],
+ "포도주스": [
+  {
+   "unit": "2kg",
+   "category": "과일류",
+   "updated_at": "2026-03-25T14:21:19.959000000+00:00",
+   "price_1month": 16309.0,
+   "name": "포도",
+   "price_1year": 19261.0,
+   "unit_g": 2000,
+   "price_1week": 16800.0,
+   "price_today": 15616.0,
+   "kind": "샤인머스켓(2kg)",
+   "price_per_g": 7.808
+  }
+ ],
+ "포도식초": [
+  {
+   "unit": "2kg",
+   "category": "과일류",
+   "updated_at": "2026-03-25T14:21:19.959000000+00:00",
+   "price_1month": 16309.0,
+   "name": "포도",
+   "price_1year": 19261.0,
+   "unit_g": 2000,
+   "price_1week": 16800.0,
+   "price_today": 15616.0,
+   "kind": "샤인머스켓(2kg)",
+   "price_per_g": 7.808
+  }
+ ],
+ "바나나": [
+  {
+   "unit": "100g",
+   "category": "과일류",
+   "updated_at": "2026-03-25T14:21:19.963000000+00:00",
+   "price_1month": 318.0,
+   "name": "바나나",
+   "price_1year": 255.0,
+   "unit_g": 100,
+   "price_1week": 321.0,
+   "price_today": 328.0,
+   "kind": "수입(100g)",
+   "price_per_g": 3.28
+  }
+ ],
+ "파인애플": [
+  {
+   "unit": "1개",
+   "category": "과일류",
+   "updated_at": "2026-03-25T14:21:19.967000000+00:00",
+   "price_1month": 6148.0,
+   "name": "파인애플",
+   "price_1year": 6027.0,
+   "unit_g": 1500,
+   "price_1week": 5735.0,
+   "price_today": 5150.0,
+   "kind": "수입(1개)",
+   "price_per_g": 3.433333333333333
+  }
+ ],
+ "오렌지": [
+  {
+   "unit": "10개",
+   "category": "과일류",
+   "updated_at": "2026-03-25T14:21:19.968000000+00:00",
+   "price_1month": 18454.0,
+   "name": "오렌지",
+   "price_1year": 12566.0,
+   "unit_g": 2400,
+   "price_1week": 11800.0,
+   "price_today": 11800.0,
+   "kind": "네이블 미국(10개)",
+   "price_per_g": 4.916666666666667
+  }
+ ],
+ "레몬즙": [
+  {
+   "unit": "10개",
+   "category": "과일류",
+   "updated_at": "2026-03-25T14:21:19.970000000+00:00",
+   "price_1month": 8631.0,
+   "name": "레몬",
+   "price_1year": 8492.0,
+   "unit_g": 1200,
+   "price_1week": 8647.0,
+   "price_today": 8980.0,
+   "kind": "수입(10개)",
+   "price_per_g": 7.483333333333333
+  }
+ ],
+ "레몬": [
+  {
+   "unit": "10개",
+   "category": "과일류",
+   "updated_at": "2026-03-25T14:21:19.970000000+00:00",
+   "price_1month": 8631.0,
+   "name": "레몬",
+   "price_1year": 8492.0,
+   "unit_g": 1200,
+   "price_1week": 8647.0,
+   "price_today": 8980.0,
+   "kind": "수입(10개)",
+   "price_per_g": 7.483333333333333
+  }
+ ],
+ "녹두(불린것)": [
+  {
+   "unit": "500g",
+   "category": "식량작물",
+   "updated_at": "2026-03-25T14:21:19.891000000+00:00",
+   "price_1month": 11158.0,
+   "name": "녹두",
+   "price_1year": 11969.0,
+   "unit_g": 500,
+   "price_1week": 11590.0,
+   "price_today": 11590.0,
+   "kind": "국산(500g)",
+   "price_per_g": 23.18
+  }
+ ],
+ "녹두묵": [
+  {
+   "unit": "500g",
+   "category": "식량작물",
+   "updated_at": "2026-03-25T14:21:19.891000000+00:00",
+   "price_1month": 11158.0,
+   "name": "녹두",
+   "price_1year": 11969.0,
+   "unit_g": 500,
+   "price_1week": 11590.0,
+   "price_today": 11590.0,
+   "kind": "국산(500g)",
+   "price_per_g": 23.18
+  }
+ ],
+ "양배추": [
+  {
+   "unit": "1포기",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.911000000+00:00",
+   "price_1month": 3247.0,
+   "name": "양배추",
+   "price_1year": 4903.0,
+   "unit_g": 2000,
+   "price_1week": 3483.0,
+   "price_today": 3021.0,
+   "kind": "양배추(1포기)",
+   "price_per_g": 1.5105
+  },
+  {
+   "unit": "1포기",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.909000000+00:00",
+   "price_1month": 5122.0,
+   "name": "배추",
+   "price_1year": 5599.0,
+   "unit_g": 3000,
+   "price_1week": 4713.0,
+   "price_today": 4574.0,
+   "kind": "월동(1포기)",
+   "price_per_g": 1.5246666666666666
+  }
+ ],
+ "방울다다기양배추": [
+  {
+   "unit": "1포기",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.911000000+00:00",
+   "price_1month": 3247.0,
+   "name": "양배추",
+   "price_1year": 4903.0,
+   "unit_g": 2000,
+   "price_1week": 3483.0,
+   "price_today": 3021.0,
+   "kind": "양배추(1포기)",
+   "price_per_g": 1.5105
+  },
+  {
+   "unit": "1포기",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.909000000+00:00",
+   "price_1month": 5122.0,
+   "name": "배추",
+   "price_1year": 5599.0,
+   "unit_g": 3000,
+   "price_1week": 4713.0,
+   "price_today": 4574.0,
+   "kind": "월동(1포기)",
+   "price_per_g": 1.5246666666666666
+  }
+ ],
+ "고구마": [
+  {
+   "unit": "1kg",
+   "category": "식량작물",
+   "updated_at": "2026-03-25T14:21:19.892000000+00:00",
+   "price_1month": 4204.0,
+   "name": "고구마",
+   "price_1year": 4365.0,
+   "unit_g": 1000,
+   "price_1week": 3960.0,
+   "price_today": 3883.0,
+   "kind": "밤(1kg)",
+   "price_per_g": 3.883
+  }
+ ],
+ "고구마순(줄기)": [
+  {
+   "unit": "1kg",
+   "category": "식량작물",
+   "updated_at": "2026-03-25T14:21:19.892000000+00:00",
+   "price_1month": 4204.0,
+   "name": "고구마",
+   "price_1year": 4365.0,
+   "unit_g": 1000,
+   "price_1week": 3960.0,
+   "price_today": 3883.0,
+   "kind": "밤(1kg)",
+   "price_per_g": 3.883
+  }
+ ],
+ "아보카도오일(볶음용)": [
+  {
+   "unit": "1개",
+   "category": "과일류",
+   "updated_at": "2026-03-25T14:21:19.972000000+00:00",
+   "price_1month": 2223.0,
+   "name": "아보카도",
+   "price_1year": 2417.0,
+   "unit_g": 200,
+   "price_1week": 2331.0,
+   "price_today": 2297.0,
+   "kind": "수입(1개)",
+   "price_per_g": 11.485
+  }
+ ],
+ "돼지고기": [
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.990000000+00:00",
+   "price_1month": 1504.0,
+   "name": "수입 돼지고기",
+   "price_1year": 1493.0,
+   "unit_g": 100,
+   "price_1week": 1475.0,
+   "price_today": 1492.0,
+   "kind": "삼겹살",
+   "price_per_g": 14.92
+  },
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.984000000+00:00",
+   "price_1month": 1552.0,
+   "name": "돼지",
+   "price_1year": 1422.0,
+   "unit_g": 100,
+   "price_1week": 1528.0,
+   "price_today": 1530.0,
+   "kind": "갈비",
+   "price_per_g": 15.3
+  },
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.983000000+00:00",
+   "price_1month": 1548.0,
+   "name": "돼지",
+   "price_1year": 1432.0,
+   "unit_g": 100,
+   "price_1week": 1541.0,
+   "price_today": 1564.0,
+   "kind": "앞다리",
+   "price_per_g": 15.64
+  },
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.985000000+00:00",
+   "price_1month": 2479.0,
+   "name": "돼지",
+   "price_1year": 2294.0,
+   "unit_g": 100,
+   "price_1week": 2446.0,
+   "price_today": 2444.0,
+   "kind": "목심",
+   "price_per_g": 24.44
+  },
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.984000000+00:00",
+   "price_1month": 2666.0,
+   "name": "돼지",
+   "price_1year": 2572.0,
+   "unit_g": 100,
+   "price_1week": 2640.0,
+   "price_today": 2610.0,
+   "kind": "삼겹살",
+   "price_per_g": 26.1
+  }
+ ],
+ "돼지고기(갈비살)": [
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.990000000+00:00",
+   "price_1month": 1504.0,
+   "name": "수입 돼지고기",
+   "price_1year": 1493.0,
+   "unit_g": 100,
+   "price_1week": 1475.0,
+   "price_today": 1492.0,
+   "kind": "삼겹살",
+   "price_per_g": 14.92
+  },
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.984000000+00:00",
+   "price_1month": 1552.0,
+   "name": "돼지",
+   "price_1year": 1422.0,
+   "unit_g": 100,
+   "price_1week": 1528.0,
+   "price_today": 1530.0,
+   "kind": "갈비",
+   "price_per_g": 15.3
+  },
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.983000000+00:00",
+   "price_1month": 1548.0,
+   "name": "돼지",
+   "price_1year": 1432.0,
+   "unit_g": 100,
+   "price_1week": 1541.0,
+   "price_today": 1564.0,
+   "kind": "앞다리",
+   "price_per_g": 15.64
+  },
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.985000000+00:00",
+   "price_1month": 2479.0,
+   "name": "돼지",
+   "price_1year": 2294.0,
+   "unit_g": 100,
+   "price_1week": 2446.0,
+   "price_today": 2444.0,
+   "kind": "목심",
+   "price_per_g": 24.44
+  },
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.984000000+00:00",
+   "price_1month": 2666.0,
+   "name": "돼지",
+   "price_1year": 2572.0,
+   "unit_g": 100,
+   "price_1week": 2640.0,
+   "price_today": 2610.0,
+   "kind": "삼겹살",
+   "price_per_g": 26.1
+  }
+ ],
+ "돼지고기(다진것)": [
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.990000000+00:00",
+   "price_1month": 1504.0,
+   "name": "수입 돼지고기",
+   "price_1year": 1493.0,
+   "unit_g": 100,
+   "price_1week": 1475.0,
+   "price_today": 1492.0,
+   "kind": "삼겹살",
+   "price_per_g": 14.92
+  },
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.984000000+00:00",
+   "price_1month": 1552.0,
+   "name": "돼지",
+   "price_1year": 1422.0,
+   "unit_g": 100,
+   "price_1week": 1528.0,
+   "price_today": 1530.0,
+   "kind": "갈비",
+   "price_per_g": 15.3
+  },
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.983000000+00:00",
+   "price_1month": 1548.0,
+   "name": "돼지",
+   "price_1year": 1432.0,
+   "unit_g": 100,
+   "price_1week": 1541.0,
+   "price_today": 1564.0,
+   "kind": "앞다리",
+   "price_per_g": 15.64
+  },
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.985000000+00:00",
+   "price_1month": 2479.0,
+   "name": "돼지",
+   "price_1year": 2294.0,
+   "unit_g": 100,
+   "price_1week": 2446.0,
+   "price_today": 2444.0,
+   "kind": "목심",
+   "price_per_g": 24.44
+  },
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.984000000+00:00",
+   "price_1month": 2666.0,
+   "name": "돼지",
+   "price_1year": 2572.0,
+   "unit_g": 100,
+   "price_1week": 2640.0,
+   "price_today": 2610.0,
+   "kind": "삼겹살",
+   "price_per_g": 26.1
+  }
+ ],
+ "돼지고기(등심)": [
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.990000000+00:00",
+   "price_1month": 1504.0,
+   "name": "수입 돼지고기",
+   "price_1year": 1493.0,
+   "unit_g": 100,
+   "price_1week": 1475.0,
+   "price_today": 1492.0,
+   "kind": "삼겹살",
+   "price_per_g": 14.92
+  },
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.984000000+00:00",
+   "price_1month": 1552.0,
+   "name": "돼지",
+   "price_1year": 1422.0,
+   "unit_g": 100,
+   "price_1week": 1528.0,
+   "price_today": 1530.0,
+   "kind": "갈비",
+   "price_per_g": 15.3
+  },
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.983000000+00:00",
+   "price_1month": 1548.0,
+   "name": "돼지",
+   "price_1year": 1432.0,
+   "unit_g": 100,
+   "price_1week": 1541.0,
+   "price_today": 1564.0,
+   "kind": "앞다리",
+   "price_per_g": 15.64
+  },
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.985000000+00:00",
+   "price_1month": 2479.0,
+   "name": "돼지",
+   "price_1year": 2294.0,
+   "unit_g": 100,
+   "price_1week": 2446.0,
+   "price_today": 2444.0,
+   "kind": "목심",
+   "price_per_g": 24.44
+  },
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.984000000+00:00",
+   "price_1month": 2666.0,
+   "name": "돼지",
+   "price_1year": 2572.0,
+   "unit_g": 100,
+   "price_1week": 2640.0,
+   "price_today": 2610.0,
+   "kind": "삼겹살",
+   "price_per_g": 26.1
+  }
+ ],
+ "돼지고기(목살)": [
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.990000000+00:00",
+   "price_1month": 1504.0,
+   "name": "수입 돼지고기",
+   "price_1year": 1493.0,
+   "unit_g": 100,
+   "price_1week": 1475.0,
+   "price_today": 1492.0,
+   "kind": "삼겹살",
+   "price_per_g": 14.92
+  },
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.984000000+00:00",
+   "price_1month": 1552.0,
+   "name": "돼지",
+   "price_1year": 1422.0,
+   "unit_g": 100,
+   "price_1week": 1528.0,
+   "price_today": 1530.0,
+   "kind": "갈비",
+   "price_per_g": 15.3
+  },
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.983000000+00:00",
+   "price_1month": 1548.0,
+   "name": "돼지",
+   "price_1year": 1432.0,
+   "unit_g": 100,
+   "price_1week": 1541.0,
+   "price_today": 1564.0,
+   "kind": "앞다리",
+   "price_per_g": 15.64
+  },
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.985000000+00:00",
+   "price_1month": 2479.0,
+   "name": "돼지",
+   "price_1year": 2294.0,
+   "unit_g": 100,
+   "price_1week": 2446.0,
+   "price_today": 2444.0,
+   "kind": "목심",
+   "price_per_g": 24.44
+  },
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.984000000+00:00",
+   "price_1month": 2666.0,
+   "name": "돼지",
+   "price_1year": 2572.0,
+   "unit_g": 100,
+   "price_1week": 2640.0,
+   "price_today": 2610.0,
+   "kind": "삼겹살",
+   "price_per_g": 26.1
+  }
+ ],
+ "돼지고기(삼겹살)": [
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.990000000+00:00",
+   "price_1month": 1504.0,
+   "name": "수입 돼지고기",
+   "price_1year": 1493.0,
+   "unit_g": 100,
+   "price_1week": 1475.0,
+   "price_today": 1492.0,
+   "kind": "삼겹살",
+   "price_per_g": 14.92
+  },
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.984000000+00:00",
+   "price_1month": 1552.0,
+   "name": "돼지",
+   "price_1year": 1422.0,
+   "unit_g": 100,
+   "price_1week": 1528.0,
+   "price_today": 1530.0,
+   "kind": "갈비",
+   "price_per_g": 15.3
+  },
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.983000000+00:00",
+   "price_1month": 1548.0,
+   "name": "돼지",
+   "price_1year": 1432.0,
+   "unit_g": 100,
+   "price_1week": 1541.0,
+   "price_today": 1564.0,
+   "kind": "앞다리",
+   "price_per_g": 15.64
+  },
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.985000000+00:00",
+   "price_1month": 2479.0,
+   "name": "돼지",
+   "price_1year": 2294.0,
+   "unit_g": 100,
+   "price_1week": 2446.0,
+   "price_today": 2444.0,
+   "kind": "목심",
+   "price_per_g": 24.44
+  },
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.984000000+00:00",
+   "price_1month": 2666.0,
+   "name": "돼지",
+   "price_1year": 2572.0,
+   "unit_g": 100,
+   "price_1week": 2640.0,
+   "price_today": 2610.0,
+   "kind": "삼겹살",
+   "price_per_g": 26.1
+  }
+ ],
+ "돼지고기(안심)": [
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.990000000+00:00",
+   "price_1month": 1504.0,
+   "name": "수입 돼지고기",
+   "price_1year": 1493.0,
+   "unit_g": 100,
+   "price_1week": 1475.0,
+   "price_today": 1492.0,
+   "kind": "삼겹살",
+   "price_per_g": 14.92
+  },
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.984000000+00:00",
+   "price_1month": 1552.0,
+   "name": "돼지",
+   "price_1year": 1422.0,
+   "unit_g": 100,
+   "price_1week": 1528.0,
+   "price_today": 1530.0,
+   "kind": "갈비",
+   "price_per_g": 15.3
+  },
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.983000000+00:00",
+   "price_1month": 1548.0,
+   "name": "돼지",
+   "price_1year": 1432.0,
+   "unit_g": 100,
+   "price_1week": 1541.0,
+   "price_today": 1564.0,
+   "kind": "앞다리",
+   "price_per_g": 15.64
+  },
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.985000000+00:00",
+   "price_1month": 2479.0,
+   "name": "돼지",
+   "price_1year": 2294.0,
+   "unit_g": 100,
+   "price_1week": 2446.0,
+   "price_today": 2444.0,
+   "kind": "목심",
+   "price_per_g": 24.44
+  },
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.984000000+00:00",
+   "price_1month": 2666.0,
+   "name": "돼지",
+   "price_1year": 2572.0,
+   "unit_g": 100,
+   "price_1week": 2640.0,
+   "price_today": 2610.0,
+   "kind": "삼겹살",
+   "price_per_g": 26.1
+  }
+ ],
+ "돼지고기(사태)": [
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.990000000+00:00",
+   "price_1month": 1504.0,
+   "name": "수입 돼지고기",
+   "price_1year": 1493.0,
+   "unit_g": 100,
+   "price_1week": 1475.0,
+   "price_today": 1492.0,
+   "kind": "삼겹살",
+   "price_per_g": 14.92
+  },
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.984000000+00:00",
+   "price_1month": 1552.0,
+   "name": "돼지",
+   "price_1year": 1422.0,
+   "unit_g": 100,
+   "price_1week": 1528.0,
+   "price_today": 1530.0,
+   "kind": "갈비",
+   "price_per_g": 15.3
+  },
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.983000000+00:00",
+   "price_1month": 1548.0,
+   "name": "돼지",
+   "price_1year": 1432.0,
+   "unit_g": 100,
+   "price_1week": 1541.0,
+   "price_today": 1564.0,
+   "kind": "앞다리",
+   "price_per_g": 15.64
+  },
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.985000000+00:00",
+   "price_1month": 2479.0,
+   "name": "돼지",
+   "price_1year": 2294.0,
+   "unit_g": 100,
+   "price_1week": 2446.0,
+   "price_today": 2444.0,
+   "kind": "목심",
+   "price_per_g": 24.44
+  },
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.984000000+00:00",
+   "price_1month": 2666.0,
+   "name": "돼지",
+   "price_1year": 2572.0,
+   "unit_g": 100,
+   "price_1week": 2640.0,
+   "price_today": 2610.0,
+   "kind": "삼겹살",
+   "price_per_g": 26.1
+  }
+ ],
+ "돼지고기(뒷다리)": [
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.990000000+00:00",
+   "price_1month": 1504.0,
+   "name": "수입 돼지고기",
+   "price_1year": 1493.0,
+   "unit_g": 100,
+   "price_1week": 1475.0,
+   "price_today": 1492.0,
+   "kind": "삼겹살",
+   "price_per_g": 14.92
+  },
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.984000000+00:00",
+   "price_1month": 1552.0,
+   "name": "돼지",
+   "price_1year": 1422.0,
+   "unit_g": 100,
+   "price_1week": 1528.0,
+   "price_today": 1530.0,
+   "kind": "갈비",
+   "price_per_g": 15.3
+  },
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.983000000+00:00",
+   "price_1month": 1548.0,
+   "name": "돼지",
+   "price_1year": 1432.0,
+   "unit_g": 100,
+   "price_1week": 1541.0,
+   "price_today": 1564.0,
+   "kind": "앞다리",
+   "price_per_g": 15.64
+  },
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.985000000+00:00",
+   "price_1month": 2479.0,
+   "name": "돼지",
+   "price_1year": 2294.0,
+   "unit_g": 100,
+   "price_1week": 2446.0,
+   "price_today": 2444.0,
+   "kind": "목심",
+   "price_per_g": 24.44
+  },
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.984000000+00:00",
+   "price_1month": 2666.0,
+   "name": "돼지",
+   "price_1year": 2572.0,
+   "unit_g": 100,
+   "price_1week": 2640.0,
+   "price_today": 2610.0,
+   "kind": "삼겹살",
+   "price_per_g": 26.1
+  }
+ ],
+ "돼지갈비양념(시판)": [
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.984000000+00:00",
+   "price_1month": 1552.0,
+   "name": "돼지",
+   "price_1year": 1422.0,
+   "unit_g": 100,
+   "price_1week": 1528.0,
+   "price_today": 1530.0,
+   "kind": "갈비",
+   "price_per_g": 15.3
+  },
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.983000000+00:00",
+   "price_1month": 1548.0,
+   "name": "돼지",
+   "price_1year": 1432.0,
+   "unit_g": 100,
+   "price_1week": 1541.0,
+   "price_today": 1564.0,
+   "kind": "앞다리",
+   "price_per_g": 15.64
+  },
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.985000000+00:00",
+   "price_1month": 2479.0,
+   "name": "돼지",
+   "price_1year": 2294.0,
+   "unit_g": 100,
+   "price_1week": 2446.0,
+   "price_today": 2444.0,
+   "kind": "목심",
+   "price_per_g": 24.44
+  },
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.984000000+00:00",
+   "price_1month": 2666.0,
+   "name": "돼지",
+   "price_1year": 2572.0,
+   "unit_g": 100,
+   "price_1week": 2640.0,
+   "price_today": 2610.0,
+   "kind": "삼겹살",
+   "price_per_g": 26.1
+  }
+ ],
+ "돼지부산물(창자)": [
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.984000000+00:00",
+   "price_1month": 1552.0,
+   "name": "돼지",
+   "price_1year": 1422.0,
+   "unit_g": 100,
+   "price_1week": 1528.0,
+   "price_today": 1530.0,
+   "kind": "갈비",
+   "price_per_g": 15.3
+  },
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.983000000+00:00",
+   "price_1month": 1548.0,
+   "name": "돼지",
+   "price_1year": 1432.0,
+   "unit_g": 100,
+   "price_1week": 1541.0,
+   "price_today": 1564.0,
+   "kind": "앞다리",
+   "price_per_g": 15.64
+  },
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.985000000+00:00",
+   "price_1month": 2479.0,
+   "name": "돼지",
+   "price_1year": 2294.0,
+   "unit_g": 100,
+   "price_1week": 2446.0,
+   "price_today": 2444.0,
+   "kind": "목심",
+   "price_per_g": 24.44
+  },
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.984000000+00:00",
+   "price_1month": 2666.0,
+   "name": "돼지",
+   "price_1year": 2572.0,
+   "unit_g": 100,
+   "price_1week": 2640.0,
+   "price_today": 2610.0,
+   "kind": "삼겹살",
+   "price_per_g": 26.1
+  }
+ ],
+ "돼지부산물(머리고기)": [
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.984000000+00:00",
+   "price_1month": 1552.0,
+   "name": "돼지",
+   "price_1year": 1422.0,
+   "unit_g": 100,
+   "price_1week": 1528.0,
+   "price_today": 1530.0,
+   "kind": "갈비",
+   "price_per_g": 15.3
+  },
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.983000000+00:00",
+   "price_1month": 1548.0,
+   "name": "돼지",
+   "price_1year": 1432.0,
+   "unit_g": 100,
+   "price_1week": 1541.0,
+   "price_today": 1564.0,
+   "kind": "앞다리",
+   "price_per_g": 15.64
+  },
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.985000000+00:00",
+   "price_1month": 2479.0,
+   "name": "돼지",
+   "price_1year": 2294.0,
+   "unit_g": 100,
+   "price_1week": 2446.0,
+   "price_today": 2444.0,
+   "kind": "목심",
+   "price_per_g": 24.44
+  },
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.984000000+00:00",
+   "price_1month": 2666.0,
+   "name": "돼지",
+   "price_1year": 2572.0,
+   "unit_g": 100,
+   "price_1week": 2640.0,
+   "price_today": 2610.0,
+   "kind": "삼겹살",
+   "price_per_g": 26.1
+  }
+ ],
+ "돼지고기(족발_삶은것_조미된것)": [
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.990000000+00:00",
+   "price_1month": 1504.0,
+   "name": "수입 돼지고기",
+   "price_1year": 1493.0,
+   "unit_g": 100,
+   "price_1week": 1475.0,
+   "price_today": 1492.0,
+   "kind": "삼겹살",
+   "price_per_g": 14.92
+  },
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.984000000+00:00",
+   "price_1month": 1552.0,
+   "name": "돼지",
+   "price_1year": 1422.0,
+   "unit_g": 100,
+   "price_1week": 1528.0,
+   "price_today": 1530.0,
+   "kind": "갈비",
+   "price_per_g": 15.3
+  },
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.983000000+00:00",
+   "price_1month": 1548.0,
+   "name": "돼지",
+   "price_1year": 1432.0,
+   "unit_g": 100,
+   "price_1week": 1541.0,
+   "price_today": 1564.0,
+   "kind": "앞다리",
+   "price_per_g": 15.64
+  },
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.985000000+00:00",
+   "price_1month": 2479.0,
+   "name": "돼지",
+   "price_1year": 2294.0,
+   "unit_g": 100,
+   "price_1week": 2446.0,
+   "price_today": 2444.0,
+   "kind": "목심",
+   "price_per_g": 24.44
+  },
+  {
+   "unit": "100g",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.984000000+00:00",
+   "price_1month": 2666.0,
+   "name": "돼지",
+   "price_1year": 2572.0,
+   "unit_g": 100,
+   "price_1week": 2640.0,
+   "price_today": 2610.0,
+   "kind": "삼겹살",
+   "price_per_g": 26.1
+  }
+ ],
+ "배추김치": [
+  {
+   "unit": "1포기",
+   "category": "채소류",
+   "updated_at": "2026-03-25T14:21:19.909000000+00:00",
+   "price_1month": 5122.0,
+   "name": "배추",
+   "price_1year": 5599.0,
+   "unit_g": 3000,
+   "price_1week": 4713.0,
+   "price_today": 4574.0,
+   "kind": "월동(1포기)",
+   "price_per_g": 1.5246666666666666
+  }
+ ],
+ "바지락살": [
+  {
+   "unit": "1kg",
+   "category": "수산물",
+   "updated_at": "2026-03-25T14:21:20.023000000+00:00",
+   "price_1month": 10811.0,
+   "name": "바지락",
+   "unit_g": 1000,
+   "price_1week": 13308.0,
+   "price_today": 12558.0,
+   "kind": "바지락(1kg)",
+   "price_per_g": 12.558
+  }
+ ],
+ "다시마(말린것)": [
+  {
+   "unit": "100g",
+   "category": "수산물",
+   "updated_at": "2026-03-25T14:21:20.022000000+00:00",
+   "price_1month": 3166.0,
+   "name": "건다시마",
+   "price_1year": 3763.0,
+   "unit_g": 100,
+   "price_1week": 3081.0,
+   "price_today": 3133.0,
+   "kind": "완도산(100g)",
+   "price_per_g": 31.33
+  }
+ ],
+ "우유": [
+  {
+   "unit": "1L",
+   "category": "축산물",
+   "updated_at": "2026-03-25T14:21:19.993000000+00:00",
+   "price_1month": 2904.0,
+   "name": "우유",
+   "price_1year": 2979.0,
+   "unit_g": 1000,
+   "price_1week": 2905.0,
+   "price_today": 2911.0,
+   "kind": "흰우유",
+   "price_per_g": 2.911
+  }
+ ],
+ "갈치": [
+  {
+   "unit": "1마리",
+   "category": "수산물",
+   "updated_at": "2026-03-25T14:21:19.998000000+00:00",
+   "price_1month": 4669.0,
+   "name": "갈치",
+   "unit_g": 700,
+   "price_1week": 5240.0,
+   "price_today": 4260.0,
+   "kind": "국산(냉장)(1마리)",
+   "price_per_g": 6.085714285714285
+  },
+  {
+   "unit": "1마리",
+   "category": "수산물",
+   "updated_at": "2026-03-25T14:21:19.999000000+00:00",
+   "price_1month": 5612.0,
+   "name": "갈치",
+   "price_1year": 4983.0,
+   "unit_g": 700,
+   "price_1week": 5690.0,
+   "price_today": 5325.0,
+   "kind": "국산(냉동)(1마리)",
+   "price_per_g": 7.607142857142857
+  },
+  {
+   "unit": "1마리",
+   "category": "수산물",
+   "updated_at": "2026-03-25T14:21:20.000000000+00:00",
+   "name": "갈치",
+   "unit_g": 700,
+   "price_1week": 8657.0,
+   "price_today": 9323.0,
+   "kind": "수입산(냉동)(1마리)",
+   "price_per_g": 13.31857142857143
+  }
+ ],
+ "꽁치": [
+  {
+   "unit": "5마리",
+   "category": "수산물",
+   "updated_at": "2026-03-25T14:21:19.997000000+00:00",
+   "price_1month": 6697.0,
+   "name": "꽁치",
+   "price_1year": 7208.0,
+   "unit_g": 750,
+   "price_1week": 7170.0,
+   "price_today": 7108.0,
+   "kind": "냉동(수입)(5마리)",
+   "price_per_g": 9.477333333333334
+  }
+ ],
+ "노가리(말린것)": [
+  {
+   "unit": "1kg",
+   "category": "수산물",
+   "updated_at": "2026-03-25T14:21:20.021000000+00:00",
+   "price_1month": 6139.0,
+   "name": "가리비",
+   "price_1year": 6486.0,
+   "unit_g": 1000,
+   "price_1week": 6130.0,
+   "price_today": 6356.0,
+   "kind": "해만가리비(홍가리비)(1kg)",
+   "price_per_g": 6.356
+  }
+ ],
+ "명태포(말린것)": [
+  {
+   "surge_rate": 15.5,
+   "unit": "1마리",
+   "category": "수산물",
+   "updated_at": "2026-03-25T14:21:20.004000000+00:00",
+   "price_1month": 3028.0,
+   "name": "명태",
+   "unit_g": 600,
+   "price_1week": 2500.0,
+   "price_today": 2500.0,
+   "kind": "냉동(원양수입통합)(1마리)",
+   "price_per_g": 4.166666666666667
+  },
+  {
+   "unit": "1kg",
+   "category": "수산물",
+   "updated_at": "2026-03-25T14:21:20.005000000+00:00",
+   "price_1month": 7237.0,
+   "name": "명태",
+   "price_1year": 8102.0,
+   "unit_g": 1000,
+   "price_1week": 6907.0,
+   "price_today": 6907.0,
+   "kind": "냉동가공(1kg)",
+   "price_per_g": 6.907
+  }
+ ],
+ "멸치(육수용)": [
+  {
+   "unit": "1kg",
+   "category": "수산물",
+   "updated_at": "2026-03-25T14:21:20.015000000+00:00",
+   "price_1month": 6070.0,
+   "name": "멸치액젓",
+   "price_1year": 5738.0,
+   "unit_g": 1000,
+   "price_1week": 5866.0,
+   "price_today": 5866.0,
+   "kind": "멸치액젓(1kg)",
+   "price_per_g": 5.866
+  },
+  {
+   "unit": "100g",
+   "category": "수산물",
+   "updated_at": "2026-03-25T14:21:20.011000000+00:00",
+   "price_1month": 3221.0,
+   "name": "마른멸치",
+   "price_1year": 2952.0,
+   "unit_g": 100,
+   "price_1week": 3305.0,
+   "price_today": 3124.0,
+   "kind": "마른멸치(100g)",
+   "price_per_g": 31.24
+  }
+ ],
+ "멸치액젓": [
+  {
+   "unit": "1kg",
+   "category": "수산물",
+   "updated_at": "2026-03-25T14:21:20.015000000+00:00",
+   "price_1month": 6070.0,
+   "name": "멸치액젓",
+   "price_1year": 5738.0,
+   "unit_g": 1000,
+   "price_1week": 5866.0,
+   "price_today": 5866.0,
+   "kind": "멸치액젓(1kg)",
+   "price_per_g": 5.866
+  }
+ ],
+ "멸치젓": [
+  {
+   "unit": "1kg",
+   "category": "수산물",
+   "updated_at": "2026-03-25T14:21:20.015000000+00:00",
+   "price_1month": 6070.0,
+   "name": "멸치액젓",
+   "price_1year": 5738.0,
+   "unit_g": 1000,
+   "price_1week": 5866.0,
+   "price_today": 5866.0,
+   "kind": "멸치액젓(1kg)",
+   "price_per_g": 5.866
+  }
+ ],
+ "삼치(생것)": [
+  {
+   "unit": "1마리",
+   "category": "수산물",
+   "updated_at": "2026-03-25T14:21:20.005000000+00:00",
+   "price_1month": 8437.0,
+   "name": "삼치",
+   "unit_g": 700,
+   "price_1week": 8479.0,
+   "price_today": 7614.0,
+   "kind": "냉장(1마리)",
+   "price_per_g": 10.877142857142857
+  }
+ ],
+ "오징어": [
+  {
+   "unit": "1마리",
+   "category": "수산물",
+   "updated_at": "2026-03-25T14:21:20.009000000+00:00",
+   "price_1month": 3959.0,
+   "name": "물오징어",
+   "price_1year": 3102.0,
+   "unit_g": 400,
+   "price_1week": 3598.0,
+   "price_today": 3220.0,
+   "kind": "원양(냉동)(1마리)",
+   "price_per_g": 8.05
+  },
+  {
+   "unit": "1마리",
+   "category": "수산물",
+   "updated_at": "2026-03-25T14:21:20.008000000+00:00",
+   "name": "물오징어",
+   "unit_g": 400,
+   "price_today": 6315.0,
+   "kind": "연근해(냉동)(1마리)",
+   "price_per_g": 15.7875
+  },
+  {
+   "unit": "1마리",
+   "category": "수산물",
+   "updated_at": "2026-03-25T14:21:20.006000000+00:00",
+   "price_1month": 7891.0,
+   "name": "물오징어",
+   "price_1year": 8543.0,
+   "unit_g": 400,
+   "price_1week": 11900.0,
+   "price_today": 12733.0,
+   "kind": "연근해(신선 냉장)(1마리)",
+   "price_per_g": 31.8325
+  },
+  {
+   "unit": "10마리",
+   "category": "수산물",
+   "updated_at": "2026-03-25T14:21:20.012000000+00:00",
+   "price_1month": 82049.0,
+   "name": "마른오징어",
+   "price_1year": 78791.0,
+   "unit_g": 1000,
+   "price_1week": 77343.0,
+   "price_today": 74733.0,
+   "kind": "마른오징어(10마리)",
+   "price_per_g": 74.733
+  }
+ ],
+ "꽃게살(통조림)": [
+  {
+   "unit": "1kg",
+   "category": "수산물",
+   "updated_at": "2026-03-25T14:21:20.019000000+00:00",
+   "price_1month": 19042.0,
+   "name": "꽃게",
+   "unit_g": 1000,
+   "price_1week": 17853.0,
+   "price_today": 19200.0,
+   "kind": "암꽃게(냉동)(1kg)",
+   "price_per_g": 19.2
+  }
+ ],
+ "김(말린것)": [
+  {
+   "unit": "10장",
+   "category": "수산물",
+   "updated_at": "2026-03-25T14:21:20.012000000+00:00",
+   "price_1month": 1405.0,
+   "name": "김",
+   "price_1year": 1367.0,
+   "unit_g": 20,
+   "price_1week": 1348.0,
+   "price_today": 1348.0,
+   "kind": "마른김(10장)",
+   "price_per_g": 67.4
+  },
+  {
+   "unit": "10장",
+   "category": "수산물",
+   "updated_at": "2026-03-25T14:21:20.013000000+00:00",
+   "price_1month": 2119.0,
+   "name": "김",
+   "price_1year": 2162.0,
+   "unit_g": 20,
+   "price_1week": 2169.0,
+   "price_today": 2169.0,
+   "kind": "얼구운김(10장)",
+   "price_per_g": 108.45
+  }
+ ],
+ "미역(말린것)": [
+  {
+   "unit": "100g",
+   "category": "수산물",
+   "updated_at": "2026-03-25T14:21:20.013000000+00:00",
+   "price_1month": 3036.0,
+   "name": "마른미역",
+   "price_1year": 3182.0,
+   "unit_g": 100,
+   "price_1week": 2907.0,
+   "price_today": 2938.0,
+   "kind": "마른미역(100g)",
+   "price_per_g": 29.38
+  }
+ ]
+}

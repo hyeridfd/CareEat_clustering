@@ -25,7 +25,8 @@ const MEALS = ['아침', '점심', '저녁']
 const SUBTABS = [
   { key: 'menu', label: '28일 식단표' },
   { key: 'serving', label: '개인 배식표' },
-  { key: 'subs', label: '대체찬·발주·죽' },
+  { key: 'purchase', label: '주간 발주' },
+  { key: 'subs', label: '대체찬·죽' },
   { key: 'settings', label: '재고·선호도·설정' },
 ]
 // 진행 문구 → 전체 진행률(0~1). 실측: 최적화 ≈ 절반, 개인별 배식량 ≈ 절반, 나머지는 몇 초
@@ -39,6 +40,7 @@ function progressOf(run) {
   if ((m = msg.match(/(\d+)\/(\d+)세대/))) return o0 + (o1 - o0) * (+m[1] / +m[2])
   if ((m = msg.match(/(\d+)\/(\d+)끼/))) return s0 + (s1 - s0) * (+m[1] / +m[2])
   if (msg.includes('저장')) return 0.98
+  if (msg.includes('발주')) return 0.975
   if (msg.includes('배식량')) return s0
   if (msg.includes('대체찬')) return s0 - 0.04
   if (msg.includes('식사형태')) return s0 - 0.07
@@ -77,11 +79,11 @@ const STAGES = [
   { key: '식사형태', label: '죽·백김치' },
   { key: '대체찬', label: '대체찬' },
   { key: '배식량', label: '개인별 배식량' },
-  { key: '저장', label: '저장' },
+  { key: '저장', label: '발주·저장' },
 ]
 function stageIdx(msg) {
   msg = String(msg || '')
-  if (msg.includes('저장')) return 5
+  if (msg.includes('저장') || msg.includes('발주')) return 5
   if (msg.includes('배식량')) return 4
   if (msg.includes('대체찬')) return 3
   if (msg.includes('식사형태')) return 2
@@ -318,6 +320,8 @@ export default function DietDesign() {
           onEdited={async (id) => { setRunId(id); await loadStatus() }} onRerun={start} setErr={setErr} />
       ) : sub === 'serving' ? (
         <ServingTab run={live} />
+      ) : sub === 'purchase' ? (
+        <PurchaseTab run={live} />
       ) : (
         <SubsTab run={live} />
       )}
@@ -569,7 +573,109 @@ function ServingTab({ run }) {
   )
 }
 
-/* ─────────────────────────── ③ 대체찬·발주·죽 ─────────────────────────── */
+/* ─────────────────────────── ③ 주간 발주 ─────────────────────────── */
+
+const won = (v) => (v == null ? '–' : `${Math.round(v).toLocaleString()}원`)
+const kg = (g) => (g == null ? '–' : g >= 1000 ? `${(g / 1000).toFixed(1)}kg` : `${Math.round(g)}g`)
+
+function downloadCsv(filename, rows, cols) {
+  const esc = (v) => { const t = v == null ? '' : String(v); return /[",\n]/.test(t) ? `"${t.replaceAll('"', '""')}"` : t }
+  const body = [cols.map((c) => c.label).join(','), ...rows.map((r) => cols.map((c) => esc(c.get(r))).join(','))].join('\n')
+  const blob = new Blob(['﻿' + body], { type: 'text/csv;charset=utf-8' })
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename; a.click()
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+}
+
+function PurchaseTab({ run }) {
+  const pu = run.result?.purchase
+  const [wi, setWi] = useState(0)
+  const [q, setQ] = useState('')
+  const [onlyBuy, setOnlyBuy] = useState(true)
+  if (!pu?.weeks?.length) {
+    return <div className="surface p-10 text-center text-sm text-muted">이 설계에는 주간 발주 계산이 없습니다. 식단 설계를 다시 실행하면 함께 계산됩니다.</div>
+  }
+  const w = pu.weeks[wi]
+  const t = w.합계
+  const ing = w.식재료.filter((r) => (!onlyBuy || r['구매량(g)'] > 0) && (!q || r.식재료명.includes(q) || (r.상품명 || '').includes(q)))
+  const total = (t.식재료_금액 || 0) + (t.제품_금액 || 0)
+
+  const exportWeek = () => {
+    const rows = [
+      ...w.식재료.filter((r) => r['구매량(g)'] > 0).map((r) => ({ 구분: '식재료', 품목: r.식재료명, 상품명: r.상품명, 규격: r['규격(g)'], 필요: r['필요량(g)'], 재고: r['재고사용(g)'], 구매: r['구매량(g)'], 수량: r.수량, 단가: r.단가, 금액: r.금액 })),
+      ...w.제품.map((r) => ({ 구분: '고령친화식품', 품목: r.제품, 상품명: `${r.업체 || ''} ${r.제품}`.trim(), 규격: r['포장(g)'], 필요: r['필요량(g)'], 재고: 0, 구매: r['필요량(g)'], 수량: r.수량, 단가: r.단가, 금액: r.금액 })),
+    ]
+    downloadCsv(`발주_${w.주차}주차_${w.기간 || w.일차}.csv`, rows, [
+      { label: '주차', get: () => w.주차 }, { label: '입고일', get: () => w.입고일 || '' }, { label: '구분', get: (r) => r.구분 },
+      { label: '품목', get: (r) => r.품목 }, { label: '상품명', get: (r) => r.상품명 }, { label: '규격(g)', get: (r) => r.규격 },
+      { label: '필요량(g)', get: (r) => r.필요 }, { label: '재고사용(g)', get: (r) => r.재고 }, { label: '구매량(g)', get: (r) => r.구매 },
+      { label: '수량', get: (r) => r.수량 }, { label: '단가(원)', get: (r) => r.단가 }, { label: '금액(원)', get: (r) => r.금액 },
+    ])
+  }
+
+  return (
+    <div className="space-y-4">
+      <Section title="주간 발주"
+        right={<>
+          {pu.weeks.map((x, i) => (
+            <button key={x.주차} onClick={() => setWi(i)} className={`px-3 py-1 rounded-full text-xs font-semibold ${wi === i ? 'bg-navy-900 text-white' : 'bg-navy-50 text-navy-700'}`}>
+              {x.주차}주차{x.기간 ? ` · ${x.기간}` : ''}
+            </button>
+          ))}
+          <button className="btn-secondary text-xs" onClick={exportWeek}>CSV 내려받기</button>
+        </>}>
+        <p className="mb-3 text-xs text-muted leading-5">
+          {w.일차}{w.입고일 ? ` · ${w.입고일} 입고 기준` : ' · 재고 화면에서 식단 1일차 날짜를 넣으면 날짜로 표시됩니다'}.
+          개인별 배식량(대체찬·죽·백김치 반영)으로 식재료 실사용량을 합산하고, 유통기한이 남은 재고를 먼저 뺀 양입니다. 국·반찬 양념은 저염 조리 감량(40%)을 반영했습니다.
+        </p>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <Stat label="예상 발주 금액" value={total ? Math.round(total).toLocaleString() : '–'} unit="원"
+            sub={t.단가미등록_품목 ? `단가 미등록 ${t.단가미등록_품목}품목 제외` : '전체 단가 반영'} tone="bg-navy-50" />
+          <Stat label="식재료" value={t.식재료_품목} unit="품목" sub={`${won(t.식재료_금액)}${t.단가미등록_품목 ? ` · 미등록 ${t['단가미등록_구매량(kg)']}kg` : ''}`} />
+          <Stat label="고령친화식품" value={t.제품_팩} unit="팩" sub={`${won(t.제품_금액)} · 부가세 별도`} />
+          <Stat label="재고 사용" value={t['재고사용(kg)']} unit="kg" sub="이번 주에 쓰는 기존 재고" />
+        </div>
+        {!pu.price_count && (
+          <p className="mt-3 text-xs rounded-xl bg-amber-50 text-amber-800 px-3 py-2">
+            식재료 단가가 아직 등록되지 않아 구매량만 표시됩니다. 식재료 상품·단가(ingredient_prices.json)를 넣으면 상품명·수량·금액이 함께 나옵니다.
+          </p>
+        )}
+      </Section>
+
+      <Section title={`식재료 (${ing.length})`}
+        right={<>
+          <label className="flex items-center gap-1.5 text-xs text-muted">
+            <input type="checkbox" checked={onlyBuy} onChange={(e) => setOnlyBuy(e.target.checked)} />구매 필요한 것만
+          </label>
+          <input className="form-input !py-1.5 !w-40" placeholder="식재료 검색" value={q} onChange={(e) => setQ(e.target.value)} />
+        </>}>
+        <Table rows={ing} minW={900} rowKey={(r) => r.식재료명} cols={[
+          { key: '식재료명', label: '식재료', cls: 'font-semibold text-navy-900' },
+          { key: '필요량(g)', label: '필요량', right: true, render: (r) => kg(r['필요량(g)']) },
+          { key: '재고사용(g)', label: '재고 사용', right: true, render: (r) => (r['재고사용(g)'] ? <span className="text-emerald-700">{kg(r['재고사용(g)'])}</span> : '–') },
+          { key: '구매량(g)', label: '구매량', right: true, render: (r) => <b>{kg(r['구매량(g)'])}</b> },
+          { key: '상품명', label: '구매 상품', render: (r) => r.상품명 ? <span>{r.상품명}<span className="text-muted"> · {kg(r['규격(g)'])}</span></span> : <span className="text-muted">단가 미등록</span> },
+          { key: '수량', label: '수량', right: true, render: (r) => (r.수량 ? `${r.수량}개` : '–') },
+          { key: '단가', label: '단가', right: true, render: (r) => won(r.단가) },
+          { key: '금액', label: '금액', right: true, render: (r) => (r.금액 ? won(r.금액) : '–') },
+          { key: '메뉴수', label: '쓰는 메뉴', right: true },
+        ]} />
+      </Section>
+
+      <Section title={`고령친화식품 (${w.제품.length})`}>
+        <Table rows={w.제품} minW={760} empty="이번 주 대체찬이 없습니다." cols={[
+          { key: '제품', label: '제품', cls: 'font-semibold text-navy-900' }, { key: '업체', label: '업체', cls: 'text-muted' },
+          { key: '인분', label: '인분', right: true }, { key: '필요량(g)', label: '필요량', right: true, render: (r) => kg(r['필요량(g)']) },
+          { key: '포장(g)', label: '포장', right: true, render: (r) => (r['포장(g)'] ? `${kg(r['포장(g)'])}(5인분)` : '–') },
+          { key: '수량', label: '수량', right: true, render: (r) => (r.수량 != null ? `${r.수량}팩` : '–') },
+          { key: '단가', label: '단가', right: true, render: (r) => won(r.단가) },
+          { key: '금액', label: '금액', right: true, render: (r) => <b>{won(r.금액)}</b> },
+        ]} />
+      </Section>
+    </div>
+  )
+}
+
+/* ─────────────────────────── ④ 대체찬·죽 ─────────────────────────── */
 
 function SubsTab({ run }) {
   const res = run.result || {}
