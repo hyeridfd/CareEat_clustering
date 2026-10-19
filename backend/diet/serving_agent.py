@@ -170,6 +170,175 @@ def _snap_levels(x, obj, cons):
     return XX[:, int(np.argmin(score))]
 
 
+# ══════════════════════════════════════════════════════════════
+# [2026-10-19] 빠른 배식 (FAST_SERVING = True)
+#   _balanced_ratios(SLSQP → 단계 맞춤)를 어르신·끼니마다 4,000번 넘게 도는 대신,
+#   처음부터 배식 단계(SERVING_LEVELS) 위에서 전체 (어르신 × 끼니)를 한꺼번에 탐색한다.
+#     · 점수 = 1e4 × 기준 위반² + 목적함수  ← _snap_levels 와 같은 기준
+#     · 시작점 여러 개(개인 비율 근처 · 나트륨 맞춘 비율 근처 · 1인분) → 칸 1개 ±1·±2단계,
+#       칸 2개 동시(하나 올리고 하나 내림) 이동 중 점수가 가장 많이 줄어드는 이동을 반복
+#     · 모든 행을 numpy 로 동시에 계산 → 수천 건이 1초 안팎
+# ══════════════════════════════════════════════════════════════
+FAST_SERVING = True
+_KEYS = ("energy", "protein", "sodium", "sugar", "sat_fat", "fat")
+
+
+def _batch_discrete(rows: list, max_iter: int = 60, init=None, return_score=False):
+    """rows: [(patient, menu_by_slot, base_ratio)] → [({칸: 비율}, 조정결과)]"""
+    import itertools
+    import numpy as np
+    slots = [s for s, _ in SLOT_CATS]
+    R, K, Q = len(rows), len(slots), len(_KEYS)
+    L = np.array(SERVING_LEVELS, dtype=float)
+    NL = len(L)
+    V = np.zeros((R, K, Q)); Fx = np.zeros((R, Q))
+    free = np.zeros((R, K), bool); fixed1 = np.zeros((R, K), bool)
+    cap = np.full((R, 4), np.inf)                  # sodium, sugar, sat_fat, fat
+    pmin = np.zeros(R); pmax = np.full(R, np.inf)
+    emin = np.zeros(R); emax = np.zeros(R); etg = np.zeros(R); p0 = np.zeros(R)
+    for r, (p, mbs, base) in enumerate(rows):
+        c = p.constraint
+        for k, s in enumerate(slots):
+            m = mbs.get(s) or {}
+            vals = [float(m.get(q, 0) or 0) for q in _KEYS]
+            if m.get("is_product"):
+                fixed1[r, k] = True; Fx[r] += vals
+            elif (m.get("weight") or 0) > 0:
+                free[r, k] = True; V[r, k] = vals
+        for j, q in enumerate(("sodium", "sugar", "sat_fat", "fat")):
+            v = getattr(c, f"{q}_max", None)
+            if v:
+                cap[r, j] = v
+        if c.protein_max:
+            pmax[r] = c.protein_max
+        elif c.protein_min:
+            pmin[r] = c.protein_min
+        emin[r], emax[r] = c.energy_min or 500, c.energy_max or 800
+        etg[r] = _target_energy(p)
+        p0[r] = max(base, 1e-3)
+    Na = V[:, :, 2]
+    nfree = np.maximum(free.sum(1), 1)
+    na_mean = (Na * free).sum(1) / nfree
+    w = np.where(na_mean[:, None] > 0, (1 - SPREAD) + SPREAD * Na / np.where(na_mean > 0, na_mean, 1)[:, None], 1.0) * free
+
+    capd = np.where(np.isfinite(cap), cap, 1); pmaxd = np.where(np.isfinite(pmax), pmax, 1); pmind = np.where(pmin > 0, pmin, 1)
+
+    def totals(X, ri=None):                         # X (n, K) 비율 → (n, Q)
+        ri = slice(None) if ri is None else ri
+        return Fx[ri] + np.einsum("rk,rkq->rq", X, V[ri])
+
+    def score(X, ri=None):
+        T = totals(X, ri)
+        ri = slice(None) if ri is None else ri
+        viol = (np.maximum(0, (T[:, [2, 3, 4, 5]] - cap[ri]) / capd[ri]) ** 2).sum(1)
+        viol += np.where(np.isfinite(pmax[ri]), np.maximum(0, (T[:, 1] - pmax[ri]) / pmaxd[ri]) ** 2, 0)
+        viol += np.where(pmin[ri] > 0, np.maximum(0, (pmin[ri] - T[:, 1]) / pmind[ri]) ** 2, 0)
+        viol += np.maximum(0, (T[:, 0] - emax[ri]) / emax[ri]) ** 2 + np.maximum(0, (emin[ri] - T[:, 0]) / emin[ri]) ** 2
+        obj = (w[ri] * ((X - p0[ri][:, None]) / p0[ri][:, None]) ** 2).sum(1) + W_ENERGY * ((T[:, 0] - etg[ri]) / etg[ri]) ** 2
+        # 기준을 조금이라도 넘으면 고정 벌점 → 기준을 모두 맞추는 조합을 우선 (그다음 덜 줄이는 조합)
+        return 1e4 * viol + 5.0 * (viol > 1e-7) + obj, viol
+
+    def lv(idx):
+        return np.where(free, L[idx], np.where(fixed1, 1.0, 0.0))
+
+    # 이동 후보: 칸 1개 ±1·±2단계, 칸 2개 (하나 +1 · 하나 −1)
+    moves = [(a, d, None, 0) for a in range(K) for d in (-2, -1, 1, 2)]
+    moves += [(a, 1, b, -1) for a, b in itertools.permutations(range(K), 2)]
+
+    def improve(idx):
+        cur, _ = score(lv(idx))
+        for _ in range(max_iter):
+            best_s, best_i = cur.copy(), None
+            cand_idx = []
+            for a, da, b, db in moves:
+                ni = idx.copy()
+                ni[:, a] = np.clip(ni[:, a] + da, 0, NL - 1)
+                if b is not None:
+                    ni[:, b] = np.clip(ni[:, b] + db, 0, NL - 1)
+                cand_idx.append(ni)
+            S = np.stack([score(lv(ni))[0] for ni in cand_idx])          # (이동 수, R)
+            j = S.argmin(0)
+            sbest = S[j, np.arange(R)]
+            better = sbest < cur - 1e-9
+            if not better.any():
+                break
+            rr = np.where(better)[0]
+            stack = np.stack(cand_idx)                                    # (이동 수, R, K)
+            idx[rr] = stack[j[rr], rr]
+            cur[rr] = sbest[rr]
+        return idx, cur
+
+    near = lambda x: np.abs(L[None, None, :] - x[:, :, None]).argmin(2)
+    starts = [near(np.repeat(p0[:, None], K, 1)), near(np.ones((R, K)))]
+    # 나트륨 상한에 맞춰 전체를 줄인 비율 근처
+    T0 = totals(lv(starts[0]))
+    shrink = np.clip(np.minimum(1.0, (cap[:, 0] - Fx[:, 2]) / np.maximum(T0[:, 2] - Fx[:, 2], 1e-6)), 0.25, 1.0)
+    starts.append(near(np.repeat((p0 * shrink)[:, None], K, 1)))
+    # 반찬은 줄이고 밥으로 열량을 채운 시작점
+    rice = slots.index("밥")
+    for f in (0.5, 0.75):
+        X0 = np.repeat((p0 * f)[:, None], K, 1); X0[:, rice] = np.minimum(2.0, p0 * 1.5)
+        starts.append(near(X0))
+    if init is not None:                                   # (검증용) 주어진 비율의 점수만 계산
+        best_idx = near(np.asarray(init, dtype=float))
+        sc_final, viol = score(lv(best_idx))
+        return sc_final, viol
+    best_idx, best_sc = None, None
+    for st in starts:
+        idx, sc = improve(st.copy())
+        if best_idx is None:
+            best_idx, best_sc = idx, sc
+        else:
+            m = sc < best_sc
+            best_idx[m], best_sc[m] = idx[m], sc[m]
+
+    # 마무리: 칸마다 현재 단계 ±1 의 모든 조합(최대 3^6 = 729개)을 한 번에 비교 (_snap_levels 와 같은 방식)
+    offs = np.array(list(itertools.product((-1, 0, 1), repeat=K)))           # (C, K)
+
+    def score3(Xc, rr):                              # Xc (n, C, K) → (n, C)
+        T = Fx[rr][:, None, :] + np.einsum("nck,nkq->ncq", Xc, V[rr])
+        cp, cd = cap[rr][:, None, :], capd[rr][:, None, :]
+        viol = (np.maximum(0, (T[..., [2, 3, 4, 5]] - cp) / cd) ** 2).sum(-1)
+        pm, pmd, pn, pnd = pmax[rr][:, None], pmaxd[rr][:, None], pmin[rr][:, None], pmind[rr][:, None]
+        viol += np.where(np.isfinite(pm), np.maximum(0, (T[..., 1] - pm) / pmd) ** 2, 0)
+        viol += np.where(pn > 0, np.maximum(0, (pn - T[..., 1]) / pnd) ** 2, 0)
+        ex, en, et = emax[rr][:, None], emin[rr][:, None], etg[rr][:, None]
+        viol += np.maximum(0, (T[..., 0] - ex) / ex) ** 2 + np.maximum(0, (en - T[..., 0]) / en) ** 2
+        pp = p0[rr][:, None, None]
+        obj = (w[rr][:, None, :] * ((Xc - pp) / pp) ** 2).sum(-1) + W_ENERGY * ((T[..., 0] - et) / et) ** 2
+        return 1e4 * viol + 5.0 * (viol > 1e-7) + obj
+
+    for _ in range(3):
+        changed = False
+        for c0 in range(0, R, 500):
+            rr = np.arange(c0, min(R, c0 + 500)); n = len(rr)
+            fr = free[rr][:, None, :]
+            cand = np.clip(best_idx[rr][:, None, :] + offs[None] * fr, 0, NL - 1)          # (n, C, K)
+            Xc = np.where(fr, L[cand], np.where(fixed1[rr][:, None, :], 1.0, 0.0))
+            sc = score3(Xc, rr)
+            j = sc.argmin(1)
+            new_sc = sc[np.arange(n), j]
+            m = new_sc < best_sc[rr] - 1e-9
+            if m.any():
+                changed = True
+                best_idx[rr[m]] = cand[np.arange(n)[m], j[m]]
+                best_sc[rr[m]] = new_sc[m]
+        if not changed:
+            break
+    X = lv(best_idx)
+    sc_final, viol = score(X)
+    if return_score:
+        return sc_final, viol
+    out = []
+    for r in range(R):
+        ratios = {s: round(float(X[r, k]), 3) for k, s in enumerate(slots)}
+        if not free[r].any():
+            out.append((ratios, "제품만"))
+        else:
+            out.append((ratios, "조정완료" if viol[r] <= 1e-7 else "조정불가(기준 일부 초과)"))
+    return out
+
+
 def _calc_ratio(patient, facility_avg_energy: float) -> float:
     """
     개인별 배식 비율 계산
@@ -249,8 +418,31 @@ def serving_agent(state: MealPlanState) -> dict:
     serving_map: dict = {}
     _cb = state.get("progress_cb")          # 서버 진행률 표시용 (끼니 i / 전체)
 
+    # [빠른 배식] 칸별 비율을 끼니 묶음(CHUNK끼) 단위로 한꺼번에 계산해 둠
+    pre = {}
+    if BALANCED_SERVING and FAST_SERVING:
+        CHUNK = 14
+        rows_all = list(df.iterrows())
+        for c0 in range(0, len(rows_all), CHUNK):
+            if _cb:
+                _cb(c0, len(rows_all))
+            batch, keys = [], []
+            for _, mr in rows_all[c0:c0 + CHUNK]:
+                d_, m_ = mr["일차"], mr["끼니"]
+                base_ = {slot: pool_index.get((cat, mr.get(slot, "")), {}) for slot, cat in SLOT_CATS}
+                for p in patients:
+                    mbs = dict(base_)
+                    for slot, prod_name in (personal_menus.get(f"{p.name}||{d_}||{m_}") or {}).items():
+                        prod = sub_products.get(prod_name) or pool_index.get(
+                            ({"부찬1": "부찬", "부찬2": "부찬"}.get(slot, slot), prod_name))
+                        if prod:
+                            mbs[slot] = prod
+                    batch.append((p, mbs, patient_ratios[p.name])); keys.append(f"{p.name}||{d_}||{m_}")
+            for k_, res_ in zip(keys, _batch_discrete(batch)):
+                pre[k_] = res_
+
     for _i, (_, menu_row) in enumerate(df.iterrows()):
-        if _cb:
+        if _cb and not pre:
             _cb(_i, len(df))
         day  = menu_row["일차"]
         meal = menu_row["끼니"]
@@ -276,7 +468,8 @@ def serving_agent(state: MealPlanState) -> dict:
             # ① 칸별 배식 비율
             if BALANCED_SERVING:
                 # [2026-10-19] 제품 칸 1인분 고정 + 나머지 칸 균형 조정
-                slot_ratio, adj_note = _balanced_ratios(p, menu_by_slot, ratio)
+                k_ = f"{p.name}||{day}||{meal}"
+                slot_ratio, adj_note = pre[k_] if k_ in pre else _balanced_ratios(p, menu_by_slot, ratio)
                 r_rice = slot_ratio.get("밥", ratio)
                 side_vals = [v for s, v in slot_ratio.items()
                              if s != "밥" and v and not (menu_by_slot.get(s) or {}).get("is_product")]
