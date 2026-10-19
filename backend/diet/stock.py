@@ -204,6 +204,9 @@ def report(events: list, runs: list, date: dt.date) -> dict:
         "date": date.isoformat(),
         "plan": ({"run_id": r["id"], "day": n, "start_date": r["start"].isoformat(), "n_days": r["n_days"],
                   "end_date": (r["start"] + dt.timedelta(days=r["n_days"] - 1)).isoformat()} if r else None),
+        "next_plan": (None if r else next(({"start_date": x["start"].isoformat(), "days_until": (x["start"] - date).days,
+                                             "end_date": (x["start"] + dt.timedelta(days=x["n_days"] - 1)).isoformat()}
+                                            for x in sorted(plans.runs, key=lambda x: x["start"]) if x["start"] > date), None)),
         "today_menu": [{k: m.get(k) for k in ("끼니", "밥", "국", "주찬", "부찬1", "부찬2", "김치")} for m in today_menu],
         "summary": {"품목": len(items), "유통기한임박": count("유통기한 임박"), "유통기한지남": count("유통기한 지남"),
                     "부족예상": count("부족 예상"), "남을위험": count("남을 위험"), "실사필요": count("실사 필요"),

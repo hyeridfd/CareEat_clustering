@@ -1008,7 +1008,9 @@ function StockTab() {
             <p className="mb-3 text-xs text-muted leading-5">
               {rep.plan
                 ? <>승인 식단 <b className="text-navy-900">{rep.plan.day}일차</b> ({rep.plan.start_date} ~ {rep.plan.end_date}) 기준. </>
-                : <span className="text-amber-700">이 날짜를 포함하는 승인 식단이 없어 예상 사용량이 0입니다. 식단표 탭에서 시작일을 정해 승인하세요. </span>}
+                : rep.next_plan
+                  ? <span className="text-navy-700">승인 식단은 <b>{rep.next_plan.start_date}</b>부터 시작합니다{rep.next_plan.days_until === 1 ? '(내일)' : ` (${rep.next_plan.days_until}일 뒤)`}. 오늘 사용량은 없고, 앞으로 7일 사용 예정량은 반영됩니다. </span>
+                  : <span className="text-amber-700">이 날짜를 포함하는 승인 식단이 없어 예상 사용량이 0입니다. 식단표 탭에서 시작일을 정해 승인하세요. </span>}
               추정 재고 = 마지막 실사 + 입고 − 승인 식단 예상 사용량 − 폐기 (유통기한 빠른 것부터 사용). 실제와 차이가 나면 실사로 맞춰 주세요.
             </p>
             <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
@@ -1052,7 +1054,11 @@ function StockTab() {
           ))}
         </div>}>
         {rep && !rep.items?.length ? (
-          <p className="text-sm text-muted py-4 text-center">아직 재고 기록이 없습니다. 아래에서 실사(현재 재고)부터 입력하세요.</p>
+          <div className="py-4 text-center text-sm text-muted leading-6">
+            <p>아직 재고 기록이 없어 추적할 식재료가 없습니다.</p>
+            <p>아래 <b className="text-navy-900">재고 입력</b>에서 <b className="text-navy-900">실사</b>를 골라 지금 창고에 있는 식재료와 양(g)·유통기한을 넣으면,
+              승인 식단의 사용량만큼 매일 자동으로 줄어듭니다. 아래 '재고 등록 안 된 식재료' 목록을 참고하세요.</p>
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm min-w-[980px]">
