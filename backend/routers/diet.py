@@ -75,10 +75,36 @@ def _save_result(sb, run_id, out):
         "updated_at": get_kst_now()})).eq("id", run_id).execute()
 
 
+CANCEL = set()                      # 멈추기 요청된 실행 id (같은 서버 프로세스)
+
+
+class Cancelled(Exception):
+    pass
+
+
+def _check_cancel(sb, run_id, state):
+    """멈추기 요청 확인 — 메모리 표시 우선, 10초마다 DB 상태도 확인(서버 재시작·다중 프로세스 대비)"""
+    if run_id in CANCEL:
+        raise Cancelled()
+    now = time.time()
+    if now - state["checked"] >= 10:
+        state["checked"] = now
+        try:
+            st = sb.table("diet_runs").select("status").eq("id", run_id).execute().data
+            if st and st[0]["status"] == "cancelled":
+                raise Cancelled()
+        except Cancelled:
+            raise
+        except Exception:
+            pass
+
+
 def _progress_writer(sb, run_id):
     last = [0.0]
+    state = {"checked": time.time()}
 
     def say(msg):
+        _check_cancel(sb, run_id, state)
         now = time.time()
         if now - last[0] >= 3:            # DB 쓰기는 3초에 한 번까지
             last[0] = now
@@ -93,6 +119,7 @@ def _job(run_id, home, preset, seed, menu=None):
     from diet import pipeline as P
     sb = get_supabase()
     try:
+        _check_cancel(sb, run_id, {"checked": 0})
         sb.table("diet_runs").update({"status": "running", "progress": "데이터 불러오는 중",
                                       "updated_at": get_kst_now()}).eq("id", run_id).execute()
         residents, assess, settings, inv, pref = _load_inputs(sb, home)
@@ -102,11 +129,17 @@ def _job(run_id, home, preset, seed, menu=None):
         else:
             out = P.redo_personalization(menu, residents, assess, settings, inv, pref, progress=say)
         sb.table("diet_runs").update({"progress": "결과 저장 중", "updated_at": get_kst_now()}).eq("id", run_id).execute()
+        _check_cancel(sb, run_id, {"checked": 0})
         _save_result(sb, run_id, out)
+    except Cancelled:
+        sb.table("diet_runs").update({"status": "cancelled", "progress": "중지됨",
+                                      "updated_at": get_kst_now()}).eq("id", run_id).execute()
     except Exception as e:
         traceback.print_exc()
         sb.table("diet_runs").update({"status": "failed", "error": str(e)[:2000], "progress": "실패",
                                       "updated_at": get_kst_now()}).eq("id", run_id).execute()
+    finally:
+        CANCEL.discard(run_id)
 
 
 def _busy(sb, home):
@@ -181,6 +214,19 @@ def get_servings(run_id: str, eid: str, user: dict = Depends(require_staff)):
     get_run(run_id, user)
     return _one(sb.table("diet_servings").select("*").eq("run_id", run_id).eq("elderly_id", eid).execute(),
                 "이 어르신의 배식표가 없습니다.")
+
+
+@router.post("/runs/{run_id}/cancel")
+def cancel(run_id: str, user: dict = Depends(require_staff)):
+    """계산 중인 식단 설계 멈추기 — 진행 중인 단계가 끝나는 대로(보통 수 초~십여 초) 중지"""
+    sb = get_supabase()
+    run = get_run(run_id, user)
+    if run["status"] not in ("queued", "running"):
+        raise HTTPException(status_code=400, detail="계산 중인 설계만 멈출 수 있습니다.")
+    CANCEL.add(run_id)
+    sb.table("diet_runs").update({"status": "cancelled", "progress": "중지 요청됨",
+                                  "updated_at": get_kst_now()}).eq("id", run_id).execute()
+    return {"ok": True}
 
 
 class ApproveRequest(BaseModel):

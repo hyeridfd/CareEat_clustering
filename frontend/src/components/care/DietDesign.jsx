@@ -18,6 +18,7 @@ const RUN_STATUS = {
   done: { label: '검토 필요', cls: 'bg-navy-50 text-navy-700' },
   approved: { label: '승인됨', cls: 'bg-emerald-50 text-emerald-700' },
   failed: { label: '실패', cls: 'bg-rose-50 text-rose-700' },
+  cancelled: { label: '중지됨', cls: 'bg-slate-100 text-slate-500' },
 }
 const SLOTS = ['밥', '국', '주찬', '부찬1', '부찬2', '김치']
 const SLOT_CAT = { 밥: '밥', 국: '국', 주찬: '주찬', 부찬1: '부찬', 부찬2: '부찬', 김치: '김치' }
@@ -92,7 +93,13 @@ function stageIdx(msg) {
   return 0
 }
 
-function RunProgress({ run, nResidents, big }) {
+function RunProgress({ run, nResidents, big, onStop }) {
+  const [stopping, setStopping] = useState(false)
+  const stop = async () => {
+    if (!onStop) return
+    setStopping(true)
+    try { await onStop(run.id) } finally { setStopping(false) }
+  }
   const now = useNow(true)
   const { p, elapsed, remain } = estimate(run, now, nResidents)
   const si = stageIdx(run.progress)
@@ -113,6 +120,7 @@ function RunProgress({ run, nResidents, big }) {
         <span className="inline-block h-5 w-5 rounded-full border-2 border-navy-200 border-t-navy-600 animate-spin" />
         <p className="text-base font-bold text-navy-900">{run.status === 'queued' ? '계산 대기 중' : run.parent_run_id ? '수정본 계산 중' : '식단 설계 계산 중'}</p>
         <p className="ml-auto text-sm tabular-nums text-navy-700">약 <b>{fmtSec(remain)}</b> 남음</p>
+        {onStop && <button className="btn-secondary text-xs" disabled={stopping} onClick={stop}>{stopping ? '멈추는 중…' : '계산 멈추기'}</button>}
       </div>
       <div className="mt-4 h-2.5 rounded-full bg-navy-50 overflow-hidden">
         <div className="h-full rounded-full bg-navy-600 transition-all duration-1000" style={{ width: `${Math.max(2, Math.round(p * 100))}%` }} />
@@ -133,7 +141,8 @@ function RunProgress({ run, nResidents, big }) {
         })}
       </ol>
       <p className="mt-4 text-xs text-muted">{run.progress}</p>
-      <p className="mt-1 text-xs text-muted">이 화면을 닫거나 다른 메뉴로 가도 서버에서 계속 계산합니다. 다시 들어오면 진행 상황이 이어서 보입니다.</p>
+      <p className="mt-1 text-xs text-muted">이 화면을 닫거나 다른 메뉴로 가도 서버에서 계속 계산합니다. 다시 들어오면 진행 상황이 이어서 보입니다.
+        멈추면 진행 중인 단계가 끝나는 대로(보통 몇 초~십여 초) 중지되고, 결과는 저장되지 않습니다.</p>
     </div>
   )
 }
@@ -226,7 +235,7 @@ export default function DietDesign() {
       timer.current = setTimeout(async () => {
         const s = await loadStatus()
         const still = s?.runs?.find((x) => x.id === active.id)
-        if (still && ['done', 'failed'].includes(still.status)) { setRunId(still.id); loadRun(still.id) }
+        if (still && ['done', 'failed', 'cancelled'].includes(still.status)) { setRunId(still.id); loadRun(still.id) }
       }, 4000)
     }
     return () => clearTimeout(timer.current)
@@ -239,6 +248,11 @@ export default function DietDesign() {
       setRunId(r.data.id)
       await loadStatus()
     } catch (e) { setErr(errMsg(e)) } finally { setBusy(false) }
+  }
+
+  const stopRun = async (id) => {
+    setErr('')
+    try { await api.post(`/care/diet/runs/${id}/cancel`); await loadStatus() } catch (e) { setErr(errMsg(e)) }
   }
 
   const approve = async (startDate) => {
@@ -261,9 +275,9 @@ export default function DietDesign() {
                 className={`px-3 py-1 rounded-lg text-xs font-semibold ${preset === p.key ? 'bg-white text-navy-900 shadow-sm' : 'text-muted'}`}>{p.label}</button>
             ))}
           </div>
-          <button className="btn-primary" disabled={busy || !!active || !ready} onClick={start}>
-            {active ? '계산 중…' : '식단 설계 실행'}
-          </button>
+          {active
+            ? <button className="btn-secondary" onClick={() => stopRun(active.id)}>계산 멈추기</button>
+            : <button className="btn-primary" disabled={busy || !ready} onClick={start}>식단 설계 실행</button>}
         </>}>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <Stat label="설계 대상 어르신" value={ready} unit={`/ ${status?.residents_total ?? '–'}명`} sub="진단 평가가 있는 어르신" />
@@ -316,8 +330,10 @@ export default function DietDesign() {
           <p className="font-semibold">설계에 실패했습니다.</p>
           <p className="mt-1 break-all text-xs">{live.error || '원인을 알 수 없습니다. 다시 실행해 보세요.'}</p>
         </div>
+      ) : live.status === 'cancelled' ? (
+        <div className="surface p-10 text-center text-sm text-muted">계산을 중지한 설계입니다. 위에서 다시 실행하거나 다른 설계를 선택하세요.</div>
       ) : ['queued', 'running'].includes(live.status) || !live.menu ? (
-        <RunProgress run={live} nResidents={ready} big />
+        <RunProgress run={live} nResidents={ready} big onStop={stopRun} />
       ) : sub === 'menu' ? (
         <MenuTab run={live} onApprove={approve}
           onEdited={async (id) => { setRunId(id); await loadStatus() }} onRerun={start} setErr={setErr} />
