@@ -33,6 +33,16 @@ def _match(stock_name: str, recipe_name: str) -> bool:
     return recipe_name == stock_name or recipe_name.startswith(stock_name + "(")
 
 
+def _matcher(names: list):
+    cache = {}
+
+    def find(rn):
+        if rn not in cache:
+            cache[rn] = next((n for n in names if _match(n, rn)), None)
+        return cache[rn]
+    return find
+
+
 class Plans:
     """승인 식단들 → 날짜별 예상 사용량"""
 
@@ -80,6 +90,7 @@ def simulate(events: list, plans: Plans, until: dt.date) -> dict:
     if not ev:
         return {"lots": {}, "last_count": {}, "shortfall": {}, "used": {}}
     names = sorted({e["ingredient"] for e in ev}, key=len, reverse=True)   # 긴 이름 먼저 매칭
+    find = _matcher(names)
     lots = defaultdict(list)
     last_count, shortfall, used = {}, defaultdict(float), defaultdict(float)
     by_day = defaultdict(list)
@@ -107,7 +118,7 @@ def simulate(events: list, plans: Plans, until: dt.date) -> dict:
         if day == until:
             break
         for rn, g in plans.usage(day).items():            # 그날 식단 사용
-            nm = next((n for n in names if _match(n, rn)), None)
+            nm = find(rn)
             if not nm:
                 continue
             got = _take(lots[nm], g, day)
@@ -118,7 +129,10 @@ def simulate(events: list, plans: Plans, until: dt.date) -> dict:
             if e["kind"] == "폐기":
                 _take(lots[e["ingredient"]], float(e.get("qty_g") or 0))
         day += dt.timedelta(days=1)
-    return {"lots": {k: v for k, v in lots.items()}, "names": names, "last_count": last_count,
+    first_seen = {}
+    for e in ev:
+        first_seen.setdefault(e["ingredient"], _d(e["event_date"]))
+    return {"lots": {k: v for k, v in lots.items()}, "names": names, "last_count": last_count, "first_seen": first_seen,
             "shortfall": dict(shortfall), "used": dict(used)}
 
 
@@ -128,27 +142,37 @@ def report(events: list, runs: list, date: dt.date) -> dict:
     names = sim.get("names") or []
 
     # 앞으로 사용 예정 (오늘 포함 7일)
+    find = _matcher(names)
     ahead = defaultdict(lambda: [0.0] * LOOKAHEAD)
     untracked = defaultdict(float)
     for i in range(LOOKAHEAD):
         for rn, g in plans.usage(date + dt.timedelta(days=i)).items():
-            nm = next((n for n in names if _match(n, rn)), None)
+            nm = find(rn)
             if nm:
                 ahead[nm][i] += g
             else:
                 untracked[rn] += g
+
+    incoming = defaultdict(lambda: [0.0] * LOOKAHEAD)      # 내일~ 입고 예정 (오늘 입고분은 이미 재고에 포함)
+    for e in events:
+        d = _d(e.get("event_date"))
+        if e.get("kind") == "입고" and d and date < d < date + dt.timedelta(days=LOOKAHEAD):
+            incoming[e["ingredient"]][(d - date).days] += float(e.get("qty_g") or 0)
 
     items, expiring = [], []
     for nm in sorted(set(sim["lots"]) | set(ahead) | set(sim["last_count"])):
         lots = [l for l in sim["lots"].get(nm, []) if l["qty"] > 0.05]
         total = sum(l["qty"] for l in lots)
         use = ahead.get(nm, [0.0] * LOOKAHEAD)
-        # 소진 예상일: 누적 사용이 재고를 넘는 첫날
-        run_out, acc = None, 0.0
+        # 소진 예상일: (재고 + 입고 예정 누적) − 사용 누적이 허용 오차 넘게 모자라는 첫날
+        inc = incoming.get(nm, [0.0] * LOOKAHEAD)
+        tol = max(10.0, 0.02 * sum(use))
+        run_out, bal, short = None, total, 0.0
         for i, g in enumerate(use):
-            acc += g
-            if acc > total + 0.5:
-                run_out = i; break
+            bal += inc[i] - g
+            if bal < -tol and run_out is None:
+                run_out = i
+            short = max(short, -bal)
         exp_lots = sorted([l for l in lots if l["expiry"]], key=lambda l: l["expiry"])
         first = exp_lots[0] if exp_lots else None
         d_left = (first["expiry"] - date).days if first else None
@@ -175,13 +199,14 @@ def report(events: list, runs: list, date: dt.date) -> dict:
             status.append("부족 예상")
         if waste_risk > 50:
             status.append("남을 위험")
-        if not lc or (date - lc).days > RECOUNT_DAYS:
+        since = lc or sim.get("first_seen", {}).get(nm)
+        if since and (date - since).days > RECOUNT_DAYS:
             status.append("실사 필요")
         items.append({
             "식재료명": nm, "추정재고(g)": round(total), "오늘사용(g)": round(use[0]), "7일사용(g)": round(sum(use)),
             "남는일수": (round(total / (sum(use) / LOOKAHEAD), 1) if sum(use) > 0 else None),
             "소진예상": (f"{(date + dt.timedelta(days=run_out)):%m.%d}" if run_out is not None else None),
-            "부족량(g)": round(max(0.0, sum(use) - total)),
+            "부족량(g)": round(short) if run_out is not None else 0, "입고예정(g)": round(sum(inc)),
             "가장빠른유통기한": first["expiry"].isoformat() if first else None, "D": d_left,
             "임박량(g)": round(sum(l["qty"] for l in exp_lots if (l["expiry"] - date).days <= EXPIRY_SOON)),
             "남을위험(g)": round(waste_risk), "마지막실사": lc.isoformat() if lc else None,
@@ -204,7 +229,7 @@ def report(events: list, runs: list, date: dt.date) -> dict:
         "date": date.isoformat(),
         "plan": ({"run_id": r["id"], "day": n, "start_date": r["start"].isoformat(), "n_days": r["n_days"],
                   "end_date": (r["start"] + dt.timedelta(days=r["n_days"] - 1)).isoformat()} if r else None),
-        "next_plan": (None if r else next(({"start_date": x["start"].isoformat(), "days_until": (x["start"] - date).days,
+        "next_plan": (None if r else next(({"run_id": x["id"], "start_date": x["start"].isoformat(), "days_until": (x["start"] - date).days,
                                              "end_date": (x["start"] + dt.timedelta(days=x["n_days"] - 1)).isoformat()}
                                             for x in sorted(plans.runs, key=lambda x: x["start"]) if x["start"] > date), None)),
         "today_menu": [{k: m.get(k) for k in ("끼니", "밥", "국", "주찬", "부찬1", "부찬2", "김치")} for m in today_menu],
@@ -227,3 +252,20 @@ def snapshot(events: list, runs: list, date: dt.date) -> list:
                 rows.append({"식재료명": nm, "재고량(g)": round(l["qty"]),
                              "유통기한": l["expiry"].isoformat() if l["expiry"] else "", "비고": "재고 추적"})
     return sorted(rows, key=lambda r: (r["유통기한"] or "9999", r["식재료명"]))
+
+
+AUTO_NOTE = "발주 자동입고"
+
+
+def receive_plan_events(run: dict, start: dt.date) -> list:
+    """승인 식단의 주간 발주 구매량 → 주차별 입고 기록 (입고일 = 그 주 1일차 전날, 유통기한 미기재)"""
+    weeks = ((run.get("result") or {}).get("purchase") or {}).get("weeks") or []
+    rows = []
+    for w in weeks:
+        d_in = start + dt.timedelta(days=(int(w["주차"]) - 1) * 7 - 1)
+        for x in w.get("식재료") or []:
+            if (x.get("구매량(g)") or 0) > 0:
+                rows.append({"event_date": d_in.isoformat(), "kind": "입고", "ingredient": x["식재료명"],
+                             "qty_g": round(float(x["구매량(g)"]), 1), "expiry": None,
+                             "note": f"{AUTO_NOTE} · {w['주차']}주차 · {str(run['id'])[:8]}"})
+    return rows

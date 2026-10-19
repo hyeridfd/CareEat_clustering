@@ -231,6 +231,7 @@ def cancel(run_id: str, user: dict = Depends(require_staff)):
 
 class ApproveRequest(BaseModel):
     start_date: Optional[str] = None        # 식단 1일차 날짜 (재고 추적 예상 사용량 기준)
+    auto_receive: bool = True               # 주간 발주 구매량을 주차별 입고로 자동 기록
 
 
 @router.post("/runs/{run_id}/approve")
@@ -247,7 +248,43 @@ def approve(run_id: str, req: Optional[ApproveRequest] = None, user: dict = Depe
             raise HTTPException(status_code=400, detail="식단 시작일 형식이 올바르지 않습니다 (YYYY-MM-DD).")
     sb.table("diet_runs").update({"status": "approved", "approved_by": user["actor"], "approved_at": get_kst_now(),
                                   "start_date": start, "updated_at": get_kst_now()}).eq("id", run_id).execute()
-    return {"ok": True, "start_date": start}
+    n = 0
+    if start and (req is None or req.auto_receive):
+        n = _receive_plan(sb, user, {**run, "start_date": start})
+    return {"ok": True, "start_date": start, "received": n}
+
+
+def _receive_plan(sb, user, run) -> int:
+    """승인 식단의 주간 발주량을 입고로 기록. 이 식단 시작일 이후의 이전 자동입고는 지우고 새로 넣는다."""
+    from diet.stock import receive_plan_events, AUTO_NOTE
+    home = user["scope_home"]
+    start = datetime.fromisoformat(str(run["start_date"])[:10]).date()
+    full = run if (run.get("result") or {}).get("purchase") else get_run(run["id"], user)
+    rows = receive_plan_events(full, start)
+    if not rows:
+        return 0
+    old = sb.table("diet_stock_events").select("id,event_date,note").eq("nursing_home_id", home) \
+        .eq("kind", "입고").execute().data or []
+    first = min(r["event_date"] for r in rows)
+    for o in old:
+        if str(o.get("note") or "").startswith(AUTO_NOTE) and str(o["event_date"]) >= first:
+            sb.table("diet_stock_events").delete().eq("id", o["id"]).execute()
+    for i in range(0, len(rows), 200):
+        sb.table("diet_stock_events").insert([{**r, "nursing_home_id": home, "created_by": user["actor"]}
+                                              for r in rows[i:i + 200]]).execute()
+    return len(rows)
+
+
+@router.post("/runs/{run_id}/receive-plan")
+def receive_plan(run_id: str, user: dict = Depends(require_staff)):
+    """이미 승인한 식단의 주간 발주량을 입고로 (다시) 기록"""
+    sb = get_supabase()
+    run = get_run(run_id, user)
+    if run["status"] != "approved" or not run.get("start_date"):
+        raise HTTPException(status_code=400, detail="시작일을 정해 승인한 식단만 입고로 반영할 수 있습니다.")
+    if not (run.get("result") or {}).get("purchase"):
+        raise HTTPException(status_code=400, detail="이 식단에는 주간 발주 계산이 없습니다. 식단 설계를 다시 실행해 승인하세요.")
+    return {"ok": True, "received": _receive_plan(sb, user, run)}
 
 
 class MenuChange(BaseModel):

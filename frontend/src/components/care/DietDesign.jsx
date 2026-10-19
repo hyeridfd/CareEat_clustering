@@ -392,6 +392,7 @@ function MenuTab({ run, onApprove, onEdited, onRerun, setErr }) {
                 <span className="text-xs text-navy-700">식단 1일차</span>
                 <input type="date" className="form-input !py-1 !w-auto" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
                 <button className="btn-primary text-xs" disabled={!startDate} onClick={() => { setAskStart(false); onApprove(startDate) }}>승인 확정</button>
+                <span className="text-[11px] text-muted">주간 발주량이 입고로 재고에 기록됩니다</span>
                 <button className="btn-ghost text-xs" onClick={() => setAskStart(false)}>취소</button>
               </span>
             ) : <button className="btn-primary" onClick={() => setAskStart(true)} disabled={nEdits > 0}>영양사 승인</button>}
@@ -988,6 +989,15 @@ function StockTab() {
   }
   useEffect(() => { load() }, [date])
 
+  const [recv, setRecv] = useState('')
+  const planRun = rep?.plan?.run_id || rep?.next_plan?.run_id
+  const receive = async () => {
+    setRecv('반영 중…'); setErr('')
+    try {
+      const r = await api.post(`/care/diet/runs/${planRun}/receive-plan`, {}, { timeout: 60000 })
+      setRecv(`주간 발주량 ${r.data.received}건을 입고로 기록했습니다.`); load()
+    } catch (e) { setRecv(''); setErr(errMsg(e)) }
+  }
   const del = async (id) => {
     try { await api.delete(`/care/diet/stock/events/${id}`); load() } catch (e) { setErr(errMsg(e)) }
   }
@@ -1013,6 +1023,13 @@ function StockTab() {
                   : <span className="text-amber-700">이 날짜를 포함하는 승인 식단이 없어 예상 사용량이 0입니다. 식단표 탭에서 시작일을 정해 승인하세요. </span>}
               추정 재고 = 마지막 실사 + 입고 − 승인 식단 예상 사용량 − 폐기 (유통기한 빠른 것부터 사용). 실제와 차이가 나면 실사로 맞춰 주세요.
             </p>
+            {planRun && (
+              <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl bg-navy-50/60 px-3 py-2 text-xs text-navy-700">
+                <span>승인 식단의 <b>주간 발주량</b>을 각 주 1일차 전날 <b>입고</b>로 기록하면, 실사 없이도 매일 남은 양이 계산됩니다. (다시 누르면 자동입고를 새로 계산)</span>
+                <button className="btn-secondary text-xs ml-auto" onClick={receive} disabled={recv === '반영 중…'}>발주량을 입고로 반영</button>
+                {recv && <span className="w-full text-emerald-700">{recv}</span>}
+              </div>
+            )}
             <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
               <Stat label="추적 품목" value={s.품목} unit="개" sub={`${s['추정재고(kg)'] ?? 0}kg`} />
               <Stat label="유통기한 지남" value={s.유통기한지남} unit="개" tone={s.유통기한지남 ? 'bg-rose-50' : undefined} sub="폐기 확인" />
