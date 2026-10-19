@@ -101,6 +101,7 @@ def _job(run_id, home, preset, seed, menu=None):
             out = P.run_design(residents, assess, settings, inv, pref, preset=preset, seed=seed, progress=say)
         else:
             out = P.redo_personalization(menu, residents, assess, settings, inv, pref, progress=say)
+        sb.table("diet_runs").update({"progress": "결과 저장 중", "updated_at": get_kst_now()}).eq("id", run_id).execute()
         _save_result(sb, run_id, out)
     except Exception as e:
         traceback.print_exc()

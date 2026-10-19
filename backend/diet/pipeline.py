@@ -240,8 +240,10 @@ def personalize_and_serve(pool, records, profiles, meta, inv_model=None, product
         for k, ch in (sub.get("personal_menus") or {}).items():
             personal.setdefault(k, {}).update(ch)
         sub_products = {**(sub.get("sub_products") or {}), **mf["items"]}
-        if progress: progress("개인별 배식량 계산")
-        serving = serving_agent({**state, "personal_menus": personal, "sub_products": sub_products})["serving_map"]
+        if progress: progress("개인별 배식량 계산 0/%d끼" % len(records))
+        cb = (lambda i, n: progress(f"개인별 배식량 계산 {i}/{n}끼")) if progress else None
+        serving = serving_agent({**state, "personal_menus": personal, "sub_products": sub_products,
+                                 "progress_cb": cb})["serving_map"]
     finally:
         registry._STORE.pop(f"patients_{key}", None)
         registry._STORE.pop(f"constraint_{key}", None)

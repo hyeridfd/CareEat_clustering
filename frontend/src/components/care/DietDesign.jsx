@@ -28,6 +28,113 @@ const SUBTABS = [
   { key: 'subs', label: '대체찬·발주·죽' },
   { key: 'settings', label: '재고·선호도·설정' },
 ]
+// 진행 문구 → 전체 진행률(0~1). 실측: 최적화 ≈ 절반, 개인별 배식량 ≈ 절반, 나머지는 몇 초
+const TYPICAL_SEC = { quick: 90, standard: 130, thorough: 220, edit: 65 }   // 어르신 70명 기준
+function progressOf(run) {
+  const msg = String(run?.progress || '')
+  const edit = !!run?.parent_run_id
+  const [o0, o1] = edit ? [0, 0] : [0.03, 0.5]          // 최적화 구간
+  const [s0, s1] = edit ? [0.1, 0.97] : [0.58, 0.97]     // 배식량 구간
+  let m
+  if ((m = msg.match(/(\d+)\/(\d+)세대/))) return o0 + (o1 - o0) * (+m[1] / +m[2])
+  if ((m = msg.match(/(\d+)\/(\d+)끼/))) return s0 + (s1 - s0) * (+m[1] / +m[2])
+  if (msg.includes('저장')) return 0.98
+  if (msg.includes('배식량')) return s0
+  if (msg.includes('대체찬')) return s0 - 0.04
+  if (msg.includes('식사형태')) return s0 - 0.07
+  if (msg.includes('일반식 최적화')) return o0
+  if (msg.includes('프로파일')) return 0.02
+  return 0.01
+}
+function fmtSec(sec) {
+  sec = Math.max(0, Math.round(sec))
+  if (sec < 60) return `${sec}초`
+  return `${Math.floor(sec / 60)}분${sec % 60 ? ` ${sec % 60}초` : ''}`
+}
+function useNow(on) {
+  const [now, setNow] = useState(Date.now())
+  useEffect(() => {
+    if (!on) return
+    const t = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(t)
+  }, [on])
+  return now
+}
+function estimate(run, now, nResidents) {
+  const p = progressOf(run)
+  const elapsed = Math.max(0, (now - new Date(run.created_at).getTime()) / 1000)
+  const key = run.parent_run_id ? 'edit' : (run.params?.preset || 'standard')
+  const typical = (TYPICAL_SEC[key] || 130) * Math.max(0.5, (nResidents || 70) / 70)
+  // 초반엔 평소 소요 시간, 진행될수록 실제 속도 기준으로
+  const byRate = p > 0.05 ? elapsed * (1 - p) / p : Infinity
+  const w = Math.min(1, Math.max(0, (p - 0.05) / 0.3))
+  const remain = w >= 1 ? byRate : Number.isFinite(byRate) ? w * byRate + (1 - w) * Math.max(0, typical - elapsed) : Math.max(0, typical - elapsed)
+  return { p, elapsed, remain: Math.max(remain, p < 0.99 ? 5 : 0) }
+}
+const STAGES = [
+  { key: '프로파일', label: '어르신 정보' },
+  { key: '최적화', label: '일반식 28일 최적화' },
+  { key: '식사형태', label: '죽·백김치' },
+  { key: '대체찬', label: '대체찬' },
+  { key: '배식량', label: '개인별 배식량' },
+  { key: '저장', label: '저장' },
+]
+function stageIdx(msg) {
+  msg = String(msg || '')
+  if (msg.includes('저장')) return 5
+  if (msg.includes('배식량')) return 4
+  if (msg.includes('대체찬')) return 3
+  if (msg.includes('식사형태')) return 2
+  if (msg.includes('최적화')) return 1
+  return 0
+}
+
+function RunProgress({ run, nResidents, big }) {
+  const now = useNow(true)
+  const { p, elapsed, remain } = estimate(run, now, nResidents)
+  const si = stageIdx(run.progress)
+  const stages = run.parent_run_id ? STAGES.filter((s) => !['프로파일', '최적화'].includes(s.key)) : STAGES
+  if (!big) {
+    return (
+      <div className="mt-1.5">
+        <div className="h-1.5 rounded-full bg-amber-100 overflow-hidden">
+          <div className="h-full bg-amber-500 transition-all duration-1000" style={{ width: `${Math.round(p * 100)}%` }} />
+        </div>
+        <p className="mt-1 text-[11px] text-muted tabular-nums">{Math.round(p * 100)}% · 약 {fmtSec(remain)} 남음</p>
+      </div>
+    )
+  }
+  return (
+    <div className="surface p-8 md:p-10">
+      <div className="flex items-center gap-3">
+        <span className="inline-block h-5 w-5 rounded-full border-2 border-navy-200 border-t-navy-600 animate-spin" />
+        <p className="text-base font-bold text-navy-900">{run.status === 'queued' ? '계산 대기 중' : run.parent_run_id ? '수정본 계산 중' : '식단 설계 계산 중'}</p>
+        <p className="ml-auto text-sm tabular-nums text-navy-700">약 <b>{fmtSec(remain)}</b> 남음</p>
+      </div>
+      <div className="mt-4 h-2.5 rounded-full bg-navy-50 overflow-hidden">
+        <div className="h-full rounded-full bg-navy-600 transition-all duration-1000" style={{ width: `${Math.max(2, Math.round(p * 100))}%` }} />
+      </div>
+      <div className="mt-2 flex text-xs text-muted tabular-nums">
+        <span>{Math.round(p * 100)}%</span>
+        <span className="ml-auto">경과 {fmtSec(elapsed)}</span>
+      </div>
+      <ol className="mt-5 grid grid-cols-2 md:grid-cols-6 gap-2">
+        {stages.map((s) => {
+          const i = STAGES.indexOf(s)
+          const st = i < si ? 'done' : i === si ? 'now' : 'todo'
+          return (
+            <li key={s.key} className={`rounded-xl px-3 py-2 text-xs ${st === 'done' ? 'bg-emerald-50 text-emerald-700' : st === 'now' ? 'bg-navy-900 text-white font-semibold' : 'bg-navy-50/60 text-muted'}`}>
+              {st === 'done' ? '✓ ' : ''}{s.label}
+            </li>
+          )
+        })}
+      </ol>
+      <p className="mt-4 text-xs text-muted">{run.progress}</p>
+      <p className="mt-1 text-xs text-muted">이 화면을 닫거나 다른 메뉴로 가도 서버에서 계속 계산합니다. 다시 들어오면 진행 상황이 이어서 보입니다.</p>
+    </div>
+  )
+}
+
 const dayNo = (d) => parseInt(String(d).replace(/\D/g, ''), 10) || 0
 const pct = (a, b) => (b ? Math.round((100 * a) / b) : null)
 
@@ -137,6 +244,7 @@ export default function DietDesign() {
   }
 
   const ready = status?.residents_ready ?? 0
+  const live = run && { ...run, ...(status?.runs?.find((x) => x.id === run.id) || {}) }
 
   return (
     <div className="space-y-4">
@@ -160,8 +268,15 @@ export default function DietDesign() {
             sub={status?.inventory?.updated_at ? `${fmtDate(status.inventory.updated_at)} 갱신` : '입력하면 일반식에서 먼저 사용'} />
           <Stat label="시설 선호도" value={status?.preference ? (status.preference.facility_mean * 100).toFixed(0) : '–'} unit={status?.preference ? '% 평균 섭취' : ''}
             sub={status?.preference ? `${status.preference.n_menus_observed}개 메뉴 · ${fmtDate(status.preference.updated_at)}` : '잔반 기록으로 계산 전'} />
-          <Stat label="진행 상태" value={active ? RUN_STATUS[active.status]?.label : run ? RUN_STATUS[run.status]?.label : '–'}
-            sub={active?.progress || (run && fmtDate(run.created_at))} tone={active ? 'bg-amber-50' : undefined} />
+          {active ? (
+            <div className="rounded-2xl px-4 py-3 bg-amber-50">
+              <p className="text-[11px] text-muted">진행 상태</p>
+              <p className="mt-1 text-xl font-extrabold text-navy-900">{RUN_STATUS[active.status]?.label}</p>
+              <RunProgress run={active} nResidents={ready} />
+            </div>
+          ) : (
+            <Stat label="진행 상태" value={live ? RUN_STATUS[live.status]?.label : '–'} sub={live && fmtDate(live.created_at)} />
+          )}
         </div>
         {!ready && <p className="mt-3 text-xs text-muted">진단 화면에서 어르신 평가를 먼저 실행해야 식단을 설계할 수 있습니다.</p>}
         {status?.runs?.length > 0 && (
@@ -172,6 +287,7 @@ export default function DietDesign() {
                 <span className="font-semibold text-navy-900">{fmtDate(x.created_at)} {new Date(x.created_at).toTimeString().slice(0, 5)}</span>
                 <span className={`badge ml-1.5 ${RUN_STATUS[x.status]?.cls}`}>{RUN_STATUS[x.status]?.label}</span>
                 {x.parent_run_id && <span className="ml-1 text-muted">수정본</span>}
+                {x.status === 'failed' && x.error && <span className="ml-1 text-rose-600" title={x.error}>ⓘ</span>}
                 {x.params?.preset && !x.parent_run_id && <span className="ml-1 text-muted">{PRESETS.find((p) => p.key === x.params.preset)?.label}</span>}
               </button>
             ))}
@@ -188,19 +304,22 @@ export default function DietDesign() {
 
       {sub === 'settings' ? (
         <SettingsTab onChanged={loadStatus} />
-      ) : !run ? (
+      ) : !live ? (
         <div className="surface p-12 text-center text-muted">{runId ? '불러오는 중…' : '아직 설계 결과가 없습니다. 위에서 식단 설계를 실행하세요.'}</div>
-      ) : run.status === 'failed' ? (
-        <div className="surface p-6 text-sm text-rose-700">설계에 실패했습니다: {run.error}</div>
-      ) : !run.menu ? (
-        <div className="surface p-12 text-center text-muted">계산 중입니다 — {run.progress}</div>
+      ) : live.status === 'failed' ? (
+        <div className="surface p-6 text-sm text-rose-700">
+          <p className="font-semibold">설계에 실패했습니다.</p>
+          <p className="mt-1 break-all text-xs">{live.error || '원인을 알 수 없습니다. 다시 실행해 보세요.'}</p>
+        </div>
+      ) : ['queued', 'running'].includes(live.status) || !live.menu ? (
+        <RunProgress run={live} nResidents={ready} big />
       ) : sub === 'menu' ? (
-        <MenuTab run={run} onApprove={approve}
+        <MenuTab run={live} onApprove={approve}
           onEdited={async (id) => { setRunId(id); await loadStatus() }} onRerun={start} setErr={setErr} />
       ) : sub === 'serving' ? (
-        <ServingTab run={run} />
+        <ServingTab run={live} />
       ) : (
-        <SubsTab run={run} />
+        <SubsTab run={live} />
       )}
     </div>
   )

@@ -247,8 +247,11 @@ def serving_agent(state: MealPlanState) -> dict:
 
     # ── 배식량 산출 ───────────────────────────────────────────
     serving_map: dict = {}
+    _cb = state.get("progress_cb")          # 서버 진행률 표시용 (끼니 i / 전체)
 
-    for _, menu_row in df.iterrows():
+    for _i, (_, menu_row) in enumerate(df.iterrows()):
+        if _cb:
+            _cb(_i, len(df))
         day  = menu_row["일차"]
         meal = menu_row["끼니"]
 
