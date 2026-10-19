@@ -1,0 +1,398 @@
+[
+ {
+  "name": "본 계란말이ll",
+  "maker": "㈜사랑과선행",
+  "stage": "1단계",
+  "slot": "부찬",
+  "grams": 60.0,
+  "cook": null,
+  "per100": {
+   "energy": 214.86,
+   "carb": 6.53,
+   "protein": 11.41,
+   "fat": 15.9,
+   "sodium": 358.83,
+   "sat_fat": 3.81,
+   "sugar": 1.21,
+   "potassium": null
+  }
+ },
+ {
+  "name": "부추넣은 계란말이",
+  "maker": "㈜사랑과선행",
+  "stage": "1단계",
+  "slot": "부찬",
+  "grams": 60.0,
+  "cook": null,
+  "per100": {
+   "energy": 208.56,
+   "carb": 5.95,
+   "protein": 11.45,
+   "fat": 15.44,
+   "sodium": 351.53,
+   "sat_fat": 3.75,
+   "sugar": 1.48,
+   "potassium": null
+  }
+ },
+ {
+  "name": "돼지고기장조림A(냉동)",
+  "maker": "㈜사랑과선행",
+  "stage": "1단계",
+  "slot": "부찬",
+  "grams": 42.0,
+  "cook": null,
+  "per100": {
+   "energy": null,
+   "carb": null,
+   "protein": 11.29,
+   "fat": 1.72,
+   "sodium": 579.09,
+   "sat_fat": null,
+   "sugar": null,
+   "potassium": null
+  }
+ },
+ {
+  "name": "미트볼 데리야끼",
+  "maker": "㈜사랑과선행",
+  "stage": "1단계",
+  "slot": "주찬",
+  "grams": 60.0,
+  "cook": null,
+  "per100": {
+   "energy": 234.41,
+   "carb": 16.16,
+   "protein": 11.37,
+   "fat": 13.81,
+   "sodium": 481.66,
+   "sat_fat": 3.87,
+   "sugar": 6.44,
+   "potassium": null
+  }
+ },
+ {
+  "name": "미트볼칠리",
+  "maker": "㈜사랑과선행",
+  "stage": "1단계",
+  "slot": "주찬",
+  "grams": 60.0,
+  "cook": null,
+  "per100": {
+   "energy": 239.59,
+   "carb": 22.48,
+   "protein": 9.45,
+   "fat": 12.43,
+   "sodium": 392.41,
+   "sat_fat": 3.29,
+   "sugar": 11.7,
+   "potassium": null
+  }
+ },
+ {
+  "name": "동그랑땡칠리",
+  "maker": "㈜사랑과선행",
+  "stage": "1단계",
+  "slot": "부찬",
+  "grams": 60.0,
+  "cook": null,
+  "per100": {
+   "energy": 266.54,
+   "carb": 28.03,
+   "protein": 8.41,
+   "fat": 13.42,
+   "sodium": 478.8,
+   "sat_fat": 3.4,
+   "sugar": 13.23,
+   "potassium": null
+  }
+ },
+ {
+  "name": "너비아니야채조림",
+  "maker": "㈜사랑과선행",
+  "stage": "1단계",
+  "slot": "주찬",
+  "grams": 60.0,
+  "cook": null,
+  "per100": {
+   "energy": 232.89,
+   "carb": 18.96,
+   "protein": 12.06,
+   "fat": 12.09,
+   "sodium": 570.16,
+   "sat_fat": 3.73,
+   "sugar": 7.01,
+   "potassium": null
+  }
+ },
+ {
+  "name": "순살순한닭찜",
+  "maker": "㈜사랑과선행",
+  "stage": "1단계",
+  "slot": "주찬",
+  "grams": 60.0,
+  "cook": null,
+  "per100": {
+   "energy": 117.87,
+   "carb": 12.97,
+   "protein": 16.31,
+   "fat": 6.75,
+   "sodium": 479.35,
+   "sat_fat": 1.56,
+   "sugar": 6.64,
+   "potassium": null
+  }
+ },
+ {
+  "name": "돈채굴소스볶음",
+  "maker": "㈜사랑과선행",
+  "stage": "1단계",
+  "slot": "주찬",
+  "grams": 60.0,
+  "cook": null,
+  "per100": {
+   "energy": 191.46,
+   "carb": 8.1,
+   "protein": 13.17,
+   "fat": 11.82,
+   "sodium": 360.75,
+   "sat_fat": 2.98,
+   "sugar": 5.54,
+   "potassium": null
+  }
+ },
+ {
+  "name": "돈육피망볶음",
+  "maker": "㈜사랑과선행",
+  "stage": "1단계",
+  "slot": "주찬",
+  "grams": 60.0,
+  "cook": null,
+  "per100": {
+   "energy": 245.21,
+   "carb": 10.04,
+   "protein": 14.52,
+   "fat": 16.33,
+   "sodium": 581.67,
+   "sat_fat": 4.09,
+   "sugar": 6.34,
+   "potassium": null
+  }
+ },
+ {
+  "name": "해물동그랑땡조림",
+  "maker": "㈜사랑과선행",
+  "stage": "1단계",
+  "slot": "부찬",
+  "grams": 60.0,
+  "cook": null,
+  "per100": {
+   "energy": 164.0,
+   "carb": 18.1,
+   "protein": 9.32,
+   "fat": 6.05,
+   "sodium": 574.45,
+   "sat_fat": 1.18,
+   "sugar": 4.01,
+   "potassium": null
+  }
+ },
+ {
+  "name": "베이컨크림야채볶음",
+  "maker": "㈜사랑과선행",
+  "stage": "1단계",
+  "slot": "부찬",
+  "grams": 60.0,
+  "cook": null,
+  "per100": {
+   "energy": 175.0,
+   "carb": 14.45,
+   "protein": 7.78,
+   "fat": 9.51,
+   "sodium": 415.07,
+   "sat_fat": 3.69,
+   "sugar": 7.77,
+   "potassium": null
+  }
+ },
+ {
+  "name": "돼지목살간장조림",
+  "maker": "㈜사랑과선행",
+  "stage": "1단계",
+  "slot": "주찬",
+  "grams": 60.0,
+  "cook": null,
+  "per100": {
+   "energy": 116.0,
+   "carb": 9.37,
+   "protein": 9.01,
+   "fat": 4.67,
+   "sodium": 362.95,
+   "sat_fat": 1.75,
+   "sugar": 5.48,
+   "potassium": null
+  }
+ },
+ {
+  "name": "효도쿡 마늘양념 닭갈비구이",
+  "maker": "제조사 메이플푸드주식회사/ 판매사 ㈜사랑과선행",
+  "stage": "1단계",
+  "slot": "주찬",
+  "grams": 60.0,
+  "cook": null,
+  "per100": {
+   "energy": 194.0,
+   "carb": 2.46,
+   "protein": 20.52,
+   "fat": 11.32,
+   "sodium": 504.6,
+   "sat_fat": 3.4,
+   "sugar": 0.8,
+   "potassium": null
+  }
+ },
+ {
+  "name": "감자양파국",
+  "maker": "제조사 주식회사 한상가득식품/ 판매사 ㈜사랑과선행",
+  "stage": "1단계",
+  "slot": "국",
+  "grams": 150.0,
+  "cook": null,
+  "per100": {
+   "energy": null,
+   "carb": null,
+   "protein": null,
+   "fat": null,
+   "sodium": null,
+   "sat_fat": null,
+   "sugar": null,
+   "potassium": 444.08
+  }
+ },
+ {
+  "name": "맛상 호박죽",
+  "maker": "㈜사랑과선행",
+  "stage": "3단계",
+  "slot": "밥",
+  "grams": 200.0,
+  "cook": null,
+  "per100": {
+   "energy": 78.0,
+   "carb": 14.0,
+   "protein": 2.0,
+   "fat": 1.3,
+   "sodium": 115.0,
+   "sat_fat": 0.0,
+   "sugar": 11.0,
+   "potassium": null
+  }
+ },
+ {
+  "name": "효도쿡 돼지고기가지볶음",
+  "maker": "㈜사랑과선행",
+  "stage": "1단계",
+  "slot": "주찬",
+  "grams": 60.0,
+  "cook": null,
+  "per100": {
+   "energy": null,
+   "carb": null,
+   "protein": 9.7,
+   "fat": null,
+   "sodium": null,
+   "sat_fat": null,
+   "sugar": null,
+   "potassium": null
+  }
+ },
+ {
+  "name": "효도쿡 촉촉한 갈릭닭볶음",
+  "maker": "㈜사랑과선행",
+  "stage": "1단계",
+  "slot": "주찬",
+  "grams": 60.0,
+  "cook": null,
+  "per100": {
+   "energy": null,
+   "carb": null,
+   "protein": 9.99,
+   "fat": null,
+   "sodium": null,
+   "sat_fat": null,
+   "sugar": null,
+   "potassium": null
+  }
+ },
+ {
+  "name": "효도쿡 촉촉한 갈릭제육볶음",
+  "maker": "㈜사랑과선행",
+  "stage": "1단계",
+  "slot": "주찬",
+  "grams": 60.0,
+  "cook": null,
+  "per100": {
+   "energy": null,
+   "carb": null,
+   "protein": 12.51,
+   "fat": null,
+   "sodium": null,
+   "sat_fat": null,
+   "sugar": null,
+   "potassium": null
+  }
+ },
+ {
+  "name": "효도쿡 청국장",
+  "maker": "㈜사랑과선행",
+  "stage": "1단계",
+  "slot": "국",
+  "grams": 150.0,
+  "cook": null,
+  "per100": {
+   "energy": null,
+   "carb": null,
+   "protein": 7.55,
+   "fat": null,
+   "sodium": null,
+   "sat_fat": null,
+   "sugar": null,
+   "potassium": null
+  }
+ },
+ {
+  "name": "설렁탕",
+  "maker": "㈜사랑과선행",
+  "stage": "1단계",
+  "slot": "국",
+  "grams": 150.0,
+  "cook": null,
+  "per100": {
+   "energy": null,
+   "carb": null,
+   "protein": 6.34,
+   "fat": null,
+   "sodium": null,
+   "sat_fat": null,
+   "sugar": null,
+   "potassium": null
+  }
+ },
+ {
+  "name": "효도쿡 마파두부",
+  "maker": "㈜사랑과선행",
+  "stage": "1단계",
+  "slot": "주찬",
+  "grams": 150.0,
+  "cook": null,
+  "per100": {
+   "energy": null,
+   "carb": null,
+   "protein": 6.44,
+   "fat": null,
+   "sodium": null,
+   "sat_fat": null,
+   "sugar": null,
+   "potassium": null
+  }
+ }
+]

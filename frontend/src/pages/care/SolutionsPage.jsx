@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../../lib/api'
 import CareLayout, { Empty, SoonCard } from '../../components/care/CareLayout'
+import DietDesign from '../../components/care/DietDesign'
 import { LevelPill, SOLUTION_STATUS, TypeBadge, errMsg, fmtDate } from '../../components/care/CareUI'
 
 const TABS = [
   { key: 'care', label: '돌봄 솔루션' },
-  { key: 'diet', label: '맞춤 식단 설계', soon: true },
+  { key: 'diet', label: '맞춤 식단 설계' },
   { key: 'program', label: '맞춤 프로그램', soon: true },
 ]
 const FILTERS = [['all', '전체'], ['draft', '검토 필요'], ['approved', '승인됨'], ['sent', '발송됨']]
@@ -86,11 +87,7 @@ export default function SolutionsPage() {
         </>
       )}
 
-      {tab === 'diet' && (
-        <SoonCard title="맞춤 식단 설계"
-          desc="유형과 질환, 씹기·삼키기 상태에 맞춰 한 달 식단과 개인별 배식량을 자동으로 설계하는 기능입니다. 별도 알고리즘을 개발 중이며, 완성되면 이 화면에서 바로 쓸 수 있습니다."
-          bullets={['질환·유형별 금기·권장 식재료 반영', '영양 기준·예산·다양성 동시 최적화', '개인별 배식량과 대체 반찬 제안', '잔반 데이터로 다음 식단 자동 보정']} />
-      )}
+      {tab === 'diet' && <DietDesign />}
 
       {tab === 'program' && (
         <SoonCard title="맞춤 어르신 프로그램 추천"
