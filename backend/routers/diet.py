@@ -482,6 +482,7 @@ class StockEventRequest(BaseModel):
     date: Optional[str] = None
     kind: str                         # 입고 · 실사 · 폐기
     items: list[StockEventItem]
+    auto_expiry: bool = True          # 입고·실사에서 유통기한을 비우면 식재료 종류별 추정값으로 채움
 
 
 @router.post("/stock/events")
@@ -489,7 +490,9 @@ def add_stock_events(req: StockEventRequest, user: dict = Depends(require_staff)
     sb, home = get_supabase(), user["scope_home"]
     if req.kind not in STOCK_KINDS:
         raise HTTPException(status_code=400, detail="종류는 입고 · 실사 · 폐기 중 하나입니다.")
-    day = _date_arg(req.date).isoformat()
+    from diet.shelf_life import estimate_expiry
+    day_d = _date_arg(req.date)
+    day = day_d.isoformat()
     rows = []
     for x in req.items:
         nm = x.식재료명.strip()
@@ -501,8 +504,12 @@ def add_stock_events(req: StockEventRequest, user: dict = Depends(require_staff)
                 ex = datetime.fromisoformat(str(x.유통기한)[:10]).date().isoformat()
             except ValueError:
                 raise HTTPException(status_code=400, detail=f"유통기한 형식이 올바르지 않습니다: {nm}")
+        note = x.비고 or None
+        if not ex and req.auto_expiry and req.kind in ("입고", "실사") and x.수량 > 0:
+            e, why = estimate_expiry(nm, day_d)
+            ex, note = e.isoformat(), " · ".join(t for t in (note, why) if t)
         rows.append({"nursing_home_id": home, "event_date": day, "kind": req.kind, "ingredient": nm,
-                     "qty_g": round(float(x.수량), 1), "expiry": ex, "note": x.비고 or None, "created_by": user["actor"]})
+                     "qty_g": round(float(x.수량), 1), "expiry": ex, "note": note, "created_by": user["actor"]})
     if not rows:
         raise HTTPException(status_code=400, detail="저장할 식재료가 없습니다.")
     sb.table("diet_stock_events").insert(rows).execute()

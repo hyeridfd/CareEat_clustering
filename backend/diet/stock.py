@@ -79,7 +79,7 @@ def _take(lots: list, qty: float, day: dt.date | None = None) -> float:
             continue
         u = min(l["qty"], qty - got)
         l["qty"] -= u; got += u
-    lots[:] = [l for l in lots if l["qty"] > 0.05]
+    lots[:] = [l for l in lots if l["qty"] > 1.0]     # 1g 미만 자투리는 소진으로 봄
     return got
 
 
@@ -161,7 +161,7 @@ def report(events: list, runs: list, date: dt.date) -> dict:
 
     items, expiring = [], []
     for nm in sorted(set(sim["lots"]) | set(ahead) | set(sim["last_count"])):
-        lots = [l for l in sim["lots"].get(nm, []) if l["qty"] > 0.05]
+        lots = [l for l in sim["lots"].get(nm, []) if l["qty"] > 1.0]
         total = sum(l["qty"] for l in lots)
         use = ahead.get(nm, [0.0] * LOOKAHEAD)
         # 소진 예상일: (재고 + 입고 예정 누적) − 사용 누적이 허용 오차 넘게 모자라는 첫날
@@ -191,14 +191,18 @@ def report(events: list, runs: list, date: dt.date) -> dict:
                     waste_risk += l["qty"] - u
         lc = sim["last_count"].get(nm)
         status = []
-        if first and d_left is not None and d_left < 0:
+        # 지남: 기한 지난 로트가 남아 있음 / 임박: D-3 이내인데 그 전에 다 못 씀 / 남을 위험: 7일 안 기한인데 다 못 씀
+        expired = [l for l in exp_lots if l["expiry"] < date]
+        live = [l for l in exp_lots if l["expiry"] >= date]
+        d_live = (live[0]["expiry"] - date).days if live else None
+        exp_waste = sum(l["qty"] for l in expired)
+        tol_w = max(50.0, 0.05 * total)
+        if expired:
             status.append("유통기한 지남")
-        elif d_left is not None and d_left <= EXPIRY_SOON:
-            status.append("유통기한 임박")
+        if waste_risk - exp_waste > tol_w:
+            status.append("유통기한 임박" if d_live is not None and d_live <= EXPIRY_SOON else "남을 위험")
         if run_out is not None:
             status.append("부족 예상")
-        if waste_risk > 50:
-            status.append("남을 위험")
         since = lc or sim.get("first_seen", {}).get(nm)
         if since and (date - since).days > RECOUNT_DAYS:
             status.append("실사 필요")
@@ -217,9 +221,11 @@ def report(events: list, runs: list, date: dt.date) -> dict:
         for l in exp_lots:
             dl = (l["expiry"] - date).days
             if dl <= EXPIRY_SOON:
+                within = round(sum(use[:max(0, dl + 1)])) if dl >= 0 else 0
                 expiring.append({"식재료명": nm, "양(g)": round(l["qty"]), "유통기한": l["expiry"].isoformat(), "D": dl,
+                                 "기한내사용(g)": within, "남을양(g)": max(0, round(l["qty"]) - within),
                                  "7일사용(g)": round(sum(use))})
-    expiring.sort(key=lambda x: x["D"])
+    expiring.sort(key=lambda x: (x["남을양(g)"] <= max(50, 0.05 * x["양(g)"]), x["D"]))   # 남는 것 먼저
     items.sort(key=lambda x: (-len([s for s in x["상태"] if s != "실사 필요"]), x["D"] if x["D"] is not None else 99, x["식재료명"]))
 
     r, n = plans.run_for(date)
@@ -258,14 +264,48 @@ AUTO_NOTE = "발주 자동입고"
 
 
 def receive_plan_events(run: dict, start: dt.date) -> list:
-    """승인 식단의 주간 발주 구매량 → 주차별 입고 기록 (입고일 = 그 주 1일차 전날, 유통기한 미기재)"""
-    weeks = ((run.get("result") or {}).get("purchase") or {}).get("weeks") or []
+    """승인 식단의 주간 발주 구매량 → 입고 기록 (유통기한은 식재료 종류별 추정)
+
+      · 보관 7일 이상(양파·달걀·곡류·양념 …): 그 주 구매량을 주 1일차 전날 한 번에 입고
+      · 보관 7일 미만(잎채소·고기·생선·두부 …): 쓰는 날 전날 입고, 보관일수 안에 쓰는 양만큼씩 나눠서
+        (한 번에 일주일치를 받으면 유통기한이 지나 버리므로)
+    """
+    from .shelf_life import estimate, estimate_expiry
+    res = run.get("result") or {}
+    weeks = (res.get("purchase") or {}).get("weeks") or []
+    daily = res.get("daily_usage") or {}
+    tag = str(run["id"])[:8]
     rows = []
     for w in weeks:
-        d_in = start + dt.timedelta(days=(int(w["주차"]) - 1) * 7 - 1)
+        wk = int(w["주차"])
+        d1 = (wk - 1) * 7 + 1
+        d_in = start + dt.timedelta(days=d1 - 2)
         for x in w.get("식재료") or []:
-            if (x.get("구매량(g)") or 0) > 0:
-                rows.append({"event_date": d_in.isoformat(), "kind": "입고", "ingredient": x["식재료명"],
-                             "qty_g": round(float(x["구매량(g)"]), 1), "expiry": None,
-                             "note": f"{AUTO_NOTE} · {w['주차']}주차 · {str(run['id'])[:8]}"})
+            nm, buy = x["식재료명"], float(x.get("구매량(g)") or 0)
+            if buy <= 0:
+                continue
+            cat, days = estimate(nm)
+            if days >= 7:
+                ex, why = estimate_expiry(nm, d_in)
+                rows.append({"event_date": d_in.isoformat(), "kind": "입고", "ingredient": nm, "qty_g": round(buy, 1),
+                             "expiry": ex.isoformat(), "note": f"{AUTO_NOTE} · {wk}주차 · {tag} · {why}"})
+                continue
+            use = [(d, float((daily.get(str(d)) or {}).get(nm) or 0)) for d in range(d1, d1 + 7)]
+            need = sum(g for _, g in use) or 1.0
+            scale = buy / need                      # 재고 차감분만큼 비례해서 줄임
+            i = 0
+            while i < len(use):
+                if use[i][1] <= 0:
+                    i += 1; continue
+                first = use[i][0]
+                arrive = start + dt.timedelta(days=first - 2)          # 쓰는 날 전날
+                last_ok = first - 1 + days - 1                          # 입고일 + 보관일수 − 1 까지 사용
+                q = 0.0
+                while i < len(use) and use[i][0] <= last_ok:
+                    q += use[i][1]; i += 1
+                if q * scale >= 1:
+                    ex, why = estimate_expiry(nm, arrive)
+                    rows.append({"event_date": arrive.isoformat(), "kind": "입고", "ingredient": nm,
+                                 "qty_g": round(q * scale, 1), "expiry": ex.isoformat(),
+                                 "note": f"{AUTO_NOTE} · {wk}주차 · {tag} · {why} · 사용일 전날 분할"})
     return rows

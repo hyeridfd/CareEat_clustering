@@ -1025,7 +1025,7 @@ function StockTab() {
             </p>
             {planRun && (
               <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl bg-navy-50/60 px-3 py-2 text-xs text-navy-700">
-                <span>승인 식단의 <b>주간 발주량</b>을 각 주 1일차 전날 <b>입고</b>로 기록하면, 실사 없이도 매일 남은 양이 계산됩니다. (다시 누르면 자동입고를 새로 계산)</span>
+                <span>승인 식단의 <b>주간 발주량</b>을 각 주 1일차 전날 <b>입고</b>로 기록하면, 실사 없이도 매일 남은 양이 계산됩니다. 유통기한은 식재료 종류별 추정값(잎채소 3일 · 고기 3일 · 두부 4일 · 달걀 21일 · 양파 30일 …)으로 넣습니다. (다시 누르면 자동입고를 새로 계산)</span>
                 <button className="btn-secondary text-xs ml-auto" onClick={receive} disabled={recv === '반영 중…'}>발주량을 입고로 반영</button>
                 {recv && <span className="w-full text-emerald-700">{recv}</span>}
               </div>
@@ -1059,8 +1059,12 @@ function StockTab() {
             { key: '양(g)', label: '양', right: true, render: (r) => kg(r['양(g)']) },
             { key: '유통기한', label: '유통기한' },
             { key: 'D', label: '남은 날', right: true, render: (r) => <span className={r.D < 0 ? 'text-rose-600 font-semibold' : 'text-amber-700 font-semibold'}>{r.D < 0 ? `${-r.D}일 지남` : r.D === 0 ? '오늘까지' : `D-${r.D}`}</span> },
-            { key: '7일사용(g)', label: '7일 사용 예정', right: true, render: (r) => kg(r['7일사용(g)']) },
+            { key: '기한내사용(g)', label: '기한 안 사용 예정', right: true, render: (r) => kg(r['기한내사용(g)']) },
+            { key: '남을양(g)', label: '남을 양', right: true, render: (r) => (r['남을양(g)'] > Math.max(50, 0.05 * r['양(g)'])
+              ? <span className="text-rose-600 font-semibold">{kg(r['남을양(g)'])} → 다른 메뉴·영양죽에 먼저 사용</span>
+              : <span className="text-emerald-700">기한 안에 사용</span>) },
           ]} />
+          <p className="mt-2 text-[11px] text-muted">유통기한이 '추정'인 품목은 입고 때 실제 날짜로 고쳐 주면 더 정확합니다(기록 목록의 비고에 추정 표시).</p>
         </Section>
       )}
 
@@ -1148,6 +1152,7 @@ function StockEntry({ onSaved, items }) {
   const [paste, setPaste] = useState('')
   const [msg, setMsg] = useState('')
   const [saving, setSaving] = useState(false)
+  const [autoExp, setAutoExp] = useState(true)
   const upd = (i, k, v) => setRows(rows.map((r, j) => (j === i ? { ...r, [k]: v } : r)))
   const addPaste = () => {
     const add = paste.split('\n').map((l) => l.split('\t')).filter((c) => c[0]?.trim())
@@ -1158,7 +1163,7 @@ function StockEntry({ onSaved, items }) {
   const save = async () => {
     setSaving(true); setMsg('')
     try {
-      const body = { date, kind, items: rows.filter((r) => r.식재료명 && r.수량 !== '').map((r) => ({ ...r, 수량: Number(r.수량), 유통기한: r.유통기한 || null })) }
+      const body = { date, kind, auto_expiry: autoExp, items: rows.filter((r) => r.식재료명 && r.수량 !== '').map((r) => ({ ...r, 수량: Number(r.수량), 유통기한: r.유통기한 || null })) }
       const r = await api.post('/care/diet/stock/events', body)
       setMsg(`${kind} ${r.data.count}건을 저장했습니다.`); setRows([{ 식재료명: '', 수량: '', 유통기한: '', 비고: '' }]); onSaved?.()
     } catch (e) { setMsg(errMsg(e)) } finally { setSaving(false) }
@@ -1204,6 +1209,11 @@ function StockEntry({ onSaved, items }) {
       <div className="mt-3 flex flex-wrap items-start gap-2">
         <button className="btn-secondary text-xs" onClick={() => setRows([...rows, { 식재료명: '', 수량: '', 유통기한: '', 비고: '' }])}>+ 행 추가</button>
         {kind === '실사' && items.length > 0 && <button className="btn-secondary text-xs" onClick={fillCurrent}>추적 중인 품목 불러오기</button>}
+        {kind !== '폐기' && (
+          <label className="flex items-center gap-1.5 text-xs text-muted self-center" title="잎채소 3일 · 고기 3일 · 생선 2일 · 두부 4일 · 버섯 5일 · 달걀 21일 · 뿌리채소 14일 · 양파·감자 30일 · 곡류·양념 180일 등">
+            <input type="checkbox" checked={autoExp} onChange={(e) => setAutoExp(e.target.checked)} />유통기한 비우면 추정값으로 채우기
+          </label>
+        )}
         <textarea className="form-input !py-1.5 text-xs flex-1 min-w-[240px]" rows={2} value={paste} onChange={(e) => setPaste(e.target.value)}
           placeholder="엑셀에서 '식재료명 · 양(g) · 유통기한' 열을 복사해 붙여넣기" />
         <button className="btn-secondary text-xs" disabled={!paste.trim()} onClick={addPaste}>붙여넣은 행 추가</button>
