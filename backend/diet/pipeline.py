@@ -316,9 +316,10 @@ def personalize_and_serve(pool, records, profiles, meta, inv_model=None, product
     if progress: progress("주간 발주량 계산")
     products = json.load(open(os.path.join(DATA_DIR, "products.json"), encoding="utf-8"))
     purchase = weekly_purchase(dict(by_res), pool, subs, products, inventory, n_days=N_DAYS)
+    daily_usage = purchase.pop("daily_usage", {})
 
     return {
-        "purchase": purchase,
+        "purchase": purchase, "daily_usage": daily_usage,
         "substitutions": subs, "orders": order_rows, "product_totals": total_rows, "porridge": mf["porridge"],
         "residents": residents, "servings": dict(by_res),
         "serving_summary": dict(tot), "substitution_reasons": dict(reason_tot),

@@ -96,6 +96,7 @@ def weekly_purchase(servings: dict, pool: dict, subs: list, products: list,
     n_weeks = math.ceil(n_days / WEEK_DAYS)
     need = [defaultdict(float) for _ in range(n_weeks)]          # 주차별 식재료 g
     menus_of = [defaultdict(set) for _ in range(n_weeks)]
+    daily = defaultdict(lambda: defaultdict(float))             # 일차 → 식재료 → g (재고 추적용)
     missing = set()
 
     for eid, rows in (servings or {}).items():
@@ -119,6 +120,7 @@ def weekly_purchase(servings: dict, pool: dict, subs: list, products: list,
                         continue
                     q = raw * k * ((1 - red) if _is_seasoning(ing) else 1.0)
                     need[w][ing] += q
+                    daily[day][ing] += q
                     menus_of[w][ing].add(name)
 
     # 재고: 주차 순서대로 사용
@@ -182,6 +184,7 @@ def weekly_purchase(servings: dict, pool: dict, subs: list, products: list,
                                "제품_금액": sum(r["금액"] or 0 for r in prows),
                                "제품_팩": sum(r["수량"] or 0 for r in prows),
                                "재고사용(kg)": round(sum(r["재고사용(g)"] for r in rows) / 1000, 1)}})
-    return {"weeks": weeks, "price_source": "Neo4j 상품 매핑 (g당 최저가)" if _prices() else None,
+    daily_usage = {str(d): {k: round(v, 1) for k, v in sorted(m.items()) if v >= 0.5} for d, m in sorted(daily.items())}
+    return {"daily_usage": daily_usage, "weeks": weeks, "price_source": "Neo4j 상품 매핑 (g당 최저가)" if _prices() else None,
             "price_count": len(_prices()), "missing_recipes": sorted(missing)[:30],
             "note": "식재료 금액은 부가세 포함 여부가 상품마다 다를 수 있음 · 고령친화식품은 부가세 별도"}

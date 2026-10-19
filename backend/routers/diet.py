@@ -135,12 +135,13 @@ def start_run(req: RunRequest, user: dict = Depends(require_staff)):
     sb, home = get_supabase(), user["scope_home"]
     if _busy(sb, home):
         raise HTTPException(status_code=409, detail="이미 식단 설계가 진행 중입니다. 끝난 뒤 다시 실행하세요.")
-    inv = sb.table("diet_inventory").select("nursing_home_id,items").eq("nursing_home_id", home).execute().data
+    inv = sb.table("diet_inventory").select("nursing_home_id,items,start_date").eq("nursing_home_id", home).execute().data
     pref = sb.table("diet_preferences").select("nursing_home_id,updated_at").eq("nursing_home_id", home).execute().data
     row = _one(sb.table("diet_runs").insert({
         "nursing_home_id": home, "status": "queued", "progress": "대기 중", "created_by": user["actor"],
         "params": {"preset": req.preset, "seed": req.seed,
                    "inventory_used": bool(inv and inv[0].get("items")), "preference_used": bool(pref),
+                   "start_date": (inv[0].get("start_date") if inv else None),
                    "preference_updated_at": pref[0]["updated_at"] if pref else None}}).execute())
     threading.Thread(target=_job, args=(row["id"], home, req.preset, req.seed), daemon=True).start()
     return {"id": row["id"], "status": "queued"}
@@ -149,7 +150,7 @@ def start_run(req: RunRequest, user: dict = Depends(require_staff)):
 @router.get("/status")
 def status(user: dict = Depends(require_staff)):
     sb, home = get_supabase(), user["scope_home"]
-    runs = sb.table("diet_runs").select("id,status,progress,params,created_at,updated_at,approved_at,approved_by,parent_run_id,error") \
+    runs = sb.table("diet_runs").select("id,status,progress,params,created_at,updated_at,approved_at,approved_by,parent_run_id,error,start_date") \
         .eq("nursing_home_id", home).order("created_at", desc=True).limit(12).execute().data or []
     inv = sb.table("diet_inventory").select("items,start_date,updated_at").eq("nursing_home_id", home).execute().data
     pref = sb.table("diet_preferences").select("updated_at,report").eq("nursing_home_id", home).execute().data
@@ -182,15 +183,25 @@ def get_servings(run_id: str, eid: str, user: dict = Depends(require_staff)):
                 "이 어르신의 배식표가 없습니다.")
 
 
+class ApproveRequest(BaseModel):
+    start_date: Optional[str] = None        # 식단 1일차 날짜 (재고 추적 예상 사용량 기준)
+
+
 @router.post("/runs/{run_id}/approve")
-def approve(run_id: str, user: dict = Depends(require_staff)):
+def approve(run_id: str, req: Optional[ApproveRequest] = None, user: dict = Depends(require_staff)):
     sb = get_supabase()
     run = get_run(run_id, user)
     if run["status"] not in ("done", "approved"):
         raise HTTPException(status_code=400, detail="완료된 설계만 승인할 수 있습니다.")
+    start = (req.start_date if req else None) or (run.get("params") or {}).get("start_date")
+    if start:
+        try:
+            start = datetime.fromisoformat(str(start)[:10]).date().isoformat()
+        except ValueError:
+            raise HTTPException(status_code=400, detail="식단 시작일 형식이 올바르지 않습니다 (YYYY-MM-DD).")
     sb.table("diet_runs").update({"status": "approved", "approved_by": user["actor"], "approved_at": get_kst_now(),
-                                  "updated_at": get_kst_now()}).eq("id", run_id).execute()
-    return {"ok": True}
+                                  "start_date": start, "updated_at": get_kst_now()}).eq("id", run_id).execute()
+    return {"ok": True, "start_date": start}
 
 
 class MenuChange(BaseModel):
@@ -320,4 +331,105 @@ def put_settings(eid: str, req: SettingsRequest, user: dict = Depends(require_st
          "해당 요양원의 어르신이 아닙니다.")
     sb.table("diet_resident_settings").upsert({"elderly_id": eid, "nursing_home_id": home, "no_spicy": req.no_spicy,
                                                "note": req.note, "updated_at": get_kst_now()}).execute()
+    return {"ok": True}
+
+
+# ─────────────────────────── 재고 추적 (입고 · 실사 · 폐기 + 승인 식단 예상 사용) ───────────────────────────
+
+STOCK_KINDS = ("입고", "실사", "폐기")
+
+
+def _kst_today():
+    return (datetime.now(timezone.utc) + timedelta(hours=9)).date()
+
+
+def _stock_inputs(sb, home):
+    events = fetch_all(sb, "diet_stock_events", eq={"nursing_home_id": home}, order="event_date")
+    runs = sb.table("diet_runs").select("id,start_date,approved_at,menu,result").eq("nursing_home_id", home) \
+        .eq("status", "approved").execute().data or []
+    runs = [r for r in runs if r.get("start_date")]
+    for r in runs:                                   # 재고 계산엔 일별 사용량만 필요
+        r["result"] = {"daily_usage": (r.get("result") or {}).get("daily_usage") or {}}
+    return events, runs
+
+
+def _date_arg(date):
+    if not date:
+        return _kst_today()
+    try:
+        return datetime.fromisoformat(str(date)[:10]).date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="날짜 형식이 올바르지 않습니다 (YYYY-MM-DD).")
+
+
+@router.get("/stock/report")
+def stock_report(date: Optional[str] = None, user: dict = Depends(require_staff)):
+    """매일 아침 재고 리포트 — 추정 재고 · 오늘/7일 사용 예정 · 유통기한 임박 · 부족 예상 · 실사 필요"""
+    from diet.stock import report
+    sb, home = get_supabase(), user["scope_home"]
+    events, runs = _stock_inputs(sb, home)
+    return _jsonable(report(events, runs, _date_arg(date)))
+
+
+@router.get("/stock/snapshot")
+def stock_snapshot(date: Optional[str] = None, user: dict = Depends(require_staff)):
+    """해당 날짜 아침 추정 재고 → 식단 설계용 재고 표로 불러오기"""
+    from diet.stock import snapshot
+    sb, home = get_supabase(), user["scope_home"]
+    events, runs = _stock_inputs(sb, home)
+    day = _date_arg(date)
+    return {"date": day.isoformat(), "items": snapshot(events, runs, day)}
+
+
+@router.get("/stock/events")
+def stock_events(limit: int = 200, user: dict = Depends(require_staff)):
+    sb, home = get_supabase(), user["scope_home"]
+    return sb.table("diet_stock_events").select("*").eq("nursing_home_id", home) \
+        .order("event_date", desc=True).order("created_at", desc=True).limit(min(limit, 1000)).execute().data or []
+
+
+class StockEventItem(BaseModel):
+    식재료명: str
+    수량: float                       # g
+    유통기한: Optional[str] = None
+    비고: Optional[str] = None
+
+
+class StockEventRequest(BaseModel):
+    date: Optional[str] = None
+    kind: str                         # 입고 · 실사 · 폐기
+    items: list[StockEventItem]
+
+
+@router.post("/stock/events")
+def add_stock_events(req: StockEventRequest, user: dict = Depends(require_staff)):
+    sb, home = get_supabase(), user["scope_home"]
+    if req.kind not in STOCK_KINDS:
+        raise HTTPException(status_code=400, detail="종류는 입고 · 실사 · 폐기 중 하나입니다.")
+    day = _date_arg(req.date).isoformat()
+    rows = []
+    for x in req.items:
+        nm = x.식재료명.strip()
+        if not nm or x.수량 < 0 or (req.kind != "실사" and x.수량 == 0):
+            continue
+        ex = None
+        if x.유통기한:
+            try:
+                ex = datetime.fromisoformat(str(x.유통기한)[:10]).date().isoformat()
+            except ValueError:
+                raise HTTPException(status_code=400, detail=f"유통기한 형식이 올바르지 않습니다: {nm}")
+        rows.append({"nursing_home_id": home, "event_date": day, "kind": req.kind, "ingredient": nm,
+                     "qty_g": round(float(x.수량), 1), "expiry": ex, "note": x.비고 or None, "created_by": user["actor"]})
+    if not rows:
+        raise HTTPException(status_code=400, detail="저장할 식재료가 없습니다.")
+    sb.table("diet_stock_events").insert(rows).execute()
+    return {"ok": True, "count": len(rows)}
+
+
+@router.delete("/stock/events/{event_id}")
+def delete_stock_event(event_id: str, user: dict = Depends(require_staff)):
+    sb, home = get_supabase(), user["scope_home"]
+    _one(sb.table("diet_stock_events").select("id").eq("id", event_id).eq("nursing_home_id", home).execute(),
+         "기록을 찾을 수 없습니다.")
+    sb.table("diet_stock_events").delete().eq("id", event_id).eq("nursing_home_id", home).execute()
     return {"ok": True}

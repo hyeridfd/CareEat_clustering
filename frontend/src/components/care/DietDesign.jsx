@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import api from '../../lib/api'
 import { errMsg, fmtDate } from './CareUI'
 
@@ -26,6 +26,7 @@ const SUBTABS = [
   { key: 'menu', label: '28일 식단표' },
   { key: 'serving', label: '개인 배식표' },
   { key: 'purchase', label: '주간 발주' },
+  { key: 'stock', label: '재고 리포트' },
   { key: 'subs', label: '대체찬·죽' },
   { key: 'settings', label: '재고·선호도·설정' },
 ]
@@ -240,9 +241,9 @@ export default function DietDesign() {
     } catch (e) { setErr(errMsg(e)) } finally { setBusy(false) }
   }
 
-  const approve = async () => {
+  const approve = async (startDate) => {
     setErr('')
-    try { await api.post(`/care/diet/runs/${runId}/approve`); await loadStatus(); loadRun(runId) } catch (e) { setErr(errMsg(e)) }
+    try { await api.post(`/care/diet/runs/${runId}/approve`, { start_date: startDate || null }); await loadStatus(); loadRun(runId) } catch (e) { setErr(errMsg(e)) }
   }
 
   const ready = status?.residents_ready ?? 0
@@ -306,6 +307,8 @@ export default function DietDesign() {
 
       {sub === 'settings' ? (
         <SettingsTab onChanged={loadStatus} />
+      ) : sub === 'stock' ? (
+        <StockTab />
       ) : !live ? (
         <div className="surface p-12 text-center text-muted">{runId ? '불러오는 중…' : '아직 설계 결과가 없습니다. 위에서 식단 설계를 실행하세요.'}</div>
       ) : live.status === 'failed' ? (
@@ -332,6 +335,10 @@ export default function DietDesign() {
 /* ─────────────────────────── ① 식단표 ─────────────────────────── */
 
 function MenuTab({ run, onApprove, onEdited, onRerun, setErr }) {
+  const [askStart, setAskStart] = useState(false)
+  const [startDate, setStartDate] = useState(run.start_date || run.params?.start_date || (() => {
+    const d = new Date(Date.now() + 9 * 3600e3); d.setUTCDate(d.getUTCDate() + 1); return d.toISOString().slice(0, 10)
+  })())
   const [week, setWeek] = useState(1)
   const [edits, setEdits] = useState({})          // "일차|끼니|칸" → 메뉴
   const [editing, setEditing] = useState(null)     // {일차, 끼니, 칸}
@@ -363,8 +370,15 @@ function MenuTab({ run, onApprove, onEdited, onRerun, setErr }) {
       <Section title="설계 결과"
         right={<>
           {run.status === 'approved'
-            ? <span className="badge bg-emerald-50 text-emerald-700">승인됨 · {fmtDate(run.approved_at)}</span>
-            : <button className="btn-primary" onClick={onApprove} disabled={nEdits > 0}>영양사 승인</button>}
+            ? <span className="badge bg-emerald-50 text-emerald-700">승인됨 · {fmtDate(run.approved_at)}{run.start_date ? ` · ${run.start_date} 시작` : ''}</span>
+            : askStart ? (
+              <span className="flex items-center gap-2 rounded-xl bg-navy-50 px-2 py-1">
+                <span className="text-xs text-navy-700">식단 1일차</span>
+                <input type="date" className="form-input !py-1 !w-auto" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+                <button className="btn-primary text-xs" disabled={!startDate} onClick={() => { setAskStart(false); onApprove(startDate) }}>승인 확정</button>
+                <button className="btn-ghost text-xs" onClick={() => setAskStart(false)}>취소</button>
+              </span>
+            ) : <button className="btn-primary" onClick={() => setAskStart(true)} disabled={nEdits > 0}>영양사 승인</button>}
           <button className="btn-secondary" onClick={onRerun}>다시 최적화</button>
         </>}>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -783,6 +797,14 @@ function InventoryEditor({ onChanged }) {
       right={<>
         <label className="text-xs text-muted">식단 1일차</label>
         <input type="date" className="form-input !py-1.5 !w-auto" value={start} onChange={(e) => setStart(e.target.value)} />
+        <button className="btn-secondary" disabled={!start} title="재고 리포트의 추정 재고(식단 1일차 아침 기준)로 표를 채웁니다"
+          onClick={async () => {
+            try {
+              const r = await api.get('/care/diet/stock/snapshot', { params: { date: start }, timeout: 60000 })
+              if (!r.data.items.length) { setMsg('추적 중인 재고가 없습니다. 재고 리포트 탭에서 실사를 먼저 입력하세요.'); return }
+              setRows(r.data.items); setMsg(`${start} 아침 추정 재고 ${r.data.items.length}건을 불러왔습니다. 저장해야 반영됩니다.`)
+            } catch (e) { setMsg(errMsg(e)) }
+          }}>추적 재고 불러오기</button>
         <button className="btn-primary" onClick={save} disabled={saving || !rows}>{saving ? '저장 중…' : '재고 저장'}</button>
       </>}>
       <p className="mb-3 text-xs text-muted leading-5">
@@ -922,6 +944,232 @@ function ResidentSettings() {
           )}
         </>
       )}
+    </Section>
+  )
+}
+
+/* ─────────────────────────── 재고 리포트 (재고 추적) ─────────────────────────── */
+
+const todayKst = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10)
+const STATUS_CLS = {
+  '유통기한 지남': 'bg-rose-100 text-rose-700', '유통기한 임박': 'bg-amber-100 text-amber-800',
+  '부족 예상': 'bg-orange-100 text-orange-800', '남을 위험': 'bg-violet-100 text-violet-700', '실사 필요': 'bg-slate-100 text-slate-600',
+}
+const KIND_CLS = { 입고: 'bg-emerald-50 text-emerald-700', 실사: 'bg-navy-50 text-navy-700', 폐기: 'bg-rose-50 text-rose-700' }
+
+function StockTab() {
+  const [date, setDate] = useState(todayKst())
+  const [rep, setRep] = useState(null)
+  const [events, setEvents] = useState(null)
+  const [err, setErr] = useState('')
+  const [filter, setFilter] = useState('all')
+  const [open, setOpen] = useState(null)
+
+  const load = () => {
+    setErr('')
+    api.get('/care/diet/stock/report', { params: { date }, timeout: 60000 }).then((r) => setRep(r.data)).catch((e) => setErr(errMsg(e)))
+    api.get('/care/diet/stock/events', { params: { limit: 300 } }).then((r) => setEvents(r.data)).catch(() => {})
+  }
+  useEffect(() => { load() }, [date])
+
+  const del = async (id) => {
+    try { await api.delete(`/care/diet/stock/events/${id}`); load() } catch (e) { setErr(errMsg(e)) }
+  }
+  const s = rep?.summary || {}
+  const items = (rep?.items || []).filter((x) => filter === 'all' || x.상태.includes(filter))
+  const isToday = date === todayKst()
+
+  return (
+    <div className="space-y-4">
+      {err && <p className="text-sm rounded-xl bg-red-50 text-red-700 px-4 py-3">{err}</p>}
+      <Section title={`${isToday ? '오늘 아침' : date} 재고 리포트`}
+        right={<>
+          <input type="date" className="form-input !py-1.5 !w-auto" value={date} onChange={(e) => setDate(e.target.value)} />
+          {!isToday && <button className="btn-ghost text-xs" onClick={() => setDate(todayKst())}>오늘</button>}
+        </>}>
+        {!rep ? <p className="text-sm text-muted">불러오는 중…</p> : (
+          <>
+            <p className="mb-3 text-xs text-muted leading-5">
+              {rep.plan
+                ? <>승인 식단 <b className="text-navy-900">{rep.plan.day}일차</b> ({rep.plan.start_date} ~ {rep.plan.end_date}) 기준. </>
+                : <span className="text-amber-700">이 날짜를 포함하는 승인 식단이 없어 예상 사용량이 0입니다. 식단표 탭에서 시작일을 정해 승인하세요. </span>}
+              추정 재고 = 마지막 실사 + 입고 − 승인 식단 예상 사용량 − 폐기 (유통기한 빠른 것부터 사용). 실제와 차이가 나면 실사로 맞춰 주세요.
+            </p>
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+              <Stat label="추적 품목" value={s.품목} unit="개" sub={`${s['추정재고(kg)'] ?? 0}kg`} />
+              <Stat label="유통기한 지남" value={s.유통기한지남} unit="개" tone={s.유통기한지남 ? 'bg-rose-50' : undefined} sub="폐기 확인" />
+              <Stat label="유통기한 임박" value={s.유통기한임박} unit="개" tone={s.유통기한임박 ? 'bg-amber-50' : undefined} sub="D-3 이내" />
+              <Stat label="부족 예상" value={s.부족예상} unit="개" tone={s.부족예상 ? 'bg-orange-50' : undefined} sub="7일 안에 소진" />
+              <Stat label="남을 위험" value={s.남을위험} unit="개" sub="기한 내 다 못 씀" />
+              <Stat label="실사 필요" value={s.실사필요} unit="개" sub="7일 넘게 미확인" />
+            </div>
+            {rep.today_menu?.length > 0 && (
+              <div className="mt-4 grid md:grid-cols-3 gap-2">
+                {rep.today_menu.map((m) => (
+                  <div key={m.끼니} className="rounded-xl bg-navy-50/60 px-3 py-2 text-xs">
+                    <b className="text-navy-900">{m.끼니}</b>
+                    <span className="ml-2 text-navy-700">{[m.밥, m.국, m.주찬, m.부찬1, m.부찬2, m.김치].filter((x) => x && !String(x).startsWith('-')).join(' · ')}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </Section>
+
+      {rep?.expiring?.length > 0 && (
+        <Section title="유통기한 확인">
+          <Table rows={rep.expiring} minW={520} cols={[
+            { key: '식재료명', label: '식재료', cls: 'font-semibold text-navy-900' },
+            { key: '양(g)', label: '양', right: true, render: (r) => kg(r['양(g)']) },
+            { key: '유통기한', label: '유통기한' },
+            { key: 'D', label: '남은 날', right: true, render: (r) => <span className={r.D < 0 ? 'text-rose-600 font-semibold' : 'text-amber-700 font-semibold'}>{r.D < 0 ? `${-r.D}일 지남` : r.D === 0 ? '오늘까지' : `D-${r.D}`}</span> },
+            { key: '7일사용(g)', label: '7일 사용 예정', right: true, render: (r) => kg(r['7일사용(g)']) },
+          ]} />
+        </Section>
+      )}
+
+      <Section title="재고 현황"
+        right={<div className="flex flex-wrap gap-1">
+          {['all', '유통기한 지남', '유통기한 임박', '부족 예상', '남을 위험', '실사 필요'].map((k) => (
+            <button key={k} onClick={() => setFilter(k)} className={`px-2.5 py-1 rounded-full text-[11px] font-semibold ${filter === k ? 'bg-navy-900 text-white' : 'bg-navy-50 text-navy-700'}`}>{k === 'all' ? '전체' : k}</button>
+          ))}
+        </div>}>
+        {rep && !rep.items?.length ? (
+          <p className="text-sm text-muted py-4 text-center">아직 재고 기록이 없습니다. 아래에서 실사(현재 재고)부터 입력하세요.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[980px]">
+              <thead>
+                <tr className="text-left text-[11px] text-muted border-b border-navy-100">
+                  <th className="py-2 pr-2">식재료</th><th className="py-2 pr-2 text-right">추정 재고</th><th className="py-2 pr-2 text-right">오늘 사용</th>
+                  <th className="py-2 pr-2 text-right">7일 사용</th><th className="py-2 pr-2 text-right">남는 일수</th><th className="py-2 pr-2">소진 예상</th>
+                  <th className="py-2 pr-2">가장 빠른 유통기한</th><th className="py-2 pr-2">마지막 실사</th><th className="py-2">상태</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((x) => (
+                  <Fragment key={x.식재료명}>
+                    <tr className="border-b border-navy-50 cursor-pointer hover:bg-navy-50/40" onClick={() => setOpen(open === x.식재료명 ? null : x.식재료명)}>
+                      <td className="py-1.5 pr-2 font-semibold text-navy-900">{x.식재료명}</td>
+                      <td className="py-1.5 pr-2 text-right tabular-nums font-semibold">{kg(x['추정재고(g)'])}</td>
+                      <td className="py-1.5 pr-2 text-right tabular-nums">{x['오늘사용(g)'] ? kg(x['오늘사용(g)']) : '–'}</td>
+                      <td className="py-1.5 pr-2 text-right tabular-nums">{x['7일사용(g)'] ? kg(x['7일사용(g)']) : '–'}</td>
+                      <td className="py-1.5 pr-2 text-right tabular-nums">{x.남는일수 != null ? `${x.남는일수}일` : '–'}</td>
+                      <td className="py-1.5 pr-2">{x.소진예상 ? <span className="text-orange-700 font-semibold">{x.소진예상} (부족 {kg(x['부족량(g)'])})</span> : '–'}</td>
+                      <td className="py-1.5 pr-2 tabular-nums">{x.가장빠른유통기한 ? `${x.가장빠른유통기한.slice(5)} (${x.D < 0 ? `${-x.D}일 지남` : `D-${x.D}`})` : '–'}</td>
+                      <td className="py-1.5 pr-2 text-xs text-muted">{x.마지막실사 ? `${x.마지막실사.slice(5)} · ${x.실사경과일}일 전` : '없음'}</td>
+                      <td className="py-1.5">{x.상태.map((t) => <span key={t} className={`badge mr-1 ${STATUS_CLS[t]}`}>{t}</span>)}</td>
+                    </tr>
+                    {open === x.식재료명 && (
+                      <tr className="bg-navy-50/30">
+                        <td colSpan={9} className="px-3 py-2 text-xs text-navy-700">
+                          {x.로트.length ? x.로트.map((l, i) => (
+                            <span key={i} className="mr-4">{kg(l['양(g)'])} · 유통기한 {l.유통기한 || '미기재'} · {l.입고} 입고/확인</span>
+                          )) : '남은 재고 없음'}
+                          {x['남을위험(g)'] > 0 && <span className="ml-2 text-violet-700">· 유통기한까지 약 {kg(x['남을위험(g)'])} 남을 수 있음 → 다른 메뉴·영양죽에 먼저 사용</span>}
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {rep?.untracked?.length > 0 && (
+          <details className="mt-3 text-xs">
+            <summary className="cursor-pointer text-navy-700 font-semibold">재고 등록 안 된 식재료 중 7일 사용 많은 것 ({rep.untracked.length})</summary>
+            <p className="mt-2 text-muted leading-6">{rep.untracked.map((u) => `${u.식재료명} ${kg(u['7일사용(g)'])}`).join(' · ')}</p>
+          </details>
+        )}
+      </Section>
+
+      <StockEntry onSaved={load} items={rep?.items || []} />
+
+      <Section title="입고·실사·폐기 기록">
+        <Table rows={events} minW={720} empty="기록이 없습니다." rowKey={(r) => r.id} cols={[
+          { key: 'event_date', label: '날짜' },
+          { key: 'kind', label: '종류', render: (r) => <span className={`badge ${KIND_CLS[r.kind]}`}>{r.kind}</span> },
+          { key: 'ingredient', label: '식재료', cls: 'font-semibold text-navy-900' },
+          { key: 'qty_g', label: '양', right: true, render: (r) => kg(Number(r.qty_g)) },
+          { key: 'expiry', label: '유통기한' },
+          { key: 'note', label: '비고', cls: 'text-xs text-muted' },
+          { key: 'id', label: '', render: (r) => <button className="btn-ghost text-xs" onClick={() => del(r.id)}>삭제</button> },
+        ]} />
+      </Section>
+    </div>
+  )
+}
+
+function StockEntry({ onSaved, items }) {
+  const [kind, setKind] = useState('실사')
+  const [date, setDate] = useState(todayKst())
+  const [rows, setRows] = useState([{ 식재료명: '', 수량: '', 유통기한: '', 비고: '' }])
+  const [paste, setPaste] = useState('')
+  const [msg, setMsg] = useState('')
+  const [saving, setSaving] = useState(false)
+  const upd = (i, k, v) => setRows(rows.map((r, j) => (j === i ? { ...r, [k]: v } : r)))
+  const addPaste = () => {
+    const add = paste.split('\n').map((l) => l.split('\t')).filter((c) => c[0]?.trim())
+      .map((c) => ({ 식재료명: c[0].trim(), 수량: String(c[1] || '').replace(/[^\d.]/g, ''), 유통기한: (c[2] || '').trim(), 비고: (c[3] || '').trim() }))
+    setRows([...rows.filter((r) => r.식재료명), ...add]); setPaste('')
+  }
+  const fillCurrent = () => setRows(items.map((x) => ({ 식재료명: x.식재료명, 수량: '', 유통기한: '', 비고: `추정 ${Math.round(x['추정재고(g)'])}g` })))
+  const save = async () => {
+    setSaving(true); setMsg('')
+    try {
+      const body = { date, kind, items: rows.filter((r) => r.식재료명 && r.수량 !== '').map((r) => ({ ...r, 수량: Number(r.수량), 유통기한: r.유통기한 || null })) }
+      const r = await api.post('/care/diet/stock/events', body)
+      setMsg(`${kind} ${r.data.count}건을 저장했습니다.`); setRows([{ 식재료명: '', 수량: '', 유통기한: '', 비고: '' }]); onSaved?.()
+    } catch (e) { setMsg(errMsg(e)) } finally { setSaving(false) }
+  }
+  const HELP = {
+    실사: '창고에서 실제로 센 양입니다. 그날 아침(배식 전) 기준으로 재고를 이 값으로 맞춥니다. 유통기한까지 적으면 그 기한으로 교체합니다.',
+    입고: '들어온 식재료의 양과 유통기한입니다. 기존 재고에 더해지고, 유통기한 빠른 것부터 사용됩니다.',
+    폐기: '버린 양입니다. 유통기한 빠른 것부터 뺍니다.',
+  }
+  return (
+    <Section title="재고 입력"
+      right={<>
+        <div className="flex rounded-xl bg-navy-50 p-1">
+          {['실사', '입고', '폐기'].map((k) => (
+            <button key={k} onClick={() => setKind(k)} className={`px-3 py-1 rounded-lg text-xs font-semibold ${kind === k ? 'bg-white text-navy-900 shadow-sm' : 'text-muted'}`}>{k}</button>
+          ))}
+        </div>
+        <input type="date" className="form-input !py-1.5 !w-auto" value={date} onChange={(e) => setDate(e.target.value)} />
+        <button className="btn-primary" disabled={saving} onClick={save}>{saving ? '저장 중…' : `${kind} 저장`}</button>
+      </>}>
+      <p className="mb-3 text-xs text-muted leading-5">{HELP[kind]} 식재료명은 레시피 재료명과 같게 씁니다(예: 두부, 양파, 돼지고기(앞다리)). 양은 g 단위입니다.</p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm min-w-[600px]">
+          <thead>
+            <tr className="text-left text-[11px] text-muted border-b border-navy-100">
+              <th className="py-2 pr-2">식재료명</th><th className="py-2 pr-2">{kind === '실사' ? '실제 재고(g)' : '양(g)'}</th>
+              <th className="py-2 pr-2">유통기한{kind === '폐기' ? ' (선택)' : ''}</th><th className="py-2 pr-2">비고</th><th />
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr key={i} className="border-b border-navy-50">
+                <td className="py-1 pr-2"><input className="form-input !py-1.5" value={r.식재료명} onChange={(e) => upd(i, '식재료명', e.target.value)} /></td>
+                <td className="py-1 pr-2"><input className="form-input !py-1.5 text-right" type="number" value={r.수량} onChange={(e) => upd(i, '수량', e.target.value)} /></td>
+                <td className="py-1 pr-2"><input className="form-input !py-1.5" type="date" value={r.유통기한} onChange={(e) => upd(i, '유통기한', e.target.value)} /></td>
+                <td className="py-1 pr-2"><input className="form-input !py-1.5" value={r.비고} onChange={(e) => upd(i, '비고', e.target.value)} /></td>
+                <td className="py-1"><button className="btn-ghost text-xs" onClick={() => setRows(rows.filter((_, j) => j !== i))}>삭제</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="mt-3 flex flex-wrap items-start gap-2">
+        <button className="btn-secondary text-xs" onClick={() => setRows([...rows, { 식재료명: '', 수량: '', 유통기한: '', 비고: '' }])}>+ 행 추가</button>
+        {kind === '실사' && items.length > 0 && <button className="btn-secondary text-xs" onClick={fillCurrent}>추적 중인 품목 불러오기</button>}
+        <textarea className="form-input !py-1.5 text-xs flex-1 min-w-[240px]" rows={2} value={paste} onChange={(e) => setPaste(e.target.value)}
+          placeholder="엑셀에서 '식재료명 · 양(g) · 유통기한' 열을 복사해 붙여넣기" />
+        <button className="btn-secondary text-xs" disabled={!paste.trim()} onClick={addPaste}>붙여넣은 행 추가</button>
+      </div>
+      {msg && <p className="mt-2 text-xs text-navy-700">{msg}</p>}
     </Section>
   )
 }
