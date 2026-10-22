@@ -183,6 +183,142 @@ const MEAL_FOODS_BY_DAY = {
 }
 
 
+
+// 조사하지 않는 끼니 — 자리는 보이되 입력을 막는다
+const NOT_SURVEYED = [{ food: '간식', menu: '조사안함', disabled: true }]
+
+// 메뉴 미정인 일차에 쓰는 기본 틀 — 자리는 그대로 두고 메뉴명만 '미정'으로 표시한다
+const MENU_TBD = {
+  '간식1': NOT_SURVEYED,
+  '아침': [
+    { food: '밥/죽',  menu: '미정' },
+    { food: '국/탕',  menu: '미정' },
+    { food: '주찬',   menu: '미정' },
+    { food: '부찬1',  menu: '미정' },
+    { food: '부찬2',  menu: '미정' },
+    { food: '김치1',  menu: '배추김치' },
+  ],
+  '점심': [
+    { food: '밥/죽',  menu: '미정' },
+    { food: '국/탕',  menu: '미정' },
+    { food: '주찬',   menu: '미정' },
+    { food: '부찬1',  menu: '미정' },
+    { food: '부찬2',  menu: '미정' },
+    { food: '김치1',  menu: '배추김치' },
+  ],
+  '간식2': [{ food: '간식', menu: '미정' }],
+  '저녁': [
+    { food: '밥/죽',  menu: '미정' },
+    { food: '국/탕',  menu: '미정' },
+    { food: '주찬',   menu: '미정' },
+    { food: '부찬1',  menu: '미정' },
+    { food: '부찬2',  menu: '미정' },
+    { food: '김치1',  menu: '배추김치' },
+  ],
+}
+
+
+// ── 마리아의 집(NH002) 식단 ──
+// 자리 순서: 밥/죽 · 국/탕 · 주찬 · 부찬1 · 부찬2 · 김치
+// 오전간식(간식1)은 조사하지 않는다 → 아래에 넣지 않으면 그 끼니는 화면에서 빠진다.
+const MEAL_FOODS_NH002 = {
+  1: {
+    '아침': [
+      { food: '밥/죽',  menu: '잡곡밥/흰죽' },
+      { food: '국/탕',  menu: '북어배추국' },
+      { food: '주찬',   menu: '스크램블에그' },
+      { food: '부찬1',  menu: '고구마순지짐' },
+      { food: '부찬2',  menu: '양념마늘쫑무침' },
+      { food: '김치1',  menu: '배추김치' },
+    ],
+    '간식1': NOT_SURVEYED,
+    '점심': [
+      { food: '밥/죽',  menu: '잡곡밥/흰죽' },
+      { food: '국/탕',  menu: '버섯된장찌개' },
+      { food: '주찬',   menu: '제육볶음' },
+      { food: '부찬1',  menu: '들기름두부구이*양념장' },
+      { food: '부찬2',  menu: '청경채생채' },
+      { food: '김치1',  menu: '배추김치' },
+    ],
+    '간식2': [{ food: '간식', menu: '황도' }],
+    '저녁': [
+      { food: '밥/죽',  menu: '잡곡밥/흰죽' },
+      { food: '국/탕',  menu: '토란맑은국' },
+      { food: '주찬',   menu: '마파가지덮밥' },
+      { food: '부찬1',  menu: '후르츠탕수육' },
+      { food: '부찬2',  menu: '돈나물초무침' },
+      { food: '김치1',  menu: '배추김치' },
+    ],
+  },
+  2: {
+    '아침': [
+      { food: '밥/죽',  menu: '잡곡밥/흰죽' },
+      { food: '국/탕',  menu: '누룽지' },
+      { food: '주찬',   menu: '미트볼데미조림' },
+      { food: '부찬1',  menu: '유채나물' },
+      { food: '부찬2',  menu: '오이지무침' },
+      { food: '김치1',  menu: '배추김치' },
+    ],
+    '간식1': NOT_SURVEYED,
+    '점심': [
+      { food: '밥/죽',  menu: '잡곡밥/흰죽' },
+      { food: '국/탕',  menu: '김치찌개' },
+      { food: '주찬',   menu: '오징어순대볶음' },
+      { food: '부찬1',  menu: '꽈리감자조림' },
+      { food: '부찬2',  menu: '모듬콩조림' },
+      { food: '김치1',  menu: '배추김치' },
+    ],
+    '간식2': [{ food: '간식', menu: '단호박죽' }],
+    '저녁': [
+      { food: '밥/죽',  menu: '잡곡밥/흰죽' },
+      { food: '국/탕',  menu: '소고기미역국' },
+      { food: '주찬',   menu: '떠먹는장조림' },
+      { food: '부찬1',  menu: '매콤어묵볶음' },
+      { food: '부찬2',  menu: '아삭이쌈장무침' },
+      { food: '김치1',  menu: '배추김치' },
+    ],
+  },
+  3: {
+    '아침': [
+      { food: '밥/죽',  menu: '잡곡밥/흰죽' },
+      { food: '국/탕',  menu: '바지락냉이국' },
+      { food: '주찬',   menu: '푸주채소볶음' },
+      { food: '부찬1',  menu: '다래순나물' },
+      { food: '부찬2',  menu: '궁채절임지' },
+      { food: '김치1',  menu: '배추김치' },
+    ],
+    '간식1': NOT_SURVEYED,
+    '점심': [
+      { food: '밥/죽',  menu: '잡곡밥/흰죽' },
+      { food: '국/탕',  menu: '고추장찌개' },
+      { food: '주찬',   menu: '매콤닭조림' },
+      { food: '부찬1',  menu: '비엔나컬리볶음' },
+      { food: '부찬2',  menu: '숙주나물' },
+      { food: '김치1',  menu: '배추김치' },
+    ],
+    '간식2': [
+      { food: '간식A', menu: '만두찜' },
+      { food: '간식B', menu: '사이다' },
+    ],
+    '저녁': [
+      { food: '밥/죽',  menu: '잡곡밥/흰죽' },
+      { food: '국/탕',  menu: '근대국' },
+      { food: '주찬',   menu: '코다리시래기찜' },
+      { food: '부찬1',  menu: '단호박단팥범벅' },
+      { food: '부찬2',  menu: '도토리묵무침' },
+      { food: '김치1',  menu: '배추김치' },
+    ],
+  },
+  // 4·5일차 메뉴 미정 — 식단표를 받으면 위와 같은 형식으로 채운다.
+  4: MENU_TBD,
+  5: MENU_TBD,
+}
+
+// 메뉴가 아직 정해지지 않은 일차 (자리만 두고 메뉴명은 조사원이 확인해 적는다)
+const MEAL_FOODS_BY_HOME = {
+  NH002: MEAL_FOODS_NH002,
+}
+
 const MEALS = ['아침', '간식1', '점심', '간식2', '저녁']
 
 // ── 배식량 기본값 (meal_form별, 1~2일차) ──
@@ -403,8 +539,9 @@ function WasteCircle({ level, size = 40 }) {
 }
 
 // ── 그램 입력 ──
-function GramInput({ label, menu, value, onChange, isSnack = false }) {
+function GramInput({ label, menu, value, onChange, isSnack = false, disabled = false }) {
   const val = value ?? 100
+  if (disabled) return <DisabledRow label={label} menu={menu} />
   const isDeferred = val === '추후섭취'
   return (
     <div className="flex items-center gap-2 py-2.5 border-b border-gray-100 last:border-0">
@@ -439,8 +576,23 @@ function GramInput({ label, menu, value, onChange, isSnack = false }) {
   )
 }
 
+function DisabledRow({ label, menu }) {
+  return (
+    <div className="flex items-center gap-2 py-2.5 border-b border-gray-100 last:border-0 opacity-60">
+      <div className="w-16 shrink-0">
+        <span className="text-sm text-gray-500 font-medium block">{label}</span>
+        {menu && <span className="text-xs text-gray-400 leading-tight block">{menu}</span>}
+      </div>
+      <span className="flex-1 text-center text-sm text-gray-500 bg-gray-100 border border-gray-200 rounded-lg py-2">
+        이번 조사에서는 받지 않습니다
+      </span>
+    </div>
+  )
+}
+
 // ── 잔반 선택 ──
-function WasteSelector({ label, menu, value, onChange, isSnack = false }) {
+function WasteSelector({ label, menu, value, onChange, isSnack = false, disabled = false }) {
+  if (disabled) return <DisabledRow label={label} menu={menu} />
   const levels = [
     { v: 0, l: '다 먹음' }, { v: 1, l: '25%' }, { v: 2, l: '50%' }, { v: 3, l: '75%' }, { v: 4, l: '모두' },
   ]
@@ -691,16 +843,31 @@ export default function NutritionSurveyPage() {
     return [{ food: '간식', menu: '푸딩' }]
   }
 
+  // 로그인한 요양원의 식단을 쓴다 (없으면 기존 식단)
+  const homeId = JSON.parse(localStorage.getItem('user') || '{}')?.nursing_home_id || ''
+  const homeMenu = MEAL_FOODS_BY_HOME[homeId] || null
+
   const getFoods = (day, meal) => {
+    if (homeMenu) return homeMenu[day]?.[meal] || []
     if (day === 4 && meal === '간식2') return getSnack2Day4()
     return MEAL_FOODS_BY_DAY[day]?.[meal] || MEAL_FOODS_BY_DAY[3][meal] || []
   }
+
+  // 그 일차에 실제로 조사하는 끼니만 남긴다 (메뉴가 없는 끼니는 화면에서 뺀다)
+  const mealsFor = (day) => MEALS.filter(m => getFoods(day, m).length > 0)
+  // 끼니 전체가 '조사안함'이면 입력·사진을 막고 집계에서도 뺀다
+  const isMealOff = (day, meal) => {
+    const fs = getFoods(day, meal)
+    return fs.length > 0 && fs.every(f => f.disabled)
+  }
+  const photoMeals = (day) => mealsFor(day).filter(m => !isMealOff(day, m))
 
   const getGram = (day, meal, food) => {
     const stored = mealPortions[`day${day}`]?.[meal]?.[food]
     if (stored !== undefined && stored !== null) return stored
     // 간식은 SNACK_DEFAULT_PORTIONS에서 기본값
     if (meal === '간식1' || meal === '간식2') {
+      if (homeMenu) return ''          // 요양원별 식단은 간식 기본 배식량을 두지 않는다
       return SNACK_DEFAULT_PORTIONS?.[day]?.[meal]?.[food] ?? ''
     }
     return ''
@@ -747,7 +914,7 @@ export default function NutritionSurveyPage() {
   )
 
   const countPhotos = (day) =>
-    MEALS.reduce((n, meal) => {
+    photoMeals(day).reduce((n, meal) => {
       if (photos[photoKey(day, meal, 'before')]?.url) n++
       if (photos[photoKey(day, meal, 'after')]?.url) n++
       return n
@@ -757,7 +924,7 @@ export default function NutritionSurveyPage() {
     <div className="flex gap-2 mb-4 flex-wrap">
       {DAYS.map(d => {
         const cnt = showPhotoCount ? countPhotos(d) : null
-        const total = MEALS.length * 2
+        const total = photoMeals(d).length * 2
         return (
           <button key={d} type="button" onClick={() => setActiveDay(d)}
             className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
@@ -790,7 +957,7 @@ export default function NutritionSurveyPage() {
           <InfoBox>📝 5일 동안 각 끼니에서 제공한 음식의 무게(g)를 입력해주세요.</InfoBox>
           <DayTabs />
           <div className="flex gap-1.5 mb-4 flex-wrap">
-            {MEALS.map(meal => (
+            {mealsFor(activeDay).map(meal => (
               <button key={meal} type="button" onClick={() => setActiveMeal(meal)}
                 className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                   activeMeal === meal ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
@@ -799,8 +966,8 @@ export default function NutritionSurveyPage() {
           </div>
           <div className="bg-gray-50 rounded-xl px-4 py-2">
             <p className="text-xs text-gray-400 mb-1 pt-2">{activeDay}일차 · {activeMeal}</p>
-            {getFoods(activeDay, activeMeal).map(({ food, menu }) => (
-              <GramInput key={food} label={food} menu={menu}
+            {getFoods(activeDay, activeMeal).map(({ food, menu, disabled }) => (
+              <GramInput key={food} label={food} menu={menu} disabled={disabled}
                 isSnack={activeMeal === '간식1' || activeMeal === '간식2'}
                 value={getGram(activeDay, activeMeal, food)}
                 onChange={v => setGram(activeDay, activeMeal, food, v)} />
@@ -826,7 +993,7 @@ export default function NutritionSurveyPage() {
             ))}
           </div>
           <DayTabs showPhotoCount />
-          {MEALS.map(meal => (
+          {mealsFor(activeDay).map(meal => (
             <div key={meal} className="mb-6 border border-gray-100 rounded-2xl p-4 bg-white shadow-sm">
               <h3 className="text-base font-bold text-blue-700 mb-4 border-b border-blue-100 pb-2">{meal}</h3>
               <div className="mb-5 bg-gray-50 rounded-xl px-3 py-1">
@@ -839,13 +1006,16 @@ export default function NutritionSurveyPage() {
                     }
                     return true
                   })
-                  .map(({ food, menu }) => (
-                  <WasteSelector key={food} label={food} menu={menu}
+                  .map(({ food, menu, disabled }) => (
+                  <WasteSelector key={food} label={food} menu={menu} disabled={disabled}
                     isSnack={meal === '간식1' || meal === '간식2'}
                     value={getWaste(activeDay, meal, food)}
                     onChange={v => setWaste(activeDay, meal, food, v)} />
                 ))}
               </div>
+              {isMealOff(activeDay, meal) ? (
+                <p className="text-xs text-gray-400 text-center py-2">이 끼니는 조사하지 않아 사진을 올리지 않습니다.</p>
+              ) : (
               <div className="grid grid-cols-2 gap-3">
                 {['before', 'after'].map(type => (
                   <PhotoUploader key={type} day={activeDay} meal={meal} photoType={type}
@@ -860,6 +1030,7 @@ export default function NutritionSurveyPage() {
                   />
                 ))}
               </div>
+              )}
             </div>
           ))}
         </div>
@@ -874,7 +1045,7 @@ export default function NutritionSurveyPage() {
             <div className="grid grid-cols-5 gap-2">
               {DAYS.map(d => {
                 const cnt = countPhotos(d)
-                const total = MEALS.length * 2
+                const total = photoMeals(d).length * 2
                 const done = cnt === total
                 return (
                   <div key={d} className={`text-center p-3 rounded-xl border-2 ${done ? 'border-green-300 bg-green-50' : 'border-gray-200 bg-gray-50'}`}>
