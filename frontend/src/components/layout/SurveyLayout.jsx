@@ -1,5 +1,8 @@
-export default function SurveyLayout({ title, icon, page, totalPages, onPrev, onNext, onDashboard, nextLabel, children, sidebarItems, onPageJump }) {
+export default function SurveyLayout({ title, icon, page, totalPages, onPrev, onNext, onDashboard, nextLabel, children, sidebarItems, onPageJump, displayPage, displayTotal }) {
   const hasSidebar = sidebarItems && sidebarItems.length > 0
+  // 건너뛰는 페이지가 있을 때, 머리말·진행바는 '보이는 순서'로 센다 (넘기지 않으면 기존과 동일)
+  const dPage = displayPage ?? page
+  const dTotal = displayTotal ?? totalPages
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -8,13 +11,13 @@ export default function SurveyLayout({ title, icon, page, totalPages, onPrev, on
         <button onClick={onDashboard} className="text-gray-400 hover:text-gray-700 text-xl">←</button>
         <div className="flex-1">
           <h1 className="text-base font-bold text-gray-900">{icon} {title}</h1>
-          <p className="text-xs text-gray-400">페이지 {page} / {totalPages}</p>
+          <p className="text-xs text-gray-400">페이지 {dPage} / {dTotal}</p>
         </div>
       </header>
 
       {/* 진행 바 */}
       <div className="progress-bar sticky top-[53px] z-10">
-        <div className="progress-fill" style={{ width: `${(page / totalPages) * 100}%` }} />
+        <div className="progress-fill" style={{ width: `${(dPage / dTotal) * 100}%` }} />
       </div>
 
       <div className={`flex ${hasSidebar ? 'max-w-5xl' : 'max-w-2xl'} mx-auto`}>
@@ -46,7 +49,7 @@ export default function SurveyLayout({ title, icon, page, totalPages, onPrev, on
                       <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs shrink-0 font-bold ${
                         isActive ? 'bg-white/20 text-white' : isDone ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
                       }`}>
-                        {isDone ? '✓' : item.page}
+                        {isDone ? '✓' : (item.no ?? item.page)}
                       </span>
                       <span className="leading-tight">{item.label}</span>
                     </button>
@@ -79,7 +82,7 @@ export default function SurveyLayout({ title, icon, page, totalPages, onPrev, on
                           : 'bg-white text-gray-600 border-gray-200'
                       }`}
                     >
-                      {isDone ? '✓' : item.page}. {item.label}
+                      {isDone ? '✓' : (item.no ?? item.page)}. {item.label}
                     </button>
                   )
                 })}

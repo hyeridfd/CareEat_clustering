@@ -6,6 +6,19 @@ import { RadioGroup, SelectField, NumberField, CheckboxGroup, InfoBox, Divider }
 
 const TOTAL_PAGES = 10
 
+// 이번 조사에서 받지 않는 페이지 — 화면에서만 건너뛴다.
+// 문항 코드와 DB 칼럼은 그대로 두었으므로, 다시 받으려면 이 배열을 [] 로 비우면 된다.
+//   5 = IPAQ-SF (신체 활동 수준 조사)
+const SKIPPED_PAGES = [5]
+
+const ACTIVE_PAGES = Array.from({ length: TOTAL_PAGES }, (_, i) => i + 1)
+  .filter(p => !SKIPPED_PAGES.includes(p))
+
+const firstActive = ACTIVE_PAGES[0]
+const lastActive = ACTIVE_PAGES[ACTIVE_PAGES.length - 1]
+const nextActive = (p) => ACTIVE_PAGES.find(x => x > p) ?? lastActive
+const prevActive = (p) => [...ACTIVE_PAGES].reverse().find(x => x < p) ?? firstActive
+
 const DISEASE_OPTIONS = [
   '없음','고혈압','당뇨병','고지혈증','심혈관 질환(심근경색, 협심증, 부정맥 등)',
   '뇌혈관 질환(뇌졸중, 뇌경색, 뇌출혈 등)','갑상선 질환','골다공증','골관절염/류마티스 관절염',
@@ -87,7 +100,7 @@ const MMSE_ITEMS = MMSE_STRUCTURE.flatMap(s =>
 
 export default function BasicSurveyPage() {
   const navigate = useNavigate()
-  const [page, setPage] = useState(1)
+  const [page, setPage] = useState(firstActive)
   const [data, setData] = useState({})
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -99,7 +112,7 @@ export default function BasicSurveyPage() {
   const update = (fields) => setData(prev => ({ ...prev, ...fields }))
 
   const handleNext = async () => {
-    if (page < TOTAL_PAGES) { setPage(p => p + 1); window.scrollTo(0,0) }
+    if (page < lastActive) { setPage(p => nextActive(p)); window.scrollTo(0,0) }
     else await handleSubmit()
   }
 
@@ -127,7 +140,8 @@ export default function BasicSurveyPage() {
     { page: 8, label: 'MMSE-K' },
     { page: 9, label: '시설 특성' },
     { page: 10, label: 'GDS-SF' },
-  ]
+  ].filter(it => !SKIPPED_PAGES.includes(it.page))
+   .map((it, i) => ({ ...it, no: i + 1 }))   // 건너뛴 페이지를 뺀 뒤 1부터 다시 번호를 붙인다
 
   if (saved) return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -195,13 +209,15 @@ export default function BasicSurveyPage() {
       title="기초 조사표 (건강설문)"
       icon="📝"
       page={page}
-      totalPages={TOTAL_PAGES}
-      onPrev={() => { setPage(p => p - 1); window.scrollTo(0,0) }}
+      totalPages={lastActive}
+      displayPage={ACTIVE_PAGES.indexOf(page) + 1}
+      displayTotal={ACTIVE_PAGES.length}
+      onPrev={() => { setPage(p => prevActive(p)); window.scrollTo(0,0) }}
       onNext={handleNext}
       onDashboard={goToDashboard}
       nextLabel={saving ? '저장 중...' : undefined}
       sidebarItems={SIDEBAR_ITEMS}
-      onPageJump={(p) => { setPage(p); window.scrollTo(0,0) }}
+      onPageJump={(p) => { if (!SKIPPED_PAGES.includes(p)) { setPage(p); window.scrollTo(0,0) } }}
     >
       {/* ── 1페이지: 인구통계 ── */}
       {page === 1 && (
@@ -263,8 +279,14 @@ export default function BasicSurveyPage() {
         </div>
       )}
 
-      {/* ── 5페이지: IPAQ-SF ── */}
-      {page === 5 && (
+      {/* ── 5페이지: IPAQ-SF ── (SKIPPED_PAGES 로 비활성화) */}
+      {page === 5 && SKIPPED_PAGES.includes(5) && (
+        <div className="card text-center p-10">
+          <p className="font-semibold text-gray-800">이번 조사에서는 신체 활동 수준 조사(IPAQ-SF)를 받지 않습니다.</p>
+          <button onClick={() => setPage(nextActive(5))} className="btn-primary mt-4">다음 항목으로 →</button>
+        </div>
+      )}
+      {page === 5 && !SKIPPED_PAGES.includes(5) && (
         <div>
           <h2 className="section-title">신체 활동 수준 조사 (IPAQ-SF)</h2>
           <InfoBox>📝 지난 7일 동안의 신체 활동에 대해 응답해주세요.</InfoBox>
