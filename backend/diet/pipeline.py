@@ -7,7 +7,7 @@ pipeline.py  ─  맞춤 식단 설계 파이프라인 (서버판, Neo4j·LangGr
   ① 어르신 프로파일   care_assessments.features(질환·키·체중·나이·식사형태) + 식단 설정(매운 음식)
   ② 후보 메뉴         data/pool.json(에이전트 후보 풀 스냅샷) → 나트륨 보정·표준 배식 비율
                       → 시설 선호 점수 → 주의 재료 감점 → 한 그릇·다진찬 속성
-  ③ 일반식 최적화     NSGA-II(nsga2.py) 28일 × 18칸, f1 영양 · f2 예산+재고 · f3 다양성+선호 · f4 패턴
+  ③ 일반식 최적화     NSGA-II(nsga2.py) 28일 × 18칸, f1 영양 · f2 비용(예산+재고) · f3 다양성(반복·편중) · f4 조화(한 끼 내부 조합·선호·규칙)
                       → 균형 해 선택(moo_metrics.select_balanced)
   ④ 개인화           식사형태(죽·백김치, meal_form.py) + 질환 맞춤 대체찬(substitute_agent.py)
   ⑤ 배식량           균형 배식 + 현장 단계(serving_agent.py)
@@ -198,9 +198,21 @@ def inventory_from_rows(items: list, start_date) -> dict | None:
 # ══════════════════════════════════════════════════════════════
 # ③ 일반식
 # ══════════════════════════════════════════════════════════════
+USE_HARMONY = True
+
+
+def harmony_table(pool):
+    """조화 점수표 (data/harmony/harmony_model.json 이 있을 때만)"""
+    if not USE_HARMONY:
+        return None
+    from .harmony import HarmonyTable, enabled
+    return HarmonyTable(pool) if enabled() else None
+
+
 def menu_records(problem: MealPlanProblem, chrom) -> list:
     pool = problem.pool
     rows = []
+    hs = problem.meal_harmony(chrom)
     for day in range(N_DAYS):
         base = day * N_SLOTS
         for mi, meal_name in enumerate(MEAL_NAMES):
@@ -215,6 +227,8 @@ def menu_records(problem: MealPlanProblem, chrom) -> list:
             row["비용(원)"] = round(sum(m.get("cost", 0) or 0 for m in meal))
             notes = [f"{m['menu_name']}({m.get('texture')})" for m in meal[1:] if m.get("texture") in ("부적합", "주의")]
             row["다진찬주의"] = " / ".join(notes) if notes else "-"
+            if hs is not None:
+                row["조화"] = round(float(hs[day * 3 + mi]), 3)
             rows.append(row)
     return rows
 
@@ -231,13 +245,32 @@ def records_to_chrom(problem: MealPlanProblem, records: list) -> np.ndarray:
     return chrom
 
 
+def _harmony_summary(problem, chrom):
+    h = problem.meal_harmony(chrom)
+    if h is None:
+        return None
+    from .harmony import load_model
+    m = load_model()
+    v = m.get("validation") or {}
+    c = np.asarray(chrom, dtype=int).reshape(N_DAYS * 3, 6)
+    n = [len(problem.pool[cat]) for cat in ("국", "주찬", "부찬")]
+    sim, js = problem.harmony.style_similarity(c[:, 1] % n[0], c[:, 2] % n[1], c[:, 3] % n[2], c[:, 4] % n[2],
+                                               np.tile(np.arange(3), N_DAYS))
+    return {"mean": round(float(h.mean()), 3), "low_meals": int((h < 0.4).sum()),
+            "style_similarity": round(sim, 3), "style_js": round(js, 4), "objective": round(problem.harmony_objective(chrom), 3),
+            "model": {"facility": m.get("facility"), "n_meals": m.get("n_meals"), "period": m.get("period"),
+                      "auc": v.get("auc"), "ref_real_mean": m.get("ref_real_mean"), "ref_random_mean": m.get("ref_random_mean")}}
+
+
 def plan_metrics(problem, chrom, F_front=None, F_all=None, inv_model=None) -> dict:
     f = problem._eval_one(chrom)
     menus = problem.effective_menus(chrom)
     out = {
-        "selected": {"f1_영양위반": round(f[0], 4), "f2_예산·재고": round(f[1], 4),
-                     "f3_다양성·선호": round(-f[2], 2), "f4_패턴위반": round(f[3], 4)},
+        "selected": {"f1_영양": round(f[0], 4), "f2_비용": round(f[1], 4),
+                     "f3_다양성": round(f[2], 4), "f4_조화": round(f[3], 4)},
+        "objective_parts": problem.objective_parts(chrom),
         "nutrition_breakdown": {k: round(v, 4) for k, v in problem.nutrition_breakdown(menus).items() if v >= 0.001},
+        "harmony": _harmony_summary(problem, chrom),
         "pattern": problem.pattern_breakdown(chrom),
     }
     if F_front is not None and len(F_front):
@@ -468,7 +501,7 @@ def run_design(residents, assessments, settings, inventory=None, preference=None
         pool = load_pool(pref.get("pool_scores"))
         inv = inventory_from_rows((inventory or {}).get("items"), (inventory or {}).get("start_date"))
         inv_model = InventoryModel(pool, inv, len(profiles)) if inv else None
-        problem = MealPlanProblem(pool, BaseStandard(), BUDGET_PER_MEAL, inventory=inv_model)
+        problem = MealPlanProblem(pool, BaseStandard(), BUDGET_PER_MEAL, inventory=inv_model, harmony=harmony_table(pool))
         pop, gen = PRESETS.get(preset, PRESETS["standard"])
         say(f"일반식 최적화 (개체 {pop} · 세대 {gen})")
         t0 = dt.datetime.now()
@@ -502,7 +535,7 @@ def redo_personalization(menu: list, residents, assessments, settings, inventory
         pool = load_pool(pref.get("pool_scores"))
         inv = inventory_from_rows((inventory or {}).get("items"), (inventory or {}).get("start_date"))
         inv_model = InventoryModel(pool, inv, len(profiles)) if inv else None
-        problem = MealPlanProblem(pool, BaseStandard(), BUDGET_PER_MEAL, inventory=inv_model)
+        problem = MealPlanProblem(pool, BaseStandard(), BUDGET_PER_MEAL, inventory=inv_model, harmony=harmony_table(pool))
         chrom = records_to_chrom(problem, menu)
         records = menu_records(problem, chrom)
         metrics = plan_metrics(problem, chrom, None, None, inv_model)
