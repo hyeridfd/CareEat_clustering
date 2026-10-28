@@ -548,6 +548,10 @@ function ServingTab({ run }) {
               <Stat label="목표 열량" value={Math.round(me.target_energy)} unit="kcal/끼" sub={`나트륨 상한 ${me.sodium_max}mg/끼`} />
               <Stat label="대체찬" value={me.substitutions} unit="건" sub={Object.entries(me.reasons || {}).slice(0, 2).map(([k, v]) => `${k} ${v}`).join(' · ')} />
             </div>
+            <details className="mb-4 rounded-2xl bg-white ring-1 ring-navy-100 px-4 py-3" open>
+              <summary className="cursor-pointer text-sm font-bold text-navy-900">영역별 에이전트 평가 <span className="font-normal text-xs text-muted">— 7개 영역이 각자 정보만 보고 따로 판단한 결과</span></summary>
+              <div className="mt-3"><AgentPanel a={run.result?.assessments?.[eid]} /></div>
+            </details>
             {err && <p className="text-sm text-rose-700">{err}</p>}
             {!meals ? <p className="text-sm text-muted">불러오는 중…</p> : (
               <div className="overflow-x-auto">
@@ -756,6 +760,20 @@ function SubsTab({ run }) {
           ]} />
         </Section>
       </div>
+
+      <Section title={`안전 확인 목록 — 약물·알레르기 (${(res.safety_flags || []).length})`}>
+        <p className="mb-2 text-xs text-muted leading-5">
+          약물·알레르기 에이전트가 찾은 '피할 식재료'가 든 반찬은 고령친화식품으로 먼저 바꿉니다. 아래는 맞는 제품이 없거나(국·김치 칸 등)
+          끼니당 2칸을 넘어 그대로 남은 반찬입니다. 같은 분류에서 피할 식재료가 없는 메뉴를 추천합니다.
+        </p>
+        <Table rows={(res.safety_flags || []).filter((s) => day === 'all' || s.day === day)} minW={860} empty="남은 안전 문제가 없습니다." cols={[
+          { key: 'day', label: '일차' }, { key: 'meal', label: '끼니' },
+          { key: 'display_name', label: '어르신', cls: 'font-semibold text-navy-900 whitespace-nowrap' },
+          { key: 'slot', label: '칸' }, { key: 'menu', label: '메뉴', cls: 'text-rose-700 font-semibold' },
+          { key: 'reason', label: '사유', cls: 'text-xs' },
+          { key: 'alternatives', label: '대신 낼 수 있는 메뉴', cls: 'text-xs text-emerald-800', render: (r) => (r.alternatives || []).join(' · ') || '–' },
+        ]} />
+      </Section>
 
       <Section title="죽식 어르신 영양죽 계획 (아침은 흰죽)">
         <Table rows={res.porridge} minW={480} empty="죽식 어르신이 없습니다." cols={[
@@ -1220,5 +1238,86 @@ function StockEntry({ onSaved, items }) {
       </div>
       {msg && <p className="mt-2 text-xs text-navy-700">{msg}</p>}
     </Section>
+  )
+}
+
+/* ─────────────────────────── 영역별 에이전트 평가 (Stage 1) ─────────────────────────── */
+
+const SRC_SHORT = {
+  KDRI2025: '2025 영양소 섭취기준', ESPEN_GERIATRIC: 'ESPEN 노인영양', ESPEN_DEMENTIA: 'ESPEN 치매영양', IDDSI: 'IDDSI',
+  LTC_MEAL_GUIDE: '복지부 급식관리', KSH_HTN_2026: '고혈압학회 2026', KDA_DM_2025: '당뇨병학회 2025', SARCOPENIA_KR: '근감소증 종설',
+}
+const AGENT_LABEL = { body: '신체·영양', diabetes: '당뇨', hypertension: '고혈압', cognition: '인지·정서', oral: '구강·연하',
+  intake: '섭취·선호', medication: '약물·알레르기', base: '기본 기준' }
+const FIELD_LABEL = {
+  energy_min: ['열량', '≥', 'kcal'], energy_max: ['열량', '≤', 'kcal'], protein_min: ['단백질', '≥', 'g'], protein_max: ['단백질', '≤', 'g'],
+  sugar_max: ['당류', '≤', 'g'], fat_min: ['지방', '≥', 'g'], fat_max: ['지방', '≤', 'g'], sat_fat_max: ['포화지방', '≤', 'g'],
+  sodium_max: ['나트륨', '≤', 'mg'], potassium_min: ['칼륨', '≥', 'mg'], fiber_min: ['식이섬유', '≥', 'g'],
+}
+const ACTION_LABEL = { limit: '줄이기', increase: '늘리기', avoid: '피하기', texture: '식사형태', monitor: '관찰', check: '확인 필요', timing: '복약 시간' }
+
+function AgentPanel({ a }) {
+  if (!a) return <p className="text-xs text-muted">이 설계에는 영역별 에이전트 평가가 없습니다. 식단 설계를 다시 실행하면 함께 계산됩니다.</p>
+  const syn = a.synth || {}
+  const pri = (syn.priorities || []).filter((i) => i.priority >= 0.3)
+  return (
+    <div className="space-y-3">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2">
+        {a.agents.map((g) => (
+          <div key={g.agent} className={`rounded-xl px-3 py-2 text-xs ${g.active ? 'bg-navy-50 ring-1 ring-navy-100' : 'bg-slate-50 text-slate-400'}`}>
+            <p className="font-bold text-navy-900">{g.label}{!g.active && <span className="ml-1 font-normal">· 해당 없음</span>}</p>
+            {g.active && <p className="mt-0.5 text-navy-700 leading-5">{g.summary || '특이 사항 없음'}</p>}
+          </div>
+        ))}
+      </div>
+      {pri.length > 0 && (
+        <div>
+          <p className="text-xs font-bold text-muted mb-1">우선순위 (S = 0.5×심각도 + 0.3×시급성 + 0.2×개선 가능성)</p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs min-w-[640px]">
+              <tbody>
+                {pri.slice(0, 8).map((i, k) => (
+                  <tr key={k} className="border-b border-navy-50 last:border-0">
+                    <td className="py-1 pr-2 w-12 tabular-nums font-bold text-navy-900">{i.priority.toFixed(2)}</td>
+                    <td className="py-1 pr-2 whitespace-nowrap"><span className="badge bg-white ring-1 ring-navy-100 text-navy-700">{AGENT_LABEL[i.agent] || i.agent}</span></td>
+                    <td className="py-1 pr-2 font-semibold text-navy-900">{i.title}</td>
+                    <td className="py-1 pr-2 whitespace-nowrap"><span className={`badge ${i.action === 'avoid' ? 'bg-rose-50 text-rose-700' : i.action === 'check' ? 'bg-amber-50 text-amber-800' : 'bg-slate-100 text-slate-600'}`}>{ACTION_LABEL[i.action] || i.action}</span></td>
+                    <td className="py-1 pr-2 text-muted">{(i.evidence || []).join(' · ')}</td>
+                    <td className="py-1 text-muted whitespace-nowrap">{SRC_SHORT[i.source] || i.source}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+      <div className="grid md:grid-cols-2 gap-3">
+        <div>
+          <p className="text-xs font-bold text-muted mb-1">개인 영양 기준 (끼니) · 정한 에이전트</p>
+          <div className="flex flex-wrap gap-1.5">
+            {Object.entries(syn.constraints || {}).map(([k, c]) => {
+              const [lab, op, unit] = FIELD_LABEL[k] || [k, '', '']
+              return (
+                <span key={k} className="badge bg-white ring-1 ring-navy-100 text-navy-800" title={`근거: ${SRC_SHORT[c.source] || c.source || '-'}${c.others?.length ? ` · 같은 항목 제시: ${c.others.map((o) => AGENT_LABEL[o] || o).join(', ')}` : ''}`}>
+                  {lab} {op}{Math.round(c.value * 10) / 10}{unit} <span className="text-muted">· {AGENT_LABEL[c.agent] || c.agent}</span>
+                </span>
+              )
+            })}
+          </div>
+        </div>
+        <div>
+          <p className="text-xs font-bold text-muted mb-1">피할 식재료 (대체찬·제품에서 제외)</p>
+          {(syn.avoid || []).length ? syn.avoid.map((x, k) => (
+            <p key={k} className="text-xs leading-5"><b className="text-rose-700">{x.reason}</b> <span className="text-muted">— {x.keywords.slice(0, 10).join(', ')}{x.keywords.length > 10 ? ' …' : ''}{x.min_g ? ` (한 메뉴 ${x.min_g}g 이상)` : ''}</span></p>
+          )) : <p className="text-xs text-muted">없음</p>}
+          {(syn.notes || []).length > 0 && (
+            <>
+              <p className="text-xs font-bold text-muted mt-2 mb-1">복약·돌봄 안내</p>
+              {syn.notes.map((n, k) => <p key={k} className="text-xs text-navy-700 leading-5">· {n}</p>)}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
   )
 }

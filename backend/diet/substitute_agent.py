@@ -57,7 +57,10 @@ TRIGGERS = {
     "potassium_low": True,   # 칼륨 하한(고혈압) 부족
     "dementia":      True,   # 치매: 뇌건강 식재료 없는 끼니
     "dislike":       False,  # [2026-10-19] 개인 기피 반찬 → 끔 (선호는 시설 단위로 일반식 단계에서 반영)
+    "safety":        True,   # [다중 에이전트] 약물·알레르기 에이전트의 피할 식재료가 든 반찬 → 최우선 대체
 }
+SAFETY_W           = 5.0       # 피할 식재료 반찬 1개당 위반 점수 (영양 위반보다 항상 먼저 바뀌도록 크게)
+SAFETY_NO_REPEAT   = 3         # 안전 때문에 바꿀 때는 같은 제품 재사용 간격을 3일로 줄임 (맞는 제품이 적어서)
 TARGET_DISEASES    = ("당뇨병", "고혈압")   # + 치매(p.dementia) → 대체 대상
 DEMENTIA_W         = 0.3
 DISLIKE_W          = 0.3
@@ -218,7 +221,44 @@ def is_target(p) -> bool:
     return any(d in TARGET_DISEASES for d in p.diseases) or getattr(p, "dementia", False)
 
 
-def _violation(items: list, p, base, ratio: float = 1.0, prefs: dict = None) -> tuple:
+def _ings(m: dict) -> dict:
+    """메뉴 → {원재료: g} (제품은 빈 dict → 이름으로 판단)"""
+    global _RECIPE_MAP
+    if m.get("is_product"):
+        return {}
+    if _RECIPE_MAP is None:
+        try:
+            from .inventory import recipe_ingredients
+            _RECIPE_MAP = recipe_ingredients()
+        except Exception:
+            _RECIPE_MAP = {}
+    return m.get("ingredients") or _RECIPE_MAP.get(m.get("menu_name"), {})
+
+
+def safety_hits(m: dict, p) -> list:
+    """이 메뉴(또는 제품)에 들어 있는, 어르신이 피해야 할 식재료 사유 목록"""
+    av = getattr(p, "avoid", None)
+    if not av:
+        return []
+    from .agents import matches_avoid
+    return matches_avoid(_ings(m), m.get("menu_name") or "", av)
+
+
+def safe_alternatives(m: dict, cat: str, p, pool_index: dict, k: int = 3) -> list:
+    """안전 문제로 못 바꾼 칸 → 같은 분류의 일반식 메뉴 중 피할 식재료가 없고 영양이 가장 비슷한 것 k개 (영양사 참고용)"""
+    if cat not in ("국", "주찬", "부찬", "김치", "밥"):
+        return []
+    cands = []
+    for (c, nm), x in pool_index.items():
+        if c != cat or nm == m.get("menu_name") or safety_hits(x, p):
+            continue
+        d = (abs(_v(x.get("energy")) - _v(m.get("energy"))) / 100 + abs(_v(x.get("sodium")) - _v(m.get("sodium"))) / 300
+             + abs(_v(x.get("protein")) - _v(m.get("protein"))) / 10)
+        cands.append((d, nm))
+    return [nm for _, nm in sorted(cands)[:k]]
+
+
+def _violation(items: list, p, base, ratio: float = 1.0, prefs: dict = None, safety_only: bool = False) -> tuple:
     """끼니(밥~김치 6칸) → (위반 점수, 사유 목록)
     · 초과: 기본 일반식(base)보다 엄격한 개인 상한만, TOLERANCE 이상 넘을 때
     · 부족: 개인 목표 열량, 단백질·식이섬유(개인·기본 중 높은 하한), 칼륨(개인 하한)
@@ -227,6 +267,15 @@ def _violation(items: list, p, base, ratio: float = 1.0, prefs: dict = None) -> 
     # 개인 배식 비율(목표 열량 ÷ 시설 평균)을 적용한 양으로 비교 — 개인 기준도 목표 열량 비례이므로
     tot = {k: sum(_v(m.get(k)) for m in items) * ratio for k in NUT_KEYS}
     v, why = 0.0, []
+    # ── [다중 에이전트] 안전: 약물·알레르기로 피할 식재료가 든 반찬 (국·주찬·부찬) ──
+    if TRIGGERS.get("safety") and getattr(p, "avoid", None):
+        for m in items[1:5]:
+            hits = safety_hits(m, p)
+            if hits:
+                v += SAFETY_W
+                why.append(f"안전({'·'.join(sorted(set(hits)))}): {m.get('menu_name')}")
+    if safety_only:
+        return v, why
     for key in ("sodium", "sugar", "sat_fat", "fat", "protein"):
         if not TRIGGERS.get(key):
             continue
@@ -296,7 +345,7 @@ _LABEL = {"sodium": "나트륨 초과", "sugar": "당류 초과", "sat_fat": "�
 def _reason_label(why: list) -> str:
     out = []
     for w in why:
-        if w.startswith(("식사형태", "기피 메뉴", "치매")):
+        if w.startswith(("식사형태", "기피 메뉴", "치매", "안전")):
             out.append(w)
         else:
             out.append(_LABEL.get(w.split(" ")[0], w))
@@ -331,10 +380,12 @@ def substitute_agent(state: MealPlanState) -> dict:
     energies = [p.target_energy for p in patients if getattr(p, "target_energy", None)]
     fac_avg  = sum(energies) / len(energies) if energies else 700
 
-    personal_menus, subs = {}, []
+    personal_menus, subs, safety_flags = {}, [], []
     for p in patients:
-        if not is_target(p):
+        target = is_target(p)
+        if not target and not getattr(p, "avoid", None):
             continue
+        so = not target                                   # 질환 대상이 아니면 안전 사유로만 대체
         ratio = _calc_ratio(p, fac_avg)
         prefs = weights.get(p.name, {}) if USE_PERSONAL_PREF else {}
         last_used = {}   # 제품명 → 마지막 사용 일차
@@ -351,8 +402,15 @@ def substitute_agent(state: MealPlanState) -> dict:
                     items.append(no_rice)
                 else:
                     items.append(pool_index.get((cat_of[s], name), {"menu_name": name, **{k: 0 for k in NUT_KEYS}}))
-            base_v, base_why = _violation(items, p, base, ratio, prefs)
+            base_v, base_why = _violation(items, p, base, ratio, prefs, so)
             if base_v <= 0:
+                if getattr(p, "avoid", None):
+                    for s_, m_ in zip(SLOTS, items):
+                        h_ = safety_hits(m_, p)
+                        if h_:
+                            safety_flags.append({"elderly_id": p.name, "day": r["일차"], "meal": r["끼니"], "slot": s_,
+                                                 "menu": m_.get("menu_name"), "reason": "·".join(sorted(set(h_))),
+                                                 "alternatives": safe_alternatives(m_, cat_of[s_], p, pool_index)})
                 continue
 
             changes, cur_v, cur_why = {}, base_v, base_why
@@ -364,17 +422,21 @@ def substitute_agent(state: MealPlanState) -> dict:
                     if slot in changes or items[SLOTS.index(slot)].get("one_dish"):
                         continue   # 한 그릇 음식은 일반 반찬 제품으로 바꾸지 않음
                     i = SLOTS.index(slot)
+                    unsafe = bool(safety_hits(items[i], p))       # 이 칸이 안전 문제로 바꿔야 하는 칸인가
+                    gap = SAFETY_NO_REPEAT if unsafe else NO_REPEAT_DAYS
                     for prod in products.get(pslot, []):
                         nm = prod["menu_name"]
-                        if nm in used_now or (nm in last_used and day - last_used[nm] < NO_REPEAT_DAYS):
+                        if nm in used_now or (nm in last_used and day - last_used[nm] < gap):
+                            continue
+                        if safety_hits(prod, p):                 # 안전 게이트: 피할 식재료 제품은 후보에서 제외
                             continue
                         if SODIUM_UP_MAX is not None and _v(prod.get("sodium")) - _v(items[i].get("sodium")) > SODIUM_UP_MAX:
                             continue
                         trial = items[:i] + [prod] + items[i + 1:]
-                        tv, _ = _violation(trial, p, base, ratio, prefs)
+                        tv, _ = _violation(trial, p, base, ratio, prefs, so)
                         gain = cur_v - tv
                         tg = _guard(trial, p, ratio)
-                        if tg > cur_g + GUARD_SLACK:   # 대체로 다른 기준(예: 나트륨)이 나빠지면 제외
+                        if tg > cur_g + GUARD_SLACK and not unsafe:   # 대체로 다른 기준(예: 나트륨)이 나빠지면 제외 (안전 교체는 예외)
                             continue
                         if gain < MIN_GAIN:
                             continue
@@ -390,7 +452,7 @@ def substitute_agent(state: MealPlanState) -> dict:
                 items[i] = prod
                 changes[slot] = prod["menu_name"]
                 last_used[prod["menu_name"]] = day
-                cur_v, cur_why = _violation(items, p, base, ratio, prefs)
+                cur_v, cur_why = _violation(items, p, base, ratio, prefs, so)
                 cur_g = _guard(items, p, ratio)
                 subs.append({
                     "name": p.name, "type": p.disease_type_label + ("·치매" if getattr(p, "dementia", False) else ""),
@@ -403,6 +465,14 @@ def substitute_agent(state: MealPlanState) -> dict:
                 })
             if changes:
                 personal_menus[key] = changes
+            # 바꾸고도 남은 안전 문제 (밥·김치 칸, 대체 2칸 초과, 맞는 제품 없음) → 영양사 확인 목록
+            if getattr(p, "avoid", None):
+                for s_, m_ in zip(SLOTS, items):
+                    h_ = safety_hits(m_, p)
+                    if h_:
+                        safety_flags.append({"elderly_id": p.name, "day": r["일차"], "meal": r["끼니"], "slot": s_,
+                                             "menu": m_.get("menu_name"), "reason": "·".join(sorted(set(h_))),
+                                             "alternatives": safe_alternatives(m_, cat_of[s_], p, pool_index)})
 
     n_people = len({s["name"] for s in subs})
     print(f"[SubstituteAgent] 완료 — 대체 {len(subs)}건 / {len(personal_menus)}끼 / {n_people}명")
@@ -411,5 +481,6 @@ def substitute_agent(state: MealPlanState) -> dict:
         "personal_menus": personal_menus,
         "substitutions":  subs,
         "sub_products":   sub_products,
+        "safety_flags":   safety_flags,
         "messages": [f"[SubstituteAgent] 대체찬 {len(subs)}건 ({n_people}명)"],
     }

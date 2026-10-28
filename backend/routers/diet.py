@@ -59,6 +59,21 @@ def _load_inputs(sb, home):
     return residents, assess, settings, (inv[0] if inv else None), (pref[0] if pref else None)
 
 
+def _load_ehr(sb, home):
+    """어르신 기록 탭의 약·알레르기 → {elderly_id: {medications, allergies}} (약물·알레르기 에이전트 입력)"""
+    out = {}
+    try:
+        for m in fetch_all(sb, "resident_medications", "elderly_id,name,dose,food_caution,is_active",
+                           eq={"nursing_home_id": home}):
+            if m.get("is_active") is not False:
+                out.setdefault(m["elderly_id"], {}).setdefault("medications", []).append(m)
+        for a in fetch_all(sb, "resident_allergies", "elderly_id,allergen,severity,reaction", eq={"nursing_home_id": home}):
+            out.setdefault(a["elderly_id"], {}).setdefault("allergies", []).append(a)
+    except Exception:
+        traceback.print_exc()                         # 기록 탭 테이블이 없어도 식단 설계는 진행
+    return out
+
+
 def _save_result(sb, run_id, out):
     servings = out.pop("servings", {}) or {}
     menu, metrics = out.pop("menu"), out.pop("metrics")
@@ -123,11 +138,12 @@ def _job(run_id, home, preset, seed, menu=None):
         sb.table("diet_runs").update({"status": "running", "progress": "데이터 불러오는 중",
                                       "updated_at": get_kst_now()}).eq("id", run_id).execute()
         residents, assess, settings, inv, pref = _load_inputs(sb, home)
+        ehr = _load_ehr(sb, home)
         say = _progress_writer(sb, run_id)
         if menu is None:
-            out = P.run_design(residents, assess, settings, inv, pref, preset=preset, seed=seed, progress=say)
+            out = P.run_design(residents, assess, settings, inv, pref, preset=preset, seed=seed, progress=say, ehr=ehr)
         else:
-            out = P.redo_personalization(menu, residents, assess, settings, inv, pref, progress=say)
+            out = P.redo_personalization(menu, residents, assess, settings, inv, pref, progress=say, ehr=ehr)
         sb.table("diet_runs").update({"progress": "결과 저장 중", "updated_at": get_kst_now()}).eq("id", run_id).execute()
         _check_cancel(sb, run_id, {"checked": 0})
         _save_result(sb, run_id, out)

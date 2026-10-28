@@ -84,7 +84,7 @@ def parse_meal_form(resident_form: str | None, survey_type: str | None) -> tuple
 USE_KIDNEY = False
 
 
-def build_profiles(residents: list, assessments: dict, settings: dict) -> tuple[list, dict, list]:
+def build_profiles(residents: list, assessments: dict, settings: dict, ehr: dict | None = None) -> tuple[list, dict, list]:
     """→ (PatientProfile 목록, {elderly_id: 표시 정보}, 제외 목록)
     PatientProfile.name 에는 elderly_id 를 넣는다 (이름 중복 방지)."""
     profiles, meta, skipped = [], {}, []
@@ -120,12 +120,49 @@ def build_profiles(residents: list, assessments: dict, settings: dict) -> tuple[
             meal_texture_rice=rice, meal_texture_side=side,
             dementia=dementia, no_spicy=bool(st.get("no_spicy")),
         )
+        # [다중 에이전트] 영역별 에이전트가 쓸 어르신 전체 정보 (에이전트마다 필요한 부분만 잘라서 전달)
+        from .agents import build_context
+        e_ = (ehr or {}).get(eid) or {}
+        p.context = build_context(r, f, rice, side, e_.get("medications"), e_.get("allergies"))
         profiles.append(p)
         meta[eid] = {"display_name": name, "type": p.disease_type_label + ("·치매" if dementia else ""),
                      "texture": f"{rice}/{side}", "diseases": diseases, "dementia": dementia,
                      "no_spicy": p.no_spicy, "bmi": bmi, "age": age, "sex": "여" if female else "남",
                      "target_energy": p.target_energy, "sodium_max": p.constraint.sodium_max}
     return profiles, meta, skipped
+
+
+USE_AGENT_CONSTRAINTS = True     # True: 에이전트 종합 기준을 개인 기준으로 사용 (숫자는 기존과 같음 · 출처 기록)
+
+
+def apply_agents(profiles: list, progress=None) -> dict:
+    """[Stage 1] 관리자 에이전트 → 영역별 에이전트 7종 병렬 독립 평가 → 종합
+    · 개인 영양 기준(p.constraint) = 종합 기준 (같은 영양소는 더 엄격한 값, 출처 에이전트 기록)
+    · p.avoid = 약물·알레르기로 피할 식재료 (대체찬·제품 선택의 절대 조건)
+    → {elderly_id: {agents, synth}} (결과 저장용)"""
+    from .agents import assess_residents, to_json
+    from .patient_profile_final import NutritionConstraint
+    if progress: progress("영역별 에이전트 평가")
+    res = assess_residents({p.name: getattr(p, "context", {}) or {} for p in profiles})
+    mismatch = []
+    for p in profiles:
+        syn = res[p.name]["synth"]
+        new = NutritionConstraint(**{k: v["value"] for k, v in syn["constraints"].items()})
+        old = p.constraint
+        for k in vars(old):
+            a_, b_ = getattr(old, k), getattr(new, k)
+            if k in ("energy_min", "energy_max") and a_ is None:
+                continue                                   # 기존: 질환 없으면 미지정(=500~800 기본)
+            if (a_ or 0) != (b_ or 0) and abs((a_ or 0) - (b_ or 0)) > 0.01:
+                mismatch.append((p.name, k, a_, b_))
+        if USE_AGENT_CONSTRAINTS:
+            p.constraint = new
+            p.target_energy = syn["target_energy"]
+        p.avoid = [a for a in syn["avoid"] if a.get("hard")]
+        p.priorities = syn["priorities"]
+    if mismatch:
+        print(f"  [에이전트] 기존 기준과 다른 값 {len(mismatch)}건 (예: {mismatch[:3]})")
+    return to_json(res)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -219,6 +256,13 @@ def plan_metrics(problem, chrom, F_front=None, F_all=None, inv_model=None) -> di
 # ══════════════════════════════════════════════════════════════
 # ④⑤ 개인화 · 배식
 # ══════════════════════════════════════════════════════════════
+def _reason_key(w: str) -> str:
+    """대체 사유 문구 → 집계용 이름 ('안전(알레르기: 갑각류): 메뉴' → '안전(알레르기: 갑각류)')"""
+    if w.startswith("안전(") and "):" in w:
+        return w[:w.index("):") + 1]
+    return w.split(":")[0]
+
+
 def personalize_and_serve(pool, records, profiles, meta, inv_model=None, product_scores=None, progress=None,
                           inventory=None) -> dict:
     from . import substitute_agent as SA
@@ -300,11 +344,11 @@ def personalize_and_serve(pool, records, profiles, meta, inv_model=None, product
     for s in subs:
         q = sub_by_res[s["elderly_id"]]; q["건수"] += 1
         for w in s["reason"].split(" / "):
-            q["사유"][w.split(":")[0]] += 1
+            q["사유"][_reason_key(w)] += 1
     reason_tot = defaultdict(int)
     for s in subs:
         for w in s["reason"].split(" / "):
-            reason_tot[w.split(":")[0]] += 1
+            reason_tot[_reason_key(w)] += 1
 
     residents = []
     for p in profiles:
@@ -320,6 +364,8 @@ def personalize_and_serve(pool, records, profiles, meta, inv_model=None, product
 
     return {
         "purchase": purchase, "daily_usage": daily_usage,
+        "safety_flags": [{**f_, "display_name": meta.get(f_["elderly_id"], {}).get("display_name", f_["elderly_id"])}
+                         for f_ in (sub.get("safety_flags") or [])],
         "substitutions": subs, "orders": order_rows, "product_totals": total_rows, "porridge": mf["porridge"],
         "residents": residents, "servings": dict(by_res),
         "serving_summary": dict(tot), "substitution_reasons": dict(reason_tot),
@@ -330,15 +376,16 @@ def personalize_and_serve(pool, records, profiles, meta, inv_model=None, product
 # 전체 실행
 # ══════════════════════════════════════════════════════════════
 def run_design(residents, assessments, settings, inventory=None, preference=None,
-               preset="standard", seed=42, progress=None) -> dict:
+               preset="standard", seed=42, progress=None, ehr=None) -> dict:
     """→ 결과 dict (menu, metrics, personalization…)"""
     from .inventory import InventoryModel
     with LOCK:
         say = progress or (lambda *_: None)
         say("어르신 프로파일 생성")
-        profiles, meta, skipped = build_profiles(residents, assessments, settings)
+        profiles, meta, skipped = build_profiles(residents, assessments, settings, ehr)
         if not profiles:
             raise ValueError("식단 설계에 쓸 어르신이 없습니다. 진단 화면에서 평가를 먼저 실행하세요.")
+        agent_json = apply_agents(profiles, say)
         pref = preference or {}
         pool = load_pool(pref.get("pool_scores"))
         inv = inventory_from_rows((inventory or {}).get("items"), (inventory or {}).get("start_date"))
@@ -358,14 +405,17 @@ def run_design(residents, assessments, settings, inventory=None, preference=None
         metrics["preset"] = {"name": preset, "pop": pop, "gen": gen}
         pers = personalize_and_serve(pool, records, profiles, meta, inv_model, pref.get("product_scores"), say, inv)
         return {"menu": records, "metrics": metrics, "skipped": skipped, "n_residents": len(profiles),
-                "inventory_used": inv is not None, "preference_used": bool(pref.get("pool_scores")), **pers}
+                "inventory_used": inv is not None, "preference_used": bool(pref.get("pool_scores")),
+                "assessments": agent_json, **pers}
 
 
-def redo_personalization(menu: list, residents, assessments, settings, inventory=None, preference=None, progress=None):
+def redo_personalization(menu: list, residents, assessments, settings, inventory=None, preference=None, progress=None,
+                         ehr=None):
     """영양사가 식단표를 고친 뒤: 지표·개인화·배식만 다시 계산 (최적화는 다시 돌리지 않음)"""
     from .inventory import InventoryModel
     with LOCK:
-        profiles, meta, skipped = build_profiles(residents, assessments, settings)
+        profiles, meta, skipped = build_profiles(residents, assessments, settings, ehr)
+        agent_json = apply_agents(profiles, progress)
         pref = preference or {}
         pool = load_pool(pref.get("pool_scores"))
         inv = inventory_from_rows((inventory or {}).get("items"), (inventory or {}).get("start_date"))
@@ -375,7 +425,8 @@ def redo_personalization(menu: list, residents, assessments, settings, inventory
         records = menu_records(problem, chrom)
         metrics = plan_metrics(problem, chrom, None, None, inv_model)
         pers = personalize_and_serve(pool, records, profiles, meta, inv_model, pref.get("product_scores"), progress, inv)
-        return {"menu": records, "metrics": metrics, "skipped": skipped, "n_residents": len(profiles), **pers}
+        return {"menu": records, "metrics": metrics, "skipped": skipped, "n_residents": len(profiles),
+                "assessments": agent_json, **pers}
 
 
 # ══════════════════════════════════════════════════════════════
