@@ -422,6 +422,14 @@ function MenuTab({ run, onApprove, onEdited, onRerun, setErr }) {
               {Object.entries(m.pattern || {}).map(([k, v]) => (
                 <div key={k} className="flex justify-between text-xs py-0.5"><span>{k.replaceAll('_', ' ')}</span><span className="tabular-nums">{v}</span></div>
               ))}
+              {m.repeat_repair?.changes?.length > 0 && (
+                <details className="mt-2 text-[11px]">
+                  <summary className="cursor-pointer text-navy-700">반복 메뉴 보정 {m.repeat_repair.changes.length}건 (3일 안 반복 → 같은 분류 다른 메뉴)</summary>
+                  {m.repeat_repair.changes.map((c, k) => (
+                    <p key={k} className="text-muted">{c.일차} {c.끼니} {c.칸}: {c.기존} → <b className="text-navy-800">{c.변경}</b></p>
+                  ))}
+                </details>
+              )}
               {m.selection_rule && <p className="mt-2 text-[11px] text-muted">해 선택: {m.selection_rule}</p>}
             </div>
             <div>

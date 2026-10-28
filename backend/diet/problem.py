@@ -189,21 +189,16 @@ class MealPlanProblem(Problem):
                     side_dish_p += 1
         side_score = side_dish_p / (N_DAYS * 3)
 
-        # 2. 2주 간격 연속 배식 중복
-        carry_over_p = 0
-        total_items  = 0
-        look_back    = 13   # 14일 범위
+        # 2. 14일 안 반복 배식 — [2026-10-28] 끼니 단위로 계산 (기존: 날짜 단위라 '같은 날' 중복을 못 잡음)
+        #    가까울수록 무겁게: 같은 날·바로 앞 끼니 3점 · 3일 안 2점 · 14일 안 1점
+        carry_over_p = 0.0
+        dists        = repeat_distances(menus)
+        total_items  = len(dists)
+        for d in dists:
+            if d is not None:
+                carry_over_p += REPEAT_W[0] if d <= NEAR_MEALS else REPEAT_W[1] if d <= DAYS3_MEALS else REPEAT_W[2]
 
-        for day in range(1, N_DAYS):
-            cur  = [m["menu_name"] for m in menus[day*N_SLOTS:(day+1)*N_SLOTS]]
-            past = [m["menu_name"] for m in
-                    menus[max(0, day-look_back)*N_SLOTS:day*N_SLOTS]]
-            for name in cur:
-                if name in WHITELIST or name.startswith("-("): continue
-                if name in past: carry_over_p += 1
-                total_items += 1
-
-        carry_score = carry_over_p / total_items if total_items else 0.0
+        carry_score = min(1.0, carry_over_p / total_items) if total_items else 0.0
 
         # 3. [2026-10-14] 한 그릇 음식 규칙 (meal_rules.py)
         #    · 한 끼에 2개 이상 → 초과분   · 7일 단위 한 그릇 끼니 > 상한 → 초과분
@@ -243,7 +238,43 @@ class MealPlanProblem(Problem):
             "다진찬_주의3개이상_끼니": sum(1 for m in meals if sum(x.get("texture") == "주의" for x in m[1:]) > TEXTURE_CAUTION_MAX),
             "부찬중복_끼니":       sum(1 for i in range(N_DAYS) for s1, s2 in [(3,4),(9,10),(15,16)]
                                      if int(chrom[i*N_SLOTS+s1]) == int(chrom[i*N_SLOTS+s2])),
+            **repeat_counts(menus),
         }
+
+REPEAT_SLOTS = (1, 2, 3, 4)           # 국 · 주찬 · 부찬1 · 부찬2 (밥·김치 제외 — 김치는 후보가 2종뿐이라 반복이 정상)
+WINDOW_MEALS = 14 * 3 - 1             # 14일
+NEAR_MEALS   = 2                      # 같은 날 앞 끼니 · 바로 앞 끼니 (아침→점심, 저녁→다음날 아침)
+DAYS3_MEALS  = 9                      # 3일
+REPEAT_W     = (3.0, 2.0, 1.0)        # 가까운 반복일수록 무거운 벌점
+
+
+def repeat_distances(menus) -> tuple:
+    """끼니 순서대로 훑으며 각 메뉴가 '몇 끼 전에 마지막으로 나왔는지' → ([거리 또는 None, …], 대상 수)
+    (화이트리스트·한그릇 밥칸 제외, 같은 끼니 안 중복은 side_dup 이 따로 봄)"""
+    last, out = {}, []
+    for t in range(0, len(menus) // 6):
+        meal = menus[t * 6:(t + 1) * 6]
+        names = [meal[k]["menu_name"] for k in REPEAT_SLOTS]
+        for n in names:
+            if n in WHITELIST or n.startswith("-("):
+                continue
+            p = last.get(n)
+            out.append(t - p if p is not None and t - p <= WINDOW_MEALS else None)
+        for n in names:
+            last[n] = t
+    return out
+
+
+def repeat_counts(menus) -> dict:
+    near = d3 = d14 = 0
+    for d in repeat_distances(menus):
+        if d is None:
+            continue
+        if d <= NEAR_MEALS: near += 1
+        elif d <= DAYS3_MEALS: d3 += 1
+        else: d14 += 1
+    return {"반복_같은날·연속끼니": near, "반복_3일안": d3, "반복_14일안": d14}
+
 
 def get_menu(pool: dict, slot_idx: int, chrom_val: int) -> dict:
     _, cat = DAILY_SLOTS[slot_idx]

@@ -254,6 +254,84 @@ def plan_metrics(problem, chrom, F_front=None, F_all=None, inv_model=None) -> di
 
 
 # ══════════════════════════════════════════════════════════════
+# [2026-10-28] 반복 메뉴 보정 — 최적화 뒤 남은 '3일 안 반복'을 같은 분류의 다른 메뉴로 바꿈
+#   최적화(f4)는 반복을 벌점으로만 다뤄 영양(f1)과 맞바꿀 수 있으므로, 가까운 반복은 결정적으로 정리한다.
+#   후보: 같은 분류 · 앞뒤 3일 안에 안 나온 메뉴 · 한그릇 여부 같음 · 다진찬 적합도가 나빠지지 않음
+#   선택: 그날 영양 위반이 가장 적고(허용 +0.05) 비용·선호가 비슷한 메뉴
+# ══════════════════════════════════════════════════════════════
+REPAIR_WINDOW = 9          # 앞뒤 9끼(3일)
+REPAIR_SLOTS  = (1, 2, 3, 4)   # 국 · 주찬 · 부찬1 · 부찬2 (김치는 종류가 적어 제외)
+_TEX = {"적합": 0, "주의": 1, "부적합": 2}
+
+
+def _day_violation(problem, menus, day):
+    from .problem import MEAL_SETS, NUTRIENTS
+    c = problem.constraint
+    v, dsum = 0.0, {k: 0.0 for k in NUTRIENTS}
+    dm = menus[day * N_SLOTS:(day + 1) * N_SLOTS]
+    for slots in MEAL_SETS.values():
+        mn = {k: sum((dm[s].get(k, 0) or 0) for s in slots) for k in NUTRIENTS}
+        for k, val in mn.items():
+            lo, hi = getattr(c, f"{k}_min", None), getattr(c, f"{k}_max", None)
+            if lo and val < lo: v += 0.6 * (lo - val) / lo / 3
+            if hi and val > hi: v += 0.6 * (val - hi) / hi / 3
+            dsum[k] += val
+    for k, val in dsum.items():
+        lo, hi = getattr(c, f"daily_{k}_min", None), getattr(c, f"daily_{k}_max", None)
+        if lo and val < lo: v += 0.4 * (lo - val) / lo
+        if hi and val > hi: v += 0.4 * (val - hi) / hi
+    return v
+
+
+def repair_repeats(problem, chrom, window: int = REPAIR_WINDOW, tol: float = 0.05):
+    """→ (보정한 염색체, [변경 기록])"""
+    from .problem import WHITELIST
+    chrom = np.array(chrom, dtype=int).copy()
+    pool = problem.pool
+    n_meals = N_DAYS * 3
+    changes = []
+
+    def names_at(menus, t):
+        return [menus[t * 6 + k]["menu_name"] for k in range(1, 6)]
+
+    menus = problem.effective_menus(chrom)
+    for t in range(n_meals):
+        day, mi = divmod(t, 3)
+        for k in REPAIR_SLOTS:
+            gi = day * N_SLOTS + mi * 6 + k
+            cur = menus[t * 6 + k]
+            nm = cur["menu_name"]
+            if nm in WHITELIST or nm.startswith("-("):
+                continue
+            before = {n for u in range(max(0, t - window), t) for n in names_at(menus, u)}
+            if nm not in before:
+                continue
+            near = {n for u in range(max(0, t - window), min(n_meals, t + window + 1)) for n in names_at(menus, u)}
+            _, cat = DAILY_SLOTS[mi * 6 + k]
+            base_v = _day_violation(problem, menus, day)
+            best = None
+            for j, cand in enumerate(pool[cat]):
+                cn = cand["menu_name"]
+                if cn in near or cn in WHITELIST or bool(cand.get("one_dish")) != bool(cur.get("one_dish")):
+                    continue
+                if _TEX.get(cand.get("texture"), 0) > _TEX.get(cur.get("texture"), 0):
+                    continue
+                trial = list(menus)
+                trial[t * 6 + k] = cand
+                v = _day_violation(problem, trial, day)
+                key = (round(v, 4), abs((cand.get("cost") or 0) - (cur.get("cost") or 0)) / 1000,
+                       -(cand.get("preference_score") or 0.7))
+                if best is None or key < best[0]:
+                    best = (key, j, cand, v)
+            if best and best[3] <= base_v + tol:
+                chrom[gi] = best[1]
+                menus[t * 6 + k] = best[2]
+                changes.append({"일차": f"{day + 1}일", "끼니": MEAL_NAMES[mi], "칸": ["밥", "국", "주찬", "부찬1", "부찬2", "김치"][k],
+                                "기존": nm, "변경": best[2]["menu_name"], "영양위반_변화": round(best[3] - base_v, 4)})
+    return chrom, changes
+
+
+# ══════════════════════════════════════════════════════════════
 # ④⑤ 개인화 · 배식
 # ══════════════════════════════════════════════════════════════
 def _reason_key(w: str) -> str:
@@ -398,9 +476,13 @@ def run_design(residents, assessments, settings, inventory=None, preference=None
                                         progress=lambda g, n, f1: say(f"일반식 최적화 {g}/{n}세대 · f1 {f1:.3f}"))
         best_i, rule = select_balanced(Ff)
         chrom = Xf[best_i]
+        say("반복 메뉴 보정")
+        before = problem.pattern_breakdown(chrom)
+        chrom, repairs = repair_repeats(problem, chrom)
         records = menu_records(problem, chrom)
         metrics = plan_metrics(problem, chrom, Ff, Fa, inv_model)
         metrics["selection_rule"] = rule
+        metrics["repeat_repair"] = {"changes": repairs, "before": {k: v for k, v in before.items() if k.startswith("반복")}}
         metrics["optimize_sec"] = round((dt.datetime.now() - t0).total_seconds(), 1)
         metrics["preset"] = {"name": preset, "pop": pop, "gen": gen}
         pers = personalize_and_serve(pool, records, profiles, meta, inv_model, pref.get("product_scores"), say, inv)
