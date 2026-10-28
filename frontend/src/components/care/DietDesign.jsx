@@ -399,10 +399,30 @@ function MenuTab({ run, onApprove, onEdited, onRerun, setErr }) {
           <button className="btn-secondary" onClick={onRerun}>다시 최적화</button>
         </>}>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <Stat label="f1 영양 위반" value={sel['f1_영양위반']} sub="기본 일반식 기준 · 0.3 이하 목표" tone={sel['f1_영양위반'] <= 0.3 ? 'bg-emerald-50' : 'bg-amber-50'} />
-          <Stat label="f2 예산·재고" value={sel['f2_예산·재고']} sub={m.inventory_unused != null ? `재고 미활용률 ${m.inventory_unused}` : '재고 미입력'} />
-          <Stat label="f3 다양성·선호" value={sel['f3_다양성·선호']} sub="80 이상 목표" />
-          <Stat label="f4 패턴 위반" value={sel['f4_패턴위반']} sub="0.1 이하 목표" />
+          {(() => {
+            // [2026-10-28] 목적함수 이름 변경 (이전 설계 결과는 옛 이름으로 표시)
+            const f1 = sel['f1_영양'] ?? sel['f1_영양위반'], f2 = sel['f2_비용'] ?? sel['f2_예산·재고']
+            const isNew = sel['f3_다양성'] != null
+            const p3 = m.objective_parts?.f3 || {}, p4 = m.objective_parts?.f4 || {}
+            return (<>
+              <Stat label="f1 영양" value={f1} sub="목표 영양소 위반 · 0.3 이하 목표" tone={f1 <= 0.3 ? 'bg-emerald-50' : 'bg-amber-50'} />
+              <Stat label="f2 비용" value={f2} sub={m.inventory_unused != null ? `예산 초과 + 재고 미활용 ${m.inventory_unused}` : '예산 초과 (재고 미입력)'} />
+              {isNew ? (<>
+                <Stat label="f3 다양성" value={sel['f3_다양성']} sub={`28일 반복·편중 · 반복 ${p3['14일 반복'] ?? '–'} · 편중 ${p3['편중(1-Simpson)'] ?? '–'}`} />
+                <Stat label="f4 조화" value={sel['f4_조화']} sub={`한 끼 조합·선호·규칙 · 선호 ${p4['시설 선호(섭취율)'] ?? '–'} · 다진찬 ${p4['다진찬 부적합'] ?? '–'}`} />
+              </>) : (<>
+                <Stat label="f3 다양성·선호 (이전)" value={sel['f3_다양성·선호']} sub="이전 목적함수 — 다시 설계하면 새 기준" />
+                <Stat label="f4 패턴 위반 (이전)" value={sel['f4_패턴위반']} sub="이전 목적함수" />
+              </>)}
+            </>)
+          })()}
+          {m.harmony && (
+            <Stat label="한 끼 조화" value={m.harmony.mean} sub={`시설 실제 식단 ${m.harmony.model?.ref_real_mean ?? '–'} · 무작위 ${m.harmony.model?.ref_random_mean ?? '–'} · 낮은 끼니 ${m.harmony.low_meals}`}
+              tone={m.harmony.mean >= (m.harmony.model?.ref_real_mean || 0.55) - 0.02 ? 'bg-emerald-50' : 'bg-amber-50'} />
+          )}
+          {m.harmony && (
+            <Stat label="시설 스타일 유사도" value={m.harmony.style_similarity} sub={`끼니별 국 종류·조리법·주재료 분포 (${m.harmony.model?.facility} ${m.harmony.model?.n_meals}끼 학습)`} />
+          )}
           <Stat label="파레토 해 품질(HV)" value={m.front?.hv?.toFixed?.(3) ?? '–'} sub={m.front ? `비지배해 ${m.front.n_nondom}개 · f1 통과 ${m.front.f1_pass_rate}%` : '수정본은 계산 안 함'} />
           <Stat label="배식 기준 충족" value={pct(ss.끼니 - ss.조정불가, ss.끼니)} unit="%" sub={`나트륨 ${pct(ss.나트륨OK, ss.끼니) ?? '–'}% · 열량 ${pct(ss.열량OK, ss.끼니) ?? '–'}%`} />
           <Stat label="대체찬" value={res.substitutions?.length ?? 0} unit="건" sub={`${(res.residents || []).filter((x) => x.substitutions > 0).length}명 대상`} />
@@ -462,6 +482,7 @@ function MenuTab({ run, onApprove, onEdited, onRerun, setErr }) {
                 <th className="py-2 pr-2">일차</th><th className="py-2 pr-2">끼니</th>
                 {SLOTS.map((s) => <th key={s} className="py-2 pr-2">{s}</th>)}
                 <th className="py-2 pr-2 text-right">열량</th><th className="py-2 pr-2 text-right">나트륨</th><th className="py-2 pr-2 text-right">단백질</th>
+                <th className="py-2 pr-2 text-right" title="실제 요양원 식단표로 학습한 국·주찬·부찬 조합 점수 (0~1)">조화</th>
                 <th className="py-2">다진찬 주의</th>
               </tr>
             </thead>
@@ -493,6 +514,7 @@ function MenuTab({ run, onApprove, onEdited, onRerun, setErr }) {
                   <td className="py-1.5 pr-2 text-right tabular-nums">{r['열량(kcal)']}</td>
                   <td className={`py-1.5 pr-2 text-right tabular-nums ${r['나트륨(mg)'] > 600 ? 'text-rose-600 font-semibold' : ''}`}>{r['나트륨(mg)']}</td>
                   <td className="py-1.5 pr-2 text-right tabular-nums">{r['단백질(g)']}</td>
+                  <td className={`py-1.5 pr-2 text-right tabular-nums ${r.조화 != null && r.조화 < 0.4 ? 'text-amber-700 font-semibold' : 'text-muted'}`}>{r.조화 != null ? r.조화.toFixed(2) : '–'}</td>
                   <td className="py-1.5 text-[11px] text-muted">{r.다진찬주의 === '-' ? '' : r.다진찬주의}</td>
                 </tr>
               ))}
@@ -908,7 +930,7 @@ function PreferencePanel({ onChanged }) {
       right={<button className="btn-primary" disabled={busy} onClick={refresh}>{busy ? '계산 중…' : '잔반 기록으로 다시 계산'}</button>}>
       <p className="mb-3 text-xs text-muted leading-5">
         영양 조사의 끼니별 잔반(목측)으로 메뉴마다 시설 평균 섭취율을 구하고, 조리법·주재료·양념 같은 메뉴 속성으로 처음 나오는 메뉴와
-        고령친화식품의 선호까지 예측합니다. 점수는 다음 식단 설계의 다양성·선호 목표(f3)와 대체 제품 선택에 쓰입니다.
+        고령친화식품의 선호까지 예측합니다. 점수는 다음 식단 설계의 조화 목표(f4, 한 끼 수용성)와 대체 제품 선택에 쓰입니다.
       </p>
       {msg && <p className="mb-2 text-xs text-rose-700">{msg}</p>}
       {pref === undefined ? <p className="text-sm text-muted">불러오는 중…</p> : !rep ? (
