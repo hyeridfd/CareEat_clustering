@@ -308,6 +308,7 @@ const MEAL_FOODS_NH002 = {
       { food: '부찬2',  menu: '도토리묵무침' },
       { food: '김치1',  menu: '배추김치' },
     ],
+  },
   4: {
     '아침': [
       { food: '밥/죽',  menu: '잡곡밥/흰죽' },
@@ -338,6 +339,7 @@ const MEAL_FOODS_NH002 = {
       { food: '부찬2',  menu: '돌나물블루베리무침' },
       { food: '김치1',  menu: '배추김치' },
     ],
+  },
   5: {
     '아침': [
       { food: '밥/죽',  menu: '잡곡밥/흰죽' },
@@ -356,9 +358,7 @@ const MEAL_FOODS_NH002 = {
       { food: '부찬2',  menu: '열대과일범벅' },
       { food: '김치1',  menu: '배추김치' },
     ],
-    '간식2': [
-      { food: '간식A', menu: '연시감' },
-    ],
+    '간식2': [{ food: '간식', menu: '연시감' }],
     '저녁': [
       { food: '밥/죽',  menu: '잡곡밥/흰죽' },
       { food: '국/탕',  menu: '우거지국' },
@@ -366,7 +366,7 @@ const MEAL_FOODS_NH002 = {
       { food: '부찬1',  menu: '감자채볶음' },
       { food: '부찬2',  menu: '양파조림' },
       { food: '김치1',  menu: '배추김치' },
-    ],        
+    ],
   },
 }
 
