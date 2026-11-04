@@ -212,6 +212,8 @@ export default function DietDesign() {
   const [run, setRun] = useState(null)
   const [sub, setSub] = useState('menu')
   const [preset, setPreset] = useState('standard')
+  const [useAi, setUseAi] = useState(true)          // AI 영양사가 파레토 후보 중 선택
+  const [aiStatus, setAiStatus] = useState(null)
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
   const timer = useRef(null)
@@ -224,7 +226,10 @@ export default function DietDesign() {
 
   const loadRun = (id) => id && api.get(`/care/diet/runs/${id}`, { timeout: 60000 }).then((r) => setRun(r.data)).catch((e) => setErr(errMsg(e)))
 
-  useEffect(() => { loadStatus() }, [])
+  useEffect(() => {
+    loadStatus()
+    api.get('/care/diet/llm-status').then((r) => setAiStatus(r.data)).catch(() => setAiStatus(null))
+  }, [])
   useEffect(() => { setRun(null); loadRun(runId) }, [runId])
 
   // 실행 중이면 4초마다 진행 상황 갱신
@@ -244,7 +249,7 @@ export default function DietDesign() {
   const start = async () => {
     setErr(''); setBusy(true)
     try {
-      const r = await api.post('/care/diet/runs', { preset })
+      const r = await api.post('/care/diet/runs', { preset, selector: useAi ? 'llm' : 'rule' })
       setRunId(r.data.id)
       await loadStatus()
     } catch (e) { setErr(errMsg(e)) } finally { setBusy(false) }
@@ -275,6 +280,11 @@ export default function DietDesign() {
                 className={`px-3 py-1 rounded-lg text-xs font-semibold ${preset === p.key ? 'bg-white text-navy-900 shadow-sm' : 'text-muted'}`}>{p.label}</button>
             ))}
           </div>
+          <label className="flex items-center gap-1.5 text-xs font-semibold text-navy-700"
+            title={aiStatus?.ready ? `최적화가 찾은 식단 후보 중 AI 영양사(${aiStatus.model})가 시설 상황을 보고 고릅니다` : 'AI 키가 설정되지 않아 규칙(균형점)으로 고르고, 후보 비교표만 보여 줍니다'}>
+            <input type="checkbox" checked={useAi} onChange={(e) => setUseAi(e.target.checked)} />
+            AI 영양사 선택{aiStatus && !aiStatus.ready && <span className="font-normal text-muted">(미설정)</span>}
+          </label>
           {active
             ? <button className="btn-secondary" onClick={() => stopRun(active.id)}>계산 멈추기</button>
             : <button className="btn-primary" disabled={busy || !ready} onClick={start}>식단 설계 실행</button>}
@@ -303,7 +313,8 @@ export default function DietDesign() {
                 className={`rounded-xl px-3 py-1.5 text-xs text-left ring-1 ${runId === x.id ? 'ring-navy-500 bg-navy-50' : 'ring-navy-100 bg-white hover:ring-navy-300'}`}>
                 <span className="font-semibold text-navy-900">{fmtDate(x.created_at)} {new Date(x.created_at).toTimeString().slice(0, 5)}</span>
                 <span className={`badge ml-1.5 ${RUN_STATUS[x.status]?.cls}`}>{RUN_STATUS[x.status]?.label}</span>
-                {x.parent_run_id && <span className="ml-1 text-muted">수정본</span>}
+                {x.parent_run_id && <span className="ml-1 text-muted">{x.params?.candidate ? `후보 ${x.params.candidate}` : '수정본'}</span>}
+                {!x.parent_run_id && x.params?.selector === 'llm' && <span className="ml-1 text-violet-600">AI</span>}
                 {x.status === 'failed' && x.error && <span className="ml-1 text-rose-600" title={x.error}>ⓘ</span>}
                 {x.params?.preset && !x.parent_run_id && <span className="ml-1 text-muted">{PRESETS.find((p) => p.key === x.params.preset)?.label}</span>}
               </button>
@@ -345,6 +356,112 @@ export default function DietDesign() {
         <SubsTab run={live} />
       )}
     </div>
+  )
+}
+
+/* ─────────────────────────── AI 영양사 선택 (파레토 후보 비교) ─────────────────────────── */
+
+const SEL_COLS = [
+  ['f1', '영양', (s) => s.목적함수?.['f1_영양']],
+  ['f3', '다양성', (s) => s.목적함수?.['f3_다양성']],
+  ['f4', '조화', (s) => s.목적함수?.['f4_조화']],
+  ['na', '나트륨 mg/일', (s) => s.하루평균_영양?.나트륨?.하루평균],
+  ['su', '당류 g/일', (s) => s.하루평균_영양?.당류?.하루평균],
+  ['pr', '단백질 g/일', (s) => s.하루평균_영양?.단백질?.하루평균],
+  ['rp', '14일 반복', (s) => s.반복?.['반복_14일안']],
+  ['hm', '한 끼 조화', (s) => s.조화?.한끼_평균],
+  ['lo', '낮은 끼니', (s) => s.조화?.낮은_끼니],
+  ['tx', '다진찬 부적합', (s) => s.다진찬_부적합_끼니],
+]
+const HIGHER_BETTER = new Set(['pr', 'hm'])
+
+function SelectionPanel({ run, onEdited, setErr }) {
+  const [busy, setBusy] = useState('')
+  const sel = run.metrics?.selection
+  const p = run.params || {}
+  if (run.parent_run_id && p.candidate) {
+    return (
+      <div className="surface px-5 py-3 text-sm text-navy-800">
+        영양사가 <b>후보 {p.candidate}</b>를 골라 다시 계산한 식단입니다.
+        {p.ai_choice && <span className="text-muted"> (AI 영양사 선택 {p.ai_choice} · 규칙 선택 {p.rule_choice || 'A'})</span>}
+      </div>
+    )
+  }
+  if (!sel?.candidates?.length) return null
+  const cands = sel.candidates
+  const chosen = sel.mode === 'llm' ? sel.choice : 'A'
+  const best = Object.fromEntries(SEL_COLS.map(([k, , g]) => {
+    const vals = cands.map((c) => g(c.summary)).filter((v) => v != null)
+    return [k, HIGHER_BETTER.has(k) ? Math.max(...vals) : Math.min(...vals)]
+  }))
+  const useCand = async (id) => {
+    setBusy(id); setErr('')
+    try { const r = await api.post(`/care/diet/runs/${run.id}/candidate`, { candidate: id }); onEdited(r.data.id) }
+    catch (e) { setErr(errMsg(e)) } finally { setBusy('') }
+  }
+  return (
+    <Section title="AI 영양사 선택"
+      right={sel.mode === 'llm'
+        ? <span className="badge bg-violet-50 text-violet-700">후보 {sel.choice} 선택 · {sel.agreed_with_rule ? '규칙 선택과 같음' : `규칙 선택(A)과 다름`}</span>
+        : <span className="badge bg-amber-50 text-amber-700">규칙 선택(A) 사용</span>}>
+      {sel.mode === 'llm' ? (
+        <div className="space-y-2 text-sm">
+          {sel.summary && <p className="text-navy-900">{sel.summary}</p>}
+          <div className="grid md:grid-cols-3 gap-3">
+            <div className="rounded-xl bg-navy-50/60 px-3 py-2">
+              <p className="text-[11px] font-bold text-muted mb-1">고른 이유</p>
+              <ul className="list-disc pl-4 space-y-0.5 text-xs">{(sel.reasons || []).map((x, i) => <li key={i}>{x}</li>)}</ul>
+            </div>
+            <div className="rounded-xl bg-navy-50/60 px-3 py-2">
+              <p className="text-[11px] font-bold text-muted mb-1">포기한 점</p>
+              <p className="text-xs">{sel.tradeoffs || '–'}</p>
+            </div>
+            <div className="rounded-xl bg-amber-50 px-3 py-2">
+              <p className="text-[11px] font-bold text-amber-800 mb-1">승인 전 확인할 점</p>
+              <ul className="list-disc pl-4 space-y-0.5 text-xs">{(sel.check_before_approval || []).map((x, i) => <li key={i}>{x}</li>)}</ul>
+            </div>
+          </div>
+          <p className="text-[11px] text-muted">AI 순위 {(sel.ranking || []).join(' > ')} · {sel.model} · {sel.latency_sec}초 · 프롬프트 {sel.prompt_version}</p>
+          {sel.warnings?.some((w) => w.startsWith('입력에 없는 숫자')) && (
+            <p className="text-[11px] text-amber-700">⚠ AI 설명에 입력에 없는 숫자가 있습니다 — 숫자는 아래 비교표로 확인하세요. ({sel.warnings.join(' · ')})</p>
+          )}
+        </div>
+      ) : (
+        <p className="text-xs text-muted">{sel.fallback || '규칙(균형점)으로 골랐습니다.'} 아래 후보를 비교해 다른 식단을 직접 고를 수 있습니다.</p>
+      )}
+      <div className="mt-3 overflow-x-auto">
+        <table className="w-full text-xs tabular-nums">
+          <thead>
+            <tr className="text-muted border-b border-navy-100">
+              <th className="text-left py-1.5 pr-2">후보</th>
+              <th className="text-left py-1.5 pr-2">특징</th>
+              {SEL_COLS.map(([k, label]) => <th key={k} className="text-right py-1.5 px-1.5 whitespace-nowrap">{label}</th>)}
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {cands.map((c) => (
+              <tr key={c.id} className={`border-b border-navy-50 ${c.id === chosen ? 'bg-violet-50/60' : ''}`}>
+                <td className="py-1.5 pr-2 font-bold text-navy-900 whitespace-nowrap">{c.id}{c.id === chosen && ' ✓'}</td>
+                <td className="py-1.5 pr-2 text-muted whitespace-nowrap">{(c.tags || []).join(' · ')}</td>
+                {SEL_COLS.map(([k, , g]) => {
+                  const v = g(c.summary)
+                  return <td key={k} className={`text-right py-1.5 px-1.5 ${v != null && v === best[k] ? 'font-bold text-emerald-700' : ''}`}>{v ?? '–'}</td>
+                })}
+                <td className="py-1.5 pl-2 text-right">
+                  {c.id !== chosen && run.status !== 'approved' && (
+                    <button className="btn-ghost !px-2 !py-0.5 text-[11px]" disabled={!!busy} onClick={() => useCand(c.id)}>
+                      {busy === c.id ? '계산 중…' : '이 후보로'}
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="mt-1 text-[11px] text-muted">모든 후보는 영양 기준(f1 ≤ 0.3)을 통과한 파레토 식단입니다. 굵은 초록 = 그 항목에서 가장 좋은 후보. '이 후보로'를 누르면 그 식단으로 대체찬·배식량을 다시 계산한 수정본이 만들어집니다.</p>
+      </div>
+    </Section>
   )
 }
 
@@ -462,6 +579,8 @@ function MenuTab({ run, onApprove, onEdited, onRerun, setErr }) {
           </div>
         </details>
       </Section>
+
+      <SelectionPanel run={run} onEdited={onEdited} setErr={setErr} />
 
       <Section title="28일 일반식 식단표"
         right={<>

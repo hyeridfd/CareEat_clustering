@@ -130,7 +130,7 @@ def _progress_writer(sb, run_id):
     return say
 
 
-def _job(run_id, home, preset, seed, menu=None):
+def _job(run_id, home, preset, seed, menu=None, selector="llm"):
     from diet import pipeline as P
     sb = get_supabase()
     try:
@@ -141,7 +141,8 @@ def _job(run_id, home, preset, seed, menu=None):
         ehr = _load_ehr(sb, home)
         say = _progress_writer(sb, run_id)
         if menu is None:
-            out = P.run_design(residents, assess, settings, inv, pref, preset=preset, seed=seed, progress=say, ehr=ehr)
+            out = P.run_design(residents, assess, settings, inv, pref, preset=preset, seed=seed, progress=say, ehr=ehr,
+                               selector=selector)
         else:
             out = P.redo_personalization(menu, residents, assess, settings, inv, pref, progress=say, ehr=ehr)
         sb.table("diet_runs").update({"progress": "결과 저장 중", "updated_at": get_kst_now()}).eq("id", run_id).execute()
@@ -177,6 +178,7 @@ def _busy(sb, home):
 class RunRequest(BaseModel):
     preset: str = "standard"            # quick | standard | thorough
     seed: int = 42
+    selector: str = "llm"               # llm (AI 영양사가 파레토 후보 중 선택) | rule (균형점 규칙)
 
 
 @router.post("/runs")
@@ -188,11 +190,11 @@ def start_run(req: RunRequest, user: dict = Depends(require_staff)):
     pref = sb.table("diet_preferences").select("nursing_home_id,updated_at").eq("nursing_home_id", home).execute().data
     row = _one(sb.table("diet_runs").insert({
         "nursing_home_id": home, "status": "queued", "progress": "대기 중", "created_by": user["actor"],
-        "params": {"preset": req.preset, "seed": req.seed,
+        "params": {"preset": req.preset, "seed": req.seed, "selector": req.selector,
                    "inventory_used": bool(inv and inv[0].get("items")), "preference_used": bool(pref),
                    "start_date": (inv[0].get("start_date") if inv else None),
                    "preference_updated_at": pref[0]["updated_at"] if pref else None}}).execute())
-    threading.Thread(target=_job, args=(row["id"], home, req.preset, req.seed), daemon=True).start()
+    threading.Thread(target=_job, args=(row["id"], home, req.preset, req.seed, None, req.selector), daemon=True).start()
     return {"id": row["id"], "status": "queued"}
 
 
@@ -341,6 +343,38 @@ def edit_menu(run_id: str, req: MenuEditRequest, user: dict = Depends(require_st
     }).execute())
     threading.Thread(target=_job, args=(new["id"], home, None, None, menu), daemon=True).start()
     return {"id": new["id"], "status": "queued"}
+
+
+class CandidateRequest(BaseModel):
+    candidate: str                      # 후보 id (A, B, …)
+
+
+@router.post("/runs/{run_id}/candidate")
+def use_candidate(run_id: str, req: CandidateRequest, user: dict = Depends(require_staff)):
+    """AI 영양사가 비교한 후보 중 다른 식단을 영양사가 고르면 → 그 식단으로 수정본을 만들고 대체찬·배식만 다시 계산"""
+    sb, home = get_supabase(), user["scope_home"]
+    run = get_run(run_id, user)
+    sel = ((run.get("metrics") or {}).get("selection") or {})
+    cand = next((c for c in sel.get("candidates") or [] if c.get("id") == req.candidate), None)
+    if not cand or not cand.get("menu"):
+        raise HTTPException(status_code=400, detail=f"이 설계에 없는 후보입니다: {req.candidate}")
+    if _busy(sb, home):
+        raise HTTPException(status_code=409, detail="다른 식단 설계가 진행 중입니다.")
+    new = _one(sb.table("diet_runs").insert({
+        "nursing_home_id": home, "status": "queued", "progress": f"후보 {req.candidate} 계산 대기", "created_by": user["actor"],
+        "parent_run_id": run_id,
+        "params": {**(run.get("params") or {}), "edited": [], "candidate": req.candidate,
+                   "ai_choice": sel.get("choice"), "rule_choice": sel.get("rule_choice")},
+    }).execute())
+    menu = [dict(r) for r in cand["menu"]]
+    threading.Thread(target=_job, args=(new["id"], home, None, None, menu), daemon=True).start()
+    return {"id": new["id"], "status": "queued"}
+
+
+@router.get("/llm-status")
+def llm_status(user: dict = Depends(require_staff)):
+    from diet.llm_select import status as st
+    return st()
 
 
 @router.get("/menu-options")

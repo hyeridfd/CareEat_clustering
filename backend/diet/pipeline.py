@@ -487,8 +487,9 @@ def personalize_and_serve(pool, records, profiles, meta, inv_model=None, product
 # 전체 실행
 # ══════════════════════════════════════════════════════════════
 def run_design(residents, assessments, settings, inventory=None, preference=None,
-               preset="standard", seed=42, progress=None, ehr=None) -> dict:
-    """→ 결과 dict (menu, metrics, personalization…)"""
+               preset="standard", seed=42, progress=None, ehr=None, selector="llm") -> dict:
+    """→ 결과 dict (menu, metrics, personalization…)
+    selector = "llm" (파레토 후보 중 AI 영양사가 선택, 실패·미설정 시 규칙) | "rule" (균형점 규칙)"""
     from .inventory import InventoryModel
     with LOCK:
         say = progress or (lambda *_: None)
@@ -507,7 +508,10 @@ def run_design(residents, assessments, settings, inventory=None, preference=None
         t0 = dt.datetime.now()
         Xf, Ff, Xa, Fa = nsga2.minimize(problem, pop_size=pop, n_gen=gen, seed=seed,
                                         progress=lambda g, n, f1: say(f"일반식 최적화 {g}/{n}세대 · f1 {f1:.3f}"))
-        best_i, rule = select_balanced(Ff)
+        from .llm_select import choose, facility_context
+        ctx = facility_context(profiles, meta, agent_json, (inventory or {}).get("start_date"), BUDGET_PER_MEAL)
+        pick = choose(problem, Xf, Ff, problem.constraint, ctx, mode=selector, progress=say)
+        best_i, rule = pick["index"], pick["selection"].get("rule")
         chrom = Xf[best_i]
         say("반복 메뉴 보정")
         before = problem.pattern_breakdown(chrom)
@@ -515,6 +519,7 @@ def run_design(residents, assessments, settings, inventory=None, preference=None
         records = menu_records(problem, chrom)
         metrics = plan_metrics(problem, chrom, Ff, Fa, inv_model)
         metrics["selection_rule"] = rule
+        metrics["selection"] = pick["selection"]
         metrics["repeat_repair"] = {"changes": repairs, "before": {k: v for k, v in before.items() if k.startswith("반복")}}
         metrics["optimize_sec"] = round((dt.datetime.now() - t0).total_seconds(), 1)
         metrics["preset"] = {"name": preset, "pop": pop, "gen": gen}
