@@ -130,7 +130,7 @@ def _progress_writer(sb, run_id):
     return say
 
 
-def _job(run_id, home, preset, seed, menu=None, selector="llm"):
+def _job(run_id, home, preset, seed, menu=None, selector="llm", reviewer="llm"):
     from diet import pipeline as P
     sb = get_supabase()
     try:
@@ -142,7 +142,7 @@ def _job(run_id, home, preset, seed, menu=None, selector="llm"):
         say = _progress_writer(sb, run_id)
         if menu is None:
             out = P.run_design(residents, assess, settings, inv, pref, preset=preset, seed=seed, progress=say, ehr=ehr,
-                               selector=selector)
+                               selector=selector, reviewer=reviewer)
         else:
             out = P.redo_personalization(menu, residents, assess, settings, inv, pref, progress=say, ehr=ehr)
         sb.table("diet_runs").update({"progress": "결과 저장 중", "updated_at": get_kst_now()}).eq("id", run_id).execute()
@@ -179,6 +179,7 @@ class RunRequest(BaseModel):
     preset: str = "standard"            # quick | standard | thorough
     seed: int = 42
     selector: str = "llm"               # llm (AI 영양사가 파레토 후보 중 선택) | rule (균형점 규칙)
+    reviewer: str = "llm"               # llm (AI 식단 검토 → 코드 검증 후 반영) | off
 
 
 @router.post("/runs")
@@ -190,11 +191,12 @@ def start_run(req: RunRequest, user: dict = Depends(require_staff)):
     pref = sb.table("diet_preferences").select("nursing_home_id,updated_at").eq("nursing_home_id", home).execute().data
     row = _one(sb.table("diet_runs").insert({
         "nursing_home_id": home, "status": "queued", "progress": "대기 중", "created_by": user["actor"],
-        "params": {"preset": req.preset, "seed": req.seed, "selector": req.selector,
+        "params": {"preset": req.preset, "seed": req.seed, "selector": req.selector, "reviewer": req.reviewer,
                    "inventory_used": bool(inv and inv[0].get("items")), "preference_used": bool(pref),
                    "start_date": (inv[0].get("start_date") if inv else None),
                    "preference_updated_at": pref[0]["updated_at"] if pref else None}}).execute())
-    threading.Thread(target=_job, args=(row["id"], home, req.preset, req.seed, None, req.selector), daemon=True).start()
+    threading.Thread(target=_job, args=(row["id"], home, req.preset, req.seed, None, req.selector, req.reviewer),
+                     daemon=True).start()
     return {"id": row["id"], "status": "queued"}
 
 

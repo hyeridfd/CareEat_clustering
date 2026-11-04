@@ -213,6 +213,7 @@ export default function DietDesign() {
   const [sub, setSub] = useState('menu')
   const [preset, setPreset] = useState('standard')
   const [useAi, setUseAi] = useState(true)          // AI 영양사가 파레토 후보 중 선택
+  const [useReview, setUseReview] = useState(true)  // AI 식단 검토 (어색한 칸 교체 제안 → 코드 검증 후 반영)
   const [aiStatus, setAiStatus] = useState(null)
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
@@ -249,7 +250,7 @@ export default function DietDesign() {
   const start = async () => {
     setErr(''); setBusy(true)
     try {
-      const r = await api.post('/care/diet/runs', { preset, selector: useAi ? 'llm' : 'rule' })
+      const r = await api.post('/care/diet/runs', { preset, selector: useAi ? 'llm' : 'rule', reviewer: useReview ? 'llm' : 'off' })
       setRunId(r.data.id)
       await loadStatus()
     } catch (e) { setErr(errMsg(e)) } finally { setBusy(false) }
@@ -284,6 +285,11 @@ export default function DietDesign() {
             title={aiStatus?.ready ? `최적화가 찾은 식단 후보 중 AI 영양사(${aiStatus.model})가 시설 상황을 보고 고릅니다` : 'AI 키가 설정되지 않아 규칙(균형점)으로 고르고, 후보 비교표만 보여 줍니다'}>
             <input type="checkbox" checked={useAi} onChange={(e) => setUseAi(e.target.checked)} />
             AI 영양사 선택{aiStatus && !aiStatus.ready && <span className="font-normal text-muted">(미설정)</span>}
+          </label>
+          <label className="flex items-center gap-1.5 text-xs font-semibold text-navy-700"
+            title="AI 영양사가 28일 식단을 읽고 어색한 조합·조리 부담·계절에 안 맞는 칸을 후보 메뉴로 바꾸자고 제안합니다. 영양·반복·조화 점수가 나빠지지 않는 제안만 반영됩니다.">
+            <input type="checkbox" checked={useReview} onChange={(e) => setUseReview(e.target.checked)} />
+            AI 식단 검토
           </label>
           {active
             ? <button className="btn-secondary" onClick={() => stopRun(active.id)}>계산 멈추기</button>
@@ -465,6 +471,73 @@ function SelectionPanel({ run, onEdited, setErr }) {
   )
 }
 
+/* ─────────────────────────── AI 식단 검토 (교체 제안 → 코드 검증) ─────────────────────────── */
+
+function ReviewPanel({ run, onEdited, setErr }) {
+  const [busy, setBusy] = useState('')
+  const rv = run.metrics?.review
+  if (!rv) return null
+  if (rv.mode !== 'llm') {
+    return <div className="surface px-5 py-3 text-xs text-muted">AI 식단 검토: {rv.note || '검토하지 않았습니다.'}</div>
+  }
+  const acc = rv.accepted || [], rej = rv.rejected || []
+  const revert = async (a) => {
+    const key = `${a.day}|${a.meal}|${a.slot}`
+    setBusy(key); setErr('')
+    try {
+      const r = await api.put(`/care/diet/runs/${run.id}/menu`, { changes: [{ 일차: `${a.day}일`, 끼니: a.meal, 칸: a.slot, 메뉴: a.current }] })
+      onEdited(r.data.id)
+    } catch (e) { setErr(errMsg(e)) } finally { setBusy('') }
+  }
+  const fd = (k) => (rv.f_after?.[k] != null && rv.f_before?.[k] != null ? (rv.f_after[k] - rv.f_before[k]).toFixed(3) : '–')
+  return (
+    <Section title="AI 식단 검토"
+      right={<span className="badge bg-violet-50 text-violet-700">제안 {rv.n_suggested}건 · 반영 {acc.length} · 거절 {rej.length}</span>}>
+      {rv.overall && <p className="text-sm text-navy-900">{rv.overall}</p>}
+      {acc.length > 0 ? (
+        <div className="mt-3 space-y-1.5">
+          <p className="text-[11px] font-bold text-muted">반영한 교체 (식단표에 보라색으로 표시)</p>
+          {acc.map((a) => (
+            <div key={`${a.day}${a.meal}${a.slot}`} className="flex flex-wrap items-start gap-x-3 gap-y-1 rounded-xl bg-violet-50/60 px-3 py-2 text-xs">
+              <span className="font-semibold text-navy-900 whitespace-nowrap">{a.day}일 {a.meal} {a.slot}</span>
+              <span className="whitespace-nowrap"><span className="text-muted line-through">{a.current}</span> → <b className="text-violet-800">{a.replace_with}</b></span>
+              {a.type && <span className="badge bg-white text-violet-700">{a.type}</span>}
+              <span className="min-w-0 flex-1 text-navy-800">
+                {a.problem}{a.why ? ` · ${a.why}` : ''}
+                {a.calcium && (a.calcium[0] >= 100 || a.calcium[1] >= 100) && <span className="ml-1 text-muted">(칼슘 {a.calcium[0]}→{a.calcium[1]}mg)</span>}
+                {a.code_note && <span className="block text-[11px] text-emerald-700">↳ {a.code_note}</span>}
+              </span>
+              {run.status !== 'approved' && (
+                <button className="btn-ghost !px-2 !py-0.5 text-[11px]" disabled={!!busy} onClick={() => revert(a)}>
+                  {busy === `${a.day}|${a.meal}|${a.slot}` ? '계산 중…' : '되돌리기'}
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      ) : <p className="mt-2 text-xs text-muted">반영한 교체가 없습니다.</p>}
+      {rej.length > 0 && (
+        <details className="mt-3 text-xs">
+          <summary className="cursor-pointer text-navy-700 font-semibold">반영하지 않은 제안 {rej.length}건 (코드 검증에서 거절)</summary>
+          <div className="mt-2 space-y-1">
+            {rej.map((r, i) => (
+              <p key={i} className="text-muted">
+                {r.day}일 {r.meal} {r.slot}: {r.current} → {r.replace_with} — <span className="text-amber-700">{r.reason}</span>
+                {r.problem ? ` (제안 이유: ${r.problem})` : ''}
+              </p>
+            ))}
+          </div>
+        </details>
+      )}
+      <p className="mt-2 text-[11px] text-muted">
+        검토 전후 점수 변화 f1 {fd('f1')} · f3 {fd('f3')} · f4 {fd('f4')} (음수 = 좋아짐) · {rv.model} · {rv.latency_sec}초 · 프롬프트 {rv.prompt_version}.
+        제안은 후보 메뉴 안에서만, 앞뒤 3일 반복이 없고 영양·다양성·조화 점수가 0.01 넘게(검토 전체로도 0.01 넘게) 나빠지지 않을 때만 반영됩니다.
+        칼슘·단백질 급원 반찬은 같은 급원 메뉴 중 점수가 가장 좋은 것으로만 바뀝니다.
+      </p>
+    </Section>
+  )
+}
+
 /* ─────────────────────────── ① 식단표 ─────────────────────────── */
 
 function MenuTab({ run, onApprove, onEdited, onRerun, setErr }) {
@@ -487,6 +560,7 @@ function MenuTab({ run, onApprove, onEdited, onRerun, setErr }) {
     if (!options) api.get('/care/diet/menu-options').then((r) => setOptions(r.data)).catch((e) => setErr(errMsg(e)))
   }
   const rows = (run.menu || []).filter((r) => Math.ceil(dayNo(r.일차) / 7) === week)
+  const reviewed = useMemo(() => Object.fromEntries((m.review?.accepted || []).map((a) => [`${a.day}일|${a.meal}|${a.slot}`, a])), [run.id])
   const nEdits = Object.keys(edits).length
 
   const saveEdits = async () => {
@@ -581,6 +655,7 @@ function MenuTab({ run, onApprove, onEdited, onRerun, setErr }) {
       </Section>
 
       <SelectionPanel run={run} onEdited={onEdited} setErr={setErr} />
+      <ReviewPanel run={run} onEdited={onEdited} setErr={setErr} />
 
       <Section title="28일 일반식 식단표"
         right={<>
@@ -625,7 +700,8 @@ function MenuTab({ run, onApprove, onEdited, onRerun, setErr }) {
                           </select>
                         ) : (
                           <button disabled={String(r[s]).startsWith('-(')} onClick={() => openEdit({ k })}
-                            className={`text-left rounded px-1 -mx-1 hover:bg-navy-50 ${edits[k] ? 'bg-amber-50 text-amber-900 font-semibold' : ''}`}>{v}</button>
+                            title={!edits[k] && reviewed[k] ? `AI 검토로 바뀜: ${reviewed[k].current} → ${reviewed[k].replace_with} (${reviewed[k].problem || ''})` : undefined}
+                            className={`text-left rounded px-1 -mx-1 hover:bg-navy-50 ${edits[k] ? 'bg-amber-50 text-amber-900 font-semibold' : reviewed[k] ? 'bg-violet-50 text-violet-900' : ''}`}>{v}</button>
                         )}
                       </td>
                     )

@@ -487,9 +487,10 @@ def personalize_and_serve(pool, records, profiles, meta, inv_model=None, product
 # 전체 실행
 # ══════════════════════════════════════════════════════════════
 def run_design(residents, assessments, settings, inventory=None, preference=None,
-               preset="standard", seed=42, progress=None, ehr=None, selector="llm") -> dict:
+               preset="standard", seed=42, progress=None, ehr=None, selector="llm", reviewer="llm") -> dict:
     """→ 결과 dict (menu, metrics, personalization…)
-    selector = "llm" (파레토 후보 중 AI 영양사가 선택, 실패·미설정 시 규칙) | "rule" (균형점 규칙)"""
+    selector = "llm" (파레토 후보 중 AI 영양사가 선택, 실패·미설정 시 규칙) | "rule" (균형점 규칙)
+    reviewer = "llm" (AI 식단 검토자가 어색한 칸 교체 제안 → 코드 검증 후 반영) | off (검토 안 함)"""
     from .inventory import InventoryModel
     with LOCK:
         say = progress or (lambda *_: None)
@@ -516,8 +517,13 @@ def run_design(residents, assessments, settings, inventory=None, preference=None
         say("반복 메뉴 보정")
         before = problem.pattern_breakdown(chrom)
         chrom, repairs = repair_repeats(problem, chrom)
+        review = None
+        if reviewer == "llm":
+            from .llm_review import review_menu
+            chrom, review = review_menu(problem, chrom, ctx, progress=say)
         records = menu_records(problem, chrom)
         metrics = plan_metrics(problem, chrom, Ff, Fa, inv_model)
+        metrics["review"] = review
         metrics["selection_rule"] = rule
         metrics["selection"] = pick["selection"]
         metrics["repeat_repair"] = {"changes": repairs, "before": {k: v for k, v in before.items() if k.startswith("반복")}}

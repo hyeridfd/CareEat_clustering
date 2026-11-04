@@ -284,7 +284,9 @@ def _extract_json(text: str) -> dict:
     return json.loads(text[s:e + 1])
 
 
-def call_llm(user_payload: dict, p: str | None = None) -> tuple[dict, str]:
+def call_llm(user_payload: dict, p: str | None = None, system: str | None = None, max_tokens: int = 1500) -> tuple[dict, str]:
+    """LLM 한 번 호출 → (JSON dict, "제공자:모델"). system 을 주면 다른 역할(예: 식단 검토자)로 쓸 수 있다"""
+    system = system or SYSTEM_PROMPT
     p = p or provider()
     if p not in ("openai", "anthropic"):
         raise RuntimeError(f"AI 영양사 미설정 (DIET_LLM_PROVIDER / LLM_PROVIDER = {p})")
@@ -297,7 +299,7 @@ def call_llm(user_payload: dict, p: str | None = None) -> tuple[dict, str]:
             raise RuntimeError("OPENAI_API_KEY 미설정")
         r = httpx.post("https://api.openai.com/v1/chat/completions", headers={"Authorization": f"Bearer {key}"},
                        json={"model": model, "temperature": 0, "response_format": {"type": "json_object"},
-                             "messages": [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": body}]},
+                             "messages": [{"role": "system", "content": system}, {"role": "user", "content": body}]},
                        timeout=TIMEOUT)
         r.raise_for_status()
         return _extract_json(r.json()["choices"][0]["message"]["content"]), f"openai:{model}"
@@ -307,7 +309,7 @@ def call_llm(user_payload: dict, p: str | None = None) -> tuple[dict, str]:
             raise RuntimeError("ANTHROPIC_API_KEY 미설정")
         r = httpx.post("https://api.anthropic.com/v1/messages",
                        headers={"x-api-key": key, "anthropic-version": "2023-06-01"},
-                       json={"model": model, "max_tokens": 1500, "temperature": 0, "system": SYSTEM_PROMPT,
+                       json={"model": model, "max_tokens": max_tokens, "temperature": 0, "system": system,
                              "messages": [{"role": "user", "content": body}]},
                        timeout=TIMEOUT)
         r.raise_for_status()
