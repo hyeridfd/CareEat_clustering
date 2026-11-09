@@ -400,6 +400,40 @@ def care_plan(run_id: str, eid: str, user: dict = Depends(require_staff)):
     return plan
 
 
+LABEL_SLOTS = ("밥", "국", "주찬", "부찬1", "부찬2", "김치")
+MEAL_ORDER = {"아침": 0, "점심": 1, "저녁": 2}
+
+
+@router.get("/runs/{run_id}/labels")
+def serving_labels(run_id: str, day: str, meal: str = "all", user: dict = Depends(require_staff)):
+    """개인 배식표 라벨 (그 일차·끼니의 모든 어르신) — [식별번호] (끼니) 성명 (식사형태) + 칸별 메뉴"""
+    sb = get_supabase()
+    run = get_run(run_id, user)
+    info = {r["elderly_id"]: r for r in (run.get("result") or {}).get("residents") or []}
+    rows = sb.table("diet_servings").select("elderly_id,meals").eq("run_id", run_id).execute().data or []
+    out = []
+    for row in rows:
+        eid, r = row["elderly_id"], info.get(row["elderly_id"], {})
+        for m in row.get("meals") or []:
+            if m.get("일차") != day or (meal != "all" and m.get("끼니") != meal):
+                continue
+            menus, subs, forms = m.get("메뉴") or {}, set(m.get("대체") or []), set(m.get("식사형태변경") or [])
+            import re as _re
+            ratio = {k: float(v) for k, v in _re.findall(r"(밥|국|주찬|부찬1|부찬2|김치)([\d.]+)", str(m.get("칸별비율") or ""))}
+            items = []
+            for s in LABEL_SLOTS:
+                name = menus.get(s)
+                if not name or str(name).startswith("-("):          # 한 그릇 음식 끼니의 밥 칸
+                    continue
+                g = m.get(s)
+                items.append({"slot": s, "name": name, "sub": s in subs, "form": s in forms, "ratio": ratio.get(s),
+                              "grams": round(float(g)) if isinstance(g, (int, float)) else None})
+            out.append({"id": eid, "name": r.get("display_name") or eid, "texture": r.get("texture"),
+                        "type": r.get("type"), "day": m.get("일차"), "meal": m.get("끼니"), "items": items})
+    out.sort(key=lambda x: (MEAL_ORDER.get(x["meal"], 9), str(x["id"])))
+    return {"day": day, "meal": meal, "labels": out}
+
+
 @router.get("/llm-status")
 def llm_status(user: dict = Depends(require_staff)):
     from diet.llm_select import status as st

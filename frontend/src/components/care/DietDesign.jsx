@@ -752,6 +752,8 @@ function ServingTab({ run }) {
   const days = [...new Set((meals || []).map((x) => x.일차))]
 
   return (
+    <div className="space-y-4">
+    <LabelPrint run={run} />
     <div className="grid md:grid-cols-[260px_1fr] gap-4">
       <div className="surface p-3 max-h-[720px] overflow-y-auto">
         <input className="form-input !py-2 mb-2" placeholder="이름 검색" value={q} onChange={(e) => setQ(e.target.value)} />
@@ -839,6 +841,7 @@ function ServingTab({ run }) {
           </Section>
         )}
       </div>
+    </div>
     </div>
   )
 }
@@ -1017,6 +1020,142 @@ function SubsTab({ run }) {
           { key: '사용 재고', label: '사용 재고 (일반식에서 남은 재고)', cls: 'text-xs text-muted' },
         ]} />
       </Section>
+    </div>
+  )
+}
+
+/* ─────────────────────────── 배식 라벨 출력 ─────────────────────────── */
+
+// A4 라벨지 (열 × 행, 라벨 크기 mm). 여백은 자동으로 가운데 맞춤 + '위치 보정'으로 미세 조정
+const LABEL_SHEETS = {
+  '2x5': { label: 'A4 2×5칸 (99 × 57mm)', cols: 2, rows: 5, w: 99.1, h: 57, font: 12 },
+  '2x6': { label: 'A4 2×6칸 (99 × 46mm)', cols: 2, rows: 6, w: 99.1, h: 46, font: 10 },
+  '2x7': { label: 'A4 2×7칸 (99 × 38mm)', cols: 2, rows: 7, w: 99.1, h: 38.1, font: 8.5 },
+  '3x7': { label: 'A4 3×7칸 (63.5 × 38mm)', cols: 3, rows: 7, w: 63.5, h: 38.1, font: 8 },
+}
+const escHtml = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+
+function LabelPrint({ run }) {
+  const days = [...new Set((run.menu || []).map((r) => r.일차))].sort((a, b) => dayNo(a) - dayNo(b))
+  const [open, setOpen] = useState(false)
+  const [day, setDay] = useState(days[0] || '1일')
+  const [meal, setMeal] = useState('아침')
+  const [sheet, setSheet] = useState('2x5')
+  const [tag, setTag] = useState('texture')       // 괄호 안: texture(식사형태) | type(질환 유형) | both
+  const [order, setOrder] = useState('id')
+  const [star, setStar] = useState(false)         // 대체 반찬 ★
+  const [grams, setGrams] = useState(false)       // 배식량(배)
+  const [border, setBorder] = useState(true)      // 칸 테두리 (라벨지 위치 맞출 때)
+  const [dx, setDx] = useState(0)
+  const [dy, setDy] = useState(0)
+  const [labels, setLabels] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+
+  useEffect(() => {
+    if (!open) return
+    setBusy(true); setErr(''); setLabels(null)
+    api.get(`/care/diet/runs/${run.id}/labels`, { params: { day, meal } })
+      .then((r) => setLabels(r.data.labels)).catch((e) => setErr(errMsg(e))).finally(() => setBusy(false))
+  }, [open, day, meal, run.id])
+
+  const tagOf = (x) => tag === 'type' ? x.type : tag === 'both' ? `${x.texture} · ${x.type}` : x.texture
+  const sorted = (labels || []).slice().sort((a, b) =>
+    (MEALS.indexOf(a.meal) - MEALS.indexOf(b.meal)) ||
+    (order === 'name' ? String(a.name).localeCompare(String(b.name), 'ko')
+      : order === 'texture' ? String(a.texture).localeCompare(String(b.texture), 'ko') || String(a.id).localeCompare(String(b.id))
+        : String(a.id).localeCompare(String(b.id), 'ko', { numeric: true })))
+  const itemText = (i) => `${star && i.sub ? '★ ' : ''}${i.name}${grams && i.ratio != null && i.ratio !== 1 ? ` (×${i.ratio})` : ''}`
+
+  const print = () => {
+    const S = LABEL_SHEETS[sheet]
+    const gapX = S.cols > 1 ? Math.max(0, (210 - 8 - S.cols * S.w) / (S.cols - 1)) : 0
+    const gx = Math.min(gapX, 3)
+    const left = (210 - S.cols * S.w - (S.cols - 1) * gx) / 2 + Number(dx || 0)
+    const top = (297 - S.rows * S.h) / 2 + Number(dy || 0)
+    const per = S.cols * S.rows
+    const pages = []
+    for (let i = 0; i < sorted.length; i += per) pages.push(sorted.slice(i, i + per))
+    const card = (x) => `<div class="lb"><div class="hd">[${escHtml(x.id)}] (${escHtml(x.meal)}) <b>${escHtml(x.name)}</b> (${escHtml(tagOf(x))})</div><ul>${
+      x.items.map((i) => `<li>${escHtml(itemText(i))}</li>`).join('')}</ul></div>`
+    const html = `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>배식 라벨 ${escHtml(day)} ${escHtml(meal === 'all' ? '하루' : meal)}</title>
+<style>
+@page { size: A4; margin: 0 }
+* { box-sizing: border-box; margin: 0; padding: 0 }
+body { font-family: "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; color: #000 }
+.page { width: 210mm; height: 297mm; position: relative; page-break-after: always; overflow: hidden }
+.page:last-child { page-break-after: auto }
+.grid { position: absolute; left: ${left}mm; top: ${top}mm; display: grid;
+  grid-template-columns: repeat(${S.cols}, ${S.w}mm); grid-auto-rows: ${S.h}mm; column-gap: ${gx}mm }
+.lb { padding: 2.5mm 3.5mm; overflow: hidden; ${border ? 'outline: 0.2mm dashed #999; outline-offset: -0.1mm;' : ''} font-size: ${S.font}pt; line-height: 1.3 }
+.hd { font-size: ${S.font + 0.5}pt; margin-bottom: 1mm; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+ul { list-style: none } li::before { content: "* " } li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+</style></head><body>${pages.map((pg) => `<div class="page"><div class="grid">${pg.map(card).join('')}</div></div>`).join('')}
+<script>window.onload = () => setTimeout(() => window.print(), 200)<\/script></body></html>`
+    const w = window.open('', '_blank')
+    if (!w) { setErr('팝업이 막혀 있습니다. 브라우저에서 이 사이트의 팝업을 허용해 주세요.'); return }
+    w.document.open(); w.document.write(html); w.document.close()
+  }
+
+  const S = LABEL_SHEETS[sheet]
+  const nPages = labels ? Math.ceil(labels.length / (S.cols * S.rows)) : 0
+  return (
+    <div className="surface px-5 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-bold text-navy-900">배식 라벨 출력 <span className="font-normal text-xs text-muted">— 끼니별 어르신 라벨을 A4 라벨지로 인쇄</span></p>
+        <button className="btn-secondary !py-1.5 text-xs" onClick={() => setOpen((o) => !o)}>{open ? '닫기' : '라벨 만들기'}</button>
+      </div>
+      {open && (
+        <div className="mt-3 grid lg:grid-cols-[1fr_320px] gap-4">
+          <div className="space-y-2 text-xs">
+            <div className="flex flex-wrap gap-2 items-center">
+              <select id="lb-day" className="form-select !py-1.5 !w-auto" value={day} onChange={(e) => setDay(e.target.value)}>
+                {days.map((d) => <option key={d} value={d}>{d}</option>)}
+              </select>
+              <select id="lb-meal" className="form-select !py-1.5 !w-auto" value={meal} onChange={(e) => setMeal(e.target.value)}>
+                {MEALS.map((m) => <option key={m} value={m}>{m}</option>)}
+                <option value="all">하루 전체 (아침·점심·저녁)</option>
+              </select>
+              <select id="lb-sheet" className="form-select !py-1.5 !w-auto" value={sheet} onChange={(e) => setSheet(e.target.value)}>
+                {Object.entries(LABEL_SHEETS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+              </select>
+              <select id="lb-order" className="form-select !py-1.5 !w-auto" value={order} onChange={(e) => setOrder(e.target.value)}>
+                <option value="id">식별번호 순</option><option value="name">이름 순</option><option value="texture">식사형태별</option>
+              </select>
+              <select id="lb-tag" className="form-select !py-1.5 !w-auto" value={tag} onChange={(e) => setTag(e.target.value)}>
+                <option value="texture">괄호: 식사형태</option><option value="type">괄호: 질환 유형</option><option value="both">괄호: 둘 다</option>
+              </select>
+            </div>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 items-center text-navy-800">
+              <label className="flex items-center gap-1"><input id="lb-star" type="checkbox" checked={star} onChange={(e) => setStar(e.target.checked)} />대체 반찬 ★ 표시</label>
+              <label className="flex items-center gap-1"><input id="lb-grams" type="checkbox" checked={grams} onChange={(e) => setGrams(e.target.checked)} />배식량(×배) 표시</label>
+              <label className="flex items-center gap-1"><input id="lb-border" type="checkbox" checked={border} onChange={(e) => setBorder(e.target.checked)} />칸 테두리 (위치 맞출 때)</label>
+              <span className="flex items-center gap-1">위치 보정 가로
+                <input id="lb-dx" type="number" step="0.5" className="form-input !py-0.5 !w-16" value={dx} onChange={(e) => setDx(e.target.value)} />mm · 세로
+                <input id="lb-dy" type="number" step="0.5" className="form-input !py-0.5 !w-16" value={dy} onChange={(e) => setDy(e.target.value)} />mm</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <button className="btn-primary !py-1.5 text-xs" disabled={!labels?.length} onClick={print}>인쇄 ({labels?.length ?? 0}장 · A4 {nPages}쪽)</button>
+              {busy && <span className="text-muted">불러오는 중…</span>}
+              {err && <span className="text-rose-700">{err}</span>}
+            </div>
+            <p className="text-[11px] text-muted leading-5">
+              인쇄 창에서 <b>배율 100%(실제 크기)</b>, 여백 '없음'으로 인쇄하세요. 처음에는 일반 종이에 테두리를 켜고 한 장 뽑아 라벨지에 겹쳐 보고, 어긋나면 위치 보정(mm)으로 맞춥니다.
+              식별번호는 어르신 ID입니다. 메뉴는 대체찬·죽·백김치가 반영된 개인 메뉴이며, 일품식 끼니는 밥 칸을 뺍니다.
+            </p>
+          </div>
+          <div>
+            <p className="text-[11px] font-bold text-muted mb-1">미리보기</p>
+            {(sorted.slice(0, 2)).map((x) => (
+              <div key={x.id + x.meal} className="mb-2 rounded border border-dashed border-slate-400 bg-white text-black px-3 py-2 text-[12px] leading-5">
+                <p className="truncate">[{x.id}] ({x.meal}) <b>{x.name}</b> ({tagOf(x)})</p>
+                {x.items.map((i) => <p key={i.slot} className="truncate">* {itemText(i)}</p>)}
+              </div>
+            ))}
+            {labels && !labels.length && <p className="text-xs text-muted">이 끼니의 배식표가 없습니다.</p>}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
