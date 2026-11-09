@@ -28,6 +28,7 @@ const SUBTABS = [
   { key: 'serving', label: '개인 배식표' },
   { key: 'purchase', label: '주간 발주' },
   { key: 'stock', label: '재고 리포트' },
+  { key: 'subsum', label: '대체찬 요약' },
   { key: 'subs', label: '대체찬·죽' },
   { key: 'settings', label: '재고·선호도·설정' },
 ]
@@ -364,6 +365,8 @@ export default function DietDesign() {
         <ServingTab run={live} />
       ) : sub === 'purchase' ? (
         <PurchaseTab run={live} />
+      ) : sub === 'subsum' ? (
+        <SubsSummaryTab run={live} />
       ) : (
         <SubsTab run={live} />
       )}
@@ -1013,6 +1016,173 @@ function SubsTab({ run }) {
           { key: '죽', label: '영양죽', cls: 'font-semibold text-navy-900' },
           { key: '사용 재고', label: '사용 재고 (일반식에서 남은 재고)', cls: 'text-xs text-muted' },
         ]} />
+      </Section>
+    </div>
+  )
+}
+
+/* ─────────────────────────── 대체찬 요약 (어르신별) ─────────────────────────── */
+
+const RESOLVED_LABEL = {
+  sodium: '나트륨 초과', sugar: '당류 초과', sat_fat: '포화지방 초과', fat: '지방 초과', protein: '단백질 초과',
+  energy_low: '열량 부족', protein_low: '단백질 부족', fiber_low: '식이섬유 부족', potassium_low: '칼륨 부족',
+  dementia: '뇌건강 식재료', safety: '안전(약물·알레르기)',
+}
+const splitReasons = (r) => String(r || '').split(' / ').map((x) => x.trim()).filter(Boolean)
+
+function SubsSummaryTab({ run }) {
+  const res = run.result || {}
+  const subs = res.substitutions || []
+  const residents = res.residents || []
+  const [q, setQ] = useState('')
+  const [type, setType] = useState('all')
+  const [reason, setReason] = useState('all')
+  const [open, setOpen] = useState({})
+
+  const types = [...new Set(residents.map((r) => r.type).filter(Boolean))].sort()
+  const allReasons = Object.entries(res.substitution_reasons || {}).sort((a, b) => b[1] - a[1]).map(([k]) => k)
+  const match = (s) => (reason === 'all' || splitReasons(s.reason).includes(reason))
+  const byRes = useMemo(() => {
+    const m = {}
+    for (const s of subs) (m[s.elderly_id] ||= []).push(s)
+    return m
+  }, [run.id])
+  const rows = residents
+    .filter((r) => (type === 'all' || r.type === type) && (!q || String(r.display_name || '').includes(q.trim())))
+    .map((r) => ({ ...r, list: (byRes[r.elderly_id] || []).filter(match) }))
+  const withSubs = rows.filter((r) => r.list.length).sort((a, b) => b.list.length - a.list.length)
+  const without = rows.filter((r) => !r.list.length)
+  const shown = withSubs.flatMap((r) => r.list)
+
+  // 유형 × 사유 표
+  const matrix = useMemo(() => {
+    const m = {}
+    for (const s of subs) for (const k of splitReasons(s.reason)) { (m[s.type] ||= {}); m[s.type][k] = (m[s.type][k] || 0) + 1 }
+    return m
+  }, [run.id])
+  const topPairs = (list) => {
+    const c = {}
+    for (const s of list) { const k = `${s.orig} → ${s.product}`; c[k] = (c[k] || 0) + 1 }
+    return Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, 2)
+  }
+  const reasonCount = (list) => {
+    const c = {}
+    for (const s of list) for (const k of splitReasons(s.reason)) c[k] = (c[k] || 0) + 1
+    return Object.entries(c).sort((a, b) => b[1] - a[1])
+  }
+  const downloadCsv = () => {
+    const head = ['어르신', '유형', '식사형태', '일차', '끼니', '칸', '기존 메뉴', '대체 제품', '업체', '조리법', '1인분(g)', '사유', '해결된 문제']
+    const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`
+    const lines = shown.map((s) => [s.display_name, s.type, s.texture, s.day, s.meal, s.slot, s.orig, s.product, s.maker, s.cook, s.grams,
+      s.reason, (s.resolved || []).map((k) => RESOLVED_LABEL[k] || k).join(' / ')].map(esc).join(','))
+    const blob = new Blob(['\ufeff' + [head.map(esc).join(','), ...lines].join('\n')], { type: 'text/csv;charset=utf-8' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob); a.download = `대체찬_요약_${(run.created_at || '').slice(0, 10)}.csv`; a.click()
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+  }
+  const nRes = withSubs.length
+  const top = reasonCount(shown)[0]
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Stat label="대체찬" value={shown.length} unit="건" sub="28일 · 선택한 조건" />
+        <Stat label="대체 받은 어르신" value={nRes} unit={`/ ${rows.length}명`} sub={`대체 없음 ${without.length}명`} />
+        <Stat label="1인 평균" value={nRes ? (shown.length / nRes).toFixed(1) : '–'} unit="건" sub={nRes ? `하루 ${(shown.length / nRes / 28).toFixed(2)}건` : ''} />
+        <Stat label="가장 많은 사유" value={top ? top[0] : '–'} sub={top ? `${top[1]}건` : ''} />
+      </div>
+
+      <Section title="유형별 대체 사유"
+        right={<span className="text-[11px] text-muted">한 대체에 사유가 여러 개면 각각 셉니다</span>}>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs tabular-nums" style={{ minWidth: 640 }}>
+            <thead><tr className="text-muted border-b border-navy-100">
+              <th className="text-left py-1.5 pr-2">유형</th>
+              {allReasons.map((k) => <th key={k} className="text-right py-1.5 px-1.5 whitespace-nowrap">{k}</th>)}
+            </tr></thead>
+            <tbody>
+              {Object.keys(matrix).sort().map((t) => (
+                <tr key={t} className="border-b border-navy-50">
+                  <td className="py-1.5 pr-2 font-semibold text-navy-900 whitespace-nowrap">{t}</td>
+                  {allReasons.map((k) => <td key={k} className={`text-right py-1.5 px-1.5 ${matrix[t][k] ? 'text-navy-900' : 'text-slate-300'}`}>{matrix[t][k] || '·'}</td>)}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Section>
+
+      <Section title={`어르신별 대체 내역 (${nRes}명 · ${shown.length}건)`}
+        right={
+          <div className="flex flex-wrap items-center gap-2">
+            <input id="subsum-q" className="form-input !py-1.5 !w-32" placeholder="이름 검색" value={q} onChange={(e) => setQ(e.target.value)} />
+            <select id="subsum-type" className="form-select !py-1.5 !w-auto" value={type} onChange={(e) => setType(e.target.value)}>
+              <option value="all">모든 유형</option>
+              {types.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
+            <select id="subsum-reason" className="form-select !py-1.5 !w-auto" value={reason} onChange={(e) => setReason(e.target.value)}>
+              <option value="all">모든 사유</option>
+              {allReasons.map((k) => <option key={k} value={k}>{k}</option>)}
+            </select>
+            <button className="btn-secondary !py-1.5 text-xs" onClick={downloadCsv} disabled={!shown.length}>엑셀(CSV) 내려받기</button>
+          </div>
+        }>
+        {!withSubs.length && <p className="text-sm text-muted py-4 text-center">조건에 맞는 대체찬이 없습니다.</p>}
+        <div className="space-y-2">
+          {withSubs.map((r) => {
+            const isOpen = !!open[r.elderly_id]
+            return (
+              <div key={r.elderly_id} className="rounded-xl ring-1 ring-navy-100 bg-white">
+                <button className="w-full text-left px-3 py-2.5 flex flex-wrap items-center gap-x-3 gap-y-1"
+                  onClick={() => setOpen((o) => ({ ...o, [r.elderly_id]: !o[r.elderly_id] }))}>
+                  <span className="text-navy-700 text-xs w-3">{isOpen ? '▾' : '▸'}</span>
+                  <span className="font-bold text-navy-900 whitespace-nowrap">{r.display_name}</span>
+                  <span className="badge bg-navy-50 text-navy-700">{r.type}</span>
+                  <span className="text-xs text-muted whitespace-nowrap">{r.texture}</span>
+                  <span className="text-xs font-semibold text-emerald-800 whitespace-nowrap">대체 {r.list.length}건</span>
+                  <span className="flex flex-wrap gap-1">
+                    {reasonCount(r.list).slice(0, 3).map(([k, v]) => <span key={k} className="badge bg-amber-50 text-amber-800">{k} {v}</span>)}
+                  </span>
+                  <span className="min-w-0 flex-1 text-xs text-muted truncate">
+                    {topPairs(r.list).map(([k, v]) => `${k}${v > 1 ? ` ×${v}` : ''}`).join(' · ')}
+                  </span>
+                </button>
+                {isOpen && (
+                  <div className="px-3 pb-3 overflow-x-auto">
+                    <table className="w-full text-xs" style={{ minWidth: 820 }}>
+                      <thead><tr className="text-muted border-b border-navy-100">
+                        {['일차', '끼니', '칸', '기존 메뉴', '', '대체 제품', '조리법', '사유', '해결된 문제'].map((h, i) =>
+                          <th key={i} className="text-left py-1.5 pr-2 font-semibold">{h}</th>)}
+                      </tr></thead>
+                      <tbody>
+                        {r.list.slice().sort((a, b) => dayNo(a.day) - dayNo(b.day) || MEALS.indexOf(a.meal) - MEALS.indexOf(b.meal)).map((s, i) => (
+                          <tr key={i} className="border-b border-navy-50 last:border-0">
+                            <td className="py-1.5 pr-2 whitespace-nowrap">{s.day}</td>
+                            <td className="py-1.5 pr-2 whitespace-nowrap">{s.meal}</td>
+                            <td className="py-1.5 pr-2 whitespace-nowrap">{s.slot}</td>
+                            <td className="py-1.5 pr-2 text-muted">{s.orig}</td>
+                            <td className="py-1.5 pr-2 text-muted">→</td>
+                            <td className="py-1.5 pr-2 font-semibold text-emerald-800">{s.product}<span className="block font-normal text-[11px] text-muted">{s.maker}{s.grams ? ` · ${s.grams}g` : ''}</span></td>
+                            <td className="py-1.5 pr-2 whitespace-nowrap">{s.cook}</td>
+                            <td className="py-1.5 pr-2">{splitReasons(s.reason).map((k) => <span key={k} className="badge bg-amber-50 text-amber-800 mr-1 mb-0.5">{k}</span>)}</td>
+                            <td className="py-1.5 pr-2 text-emerald-700">{(s.resolved || []).map((k) => RESOLVED_LABEL[k] || k).join(' · ') || '–'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+        {without.length > 0 && (
+          <details className="mt-3 text-xs">
+            <summary className="cursor-pointer text-navy-700 font-semibold">대체 없이 일반식 그대로 드시는 어르신 {without.length}명</summary>
+            <p className="mt-1.5 text-muted leading-5">{without.map((r) => `${r.display_name}(${r.type})`).join(' · ')}</p>
+          </details>
+        )}
+        <p className="mt-2 text-[11px] text-muted">사유 = 대체 전 그 끼니가 개인 기준을 벗어난 항목 · 해결된 문제 = 대체 후 사라진 항목. 같은 어르신에게 같은 제품은 14일 안에 다시 쓰지 않으며, 끼니당 최대 2칸까지 바꿉니다.</p>
       </Section>
     </div>
   )
