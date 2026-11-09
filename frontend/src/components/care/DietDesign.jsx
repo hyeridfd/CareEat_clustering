@@ -1169,6 +1169,74 @@ const RESOLVED_LABEL = {
 }
 const splitReasons = (r) => String(r || '').split(' / ').map((x) => x.trim()).filter(Boolean)
 
+/* 대체 전후 영양성분 (끼니 합계 · 반찬) */
+const NUT_ROWS = [
+  ['energy', '열량', 'kcal'], ['protein', '단백질', 'g'], ['sugar', '당류', 'g'], ['sodium', '나트륨', 'mg'],
+  ['sat_fat', '포화지방', 'g'], ['fat', '지방', 'g'], ['fiber', '식이섬유', 'g'], ['potassium', '칼륨', 'mg'],
+]
+const RESOLVE_NUT = { sodium: 'sodium', sugar: 'sugar', sat_fat: 'sat_fat', fat: 'fat', protein: 'protein',
+  energy_low: 'energy', protein_low: 'protein', fiber_low: 'fiber', potassium_low: 'potassium' }
+const fmtN = (v, u) => (v == null ? '–' : `${u === 'mg' || u === 'kcal' ? Math.round(v).toLocaleString() : Number(v).toFixed(1)}`)
+const limText = (l, u) => (!l ? '–' : [l.min != null ? `≥${fmtN(l.min, u)}` : null, l.max != null ? `≤${fmtN(l.max, u)}` : null].filter(Boolean).join(' '))
+// 대체 판단과 같은 규칙: 기준을 10% 넘게 벗어나면 위반
+const nutState = (v, l) => {
+  if (v == null || !l) return ''
+  if (l.max != null && v > l.max * 1.1) return 'over'
+  if (l.min != null && v < l.min * 0.9) return 'under'
+  return 'ok'
+}
+const NUT_CLS = { over: 'text-rose-700 font-semibold', under: 'text-amber-700 font-semibold', ok: 'text-emerald-700', '': 'text-navy-900' }
+
+function nutChanges(s) {
+  const n = s.nut
+  if (!n || !n.meal_after) return []
+  const keys = [...new Set((s.resolved || []).map((k) => RESOLVE_NUT[k]).filter(Boolean))]
+  return keys.map((k) => {
+    const row = NUT_ROWS.find((r) => r[0] === k)
+    return `${row[1]} ${fmtN(n.meal_before[k], row[2])}→${fmtN(n.meal_after[k], row[2])}${row[2]}`
+  })
+}
+
+function NutCompare({ s, lim }) {
+  const n = s.nut
+  if (!n) return <p className="text-xs text-muted py-2">이 설계 결과에는 대체 전후 영양 기록이 없습니다. 식단 설계를 다시 실행하면 보입니다.</p>
+  const miss = new Set(n.meal_after?.missing || [])
+  const sv = n.served || {}
+  const cols = ['항목', '개인 기준', '대체 전 끼니', '대체 후 끼니', '배식 후 (최종)', `기존 반찬 · ${s.orig}`, `대체 제품 · ${s.product}`]
+  return (
+    <div className="py-2">
+      <table className="w-full text-xs tabular-nums" style={{ minWidth: 760 }}>
+        <thead><tr className="text-muted border-b border-navy-100">
+          {cols.map((h, i) => <th key={i} className={`py-1 pr-2 font-semibold ${i ? 'text-right' : 'text-left'} ${i >= 5 ? 'max-w-[160px] truncate' : ''}`} title={h}>{h}</th>)}
+        </tr></thead>
+        <tbody>
+          {NUT_ROWS.map(([k, label, u]) => {
+            const l = lim?.[k]
+            const b = n.meal_before?.[k], a = n.meal_after?.[k], f = sv[k]
+            return (
+              <tr key={k} className="border-b border-navy-50 last:border-0">
+                <td className="py-1 pr-2 text-left text-navy-900">{label} <span className="text-muted">({u})</span></td>
+                <td className="py-1 pr-2 text-right text-muted">{limText(l, u)}</td>
+                <td className={`py-1 pr-2 text-right ${NUT_CLS[nutState(b, l)]}`}>{fmtN(b, u)}</td>
+                <td className={`py-1 pr-2 text-right ${NUT_CLS[nutState(a, l)]}`}>{fmtN(a, u)}{miss.has(k) ? <span className="text-muted">*</span> : ''}</td>
+                <td className={`py-1 pr-2 text-right ${f == null ? 'text-slate-300' : NUT_CLS[nutState(f, l)]}`}>{fmtN(f, u)}</td>
+                <td className="py-1 pr-2 text-right text-muted">{fmtN(n.orig?.[k], u)}</td>
+                <td className="py-1 pr-2 text-right text-muted">{fmtN(n.product?.[k], u)}</td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+      <p className="mt-1.5 text-[11px] text-muted leading-5">
+        끼니 합계는 이 어르신의 배식 비율(×{n.ratio})을 적용한 양으로, 대체 판단에 쓴 값입니다. 대체 후 끼니 = 이 끼니의 대체를 모두 마친 뒤.
+        배식 후 = 배식량 조정까지 마친 최종 값 (배식 단계는 열량·단백질·나트륨만 계산{sv.result ? ` · ${sv.result}` : ''}{sv.portions ? ` · ${sv.portions}` : ''}).
+        반찬 칸은 1인분 원래 양입니다. <span className="text-rose-700">빨강</span> 상한 초과 · <span className="text-amber-700">주황</span> 하한 부족 (기준을 10% 넘게 벗어남).
+        {miss.size > 0 && ' * 제품에 영양 정보가 없어 0으로 더한 값 (실제보다 작게 보일 수 있음).'}
+      </p>
+    </div>
+  )
+}
+
 function SubsSummaryTab({ run }) {
   const res = run.result || {}
   const subs = res.substitutions || []
@@ -1177,6 +1245,7 @@ function SubsSummaryTab({ run }) {
   const [type, setType] = useState('all')
   const [reason, setReason] = useState('all')
   const [open, setOpen] = useState({})
+  const [nutOpen, setNutOpen] = useState({})
 
   const types = [...new Set(residents.map((r) => r.type).filter(Boolean))].sort()
   const allReasons = Object.entries(res.substitution_reasons || {}).sort((a, b) => b[1] - a[1]).map(([k]) => k)
@@ -1210,10 +1279,12 @@ function SubsSummaryTab({ run }) {
     return Object.entries(c).sort((a, b) => b[1] - a[1])
   }
   const downloadCsv = () => {
-    const head = ['어르신', '유형', '식사형태', '일차', '끼니', '칸', '기존 메뉴', '대체 제품', '업체', '조리법', '1인분(g)', '사유', '해결된 문제']
+    const head = ['어르신', '유형', '식사형태', '일차', '끼니', '칸', '기존 메뉴', '대체 제품', '업체', '조리법', '1인분(g)', '사유', '해결된 문제',
+      ...['열량', '단백질', '당류', '나트륨'].flatMap((x) => [`${x}_대체전`, `${x}_대체후`, `${x}_배식후`])]
     const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`
     const lines = shown.map((s) => [s.display_name, s.type, s.texture, s.day, s.meal, s.slot, s.orig, s.product, s.maker, s.cook, s.grams,
-      s.reason, (s.resolved || []).map((k) => RESOLVED_LABEL[k] || k).join(' / ')].map(esc).join(','))
+      s.reason, (s.resolved || []).map((k) => RESOLVED_LABEL[k] || k).join(' / '),
+      ...['energy', 'protein', 'sugar', 'sodium'].flatMap((k) => [s.nut?.meal_before?.[k], s.nut?.meal_after?.[k], s.nut?.served?.[k]])].map(esc).join(','))
     const blob = new Blob(['\ufeff' + [head.map(esc).join(','), ...lines].join('\n')], { type: 'text/csv;charset=utf-8' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob); a.download = `대체찬_요약_${(run.created_at || '').slice(0, 10)}.csv`; a.click()
@@ -1288,14 +1359,18 @@ function SubsSummaryTab({ run }) {
                 </button>
                 {isOpen && (
                   <div className="px-3 pb-3 overflow-x-auto">
-                    <table className="w-full text-xs" style={{ minWidth: 820 }}>
+                    <table className="w-full text-xs" style={{ minWidth: 980 }}>
                       <thead><tr className="text-muted border-b border-navy-100">
-                        {['일차', '끼니', '칸', '기존 메뉴', '', '대체 제품', '조리법', '사유', '해결된 문제'].map((h, i) =>
+                        {['일차', '끼니', '칸', '기존 메뉴', '', '대체 제품', '조리법', '사유', '해결된 문제', '영양 변화 (끼니)'].map((h, i) =>
                           <th key={i} className="text-left py-1.5 pr-2 font-semibold">{h}</th>)}
                       </tr></thead>
                       <tbody>
-                        {r.list.slice().sort((a, b) => dayNo(a.day) - dayNo(b.day) || MEALS.indexOf(a.meal) - MEALS.indexOf(b.meal)).map((s, i) => (
-                          <tr key={i} className="border-b border-navy-50 last:border-0">
+                        {r.list.slice().sort((a, b) => dayNo(a.day) - dayNo(b.day) || MEALS.indexOf(a.meal) - MEALS.indexOf(b.meal)).map((s, i) => {
+                          const nk = `${r.elderly_id}|${s.day}|${s.meal}|${s.slot}`
+                          const nOpen = !!nutOpen[nk]
+                          return (<Fragment key={i}>
+                          <tr className="border-b border-navy-50 last:border-0 cursor-pointer hover:bg-navy-50/40"
+                            onClick={() => setNutOpen((o) => ({ ...o, [nk]: !o[nk] }))} title="눌러서 대체 전후 영양성분 보기">
                             <td className="py-1.5 pr-2 whitespace-nowrap">{s.day}</td>
                             <td className="py-1.5 pr-2 whitespace-nowrap">{s.meal}</td>
                             <td className="py-1.5 pr-2 whitespace-nowrap">{s.slot}</td>
@@ -1305,8 +1380,14 @@ function SubsSummaryTab({ run }) {
                             <td className="py-1.5 pr-2 whitespace-nowrap">{s.cook}</td>
                             <td className="py-1.5 pr-2">{splitReasons(s.reason).map((k) => <span key={k} className="badge bg-amber-50 text-amber-800 mr-1 mb-0.5">{k}</span>)}</td>
                             <td className="py-1.5 pr-2 text-emerald-700">{(s.resolved || []).map((k) => RESOLVED_LABEL[k] || k).join(' · ') || '–'}</td>
+                            <td className="py-1.5 pr-2 whitespace-nowrap tabular-nums">
+                              <span className="text-navy-700 mr-1">{nOpen ? '▾' : '▸'}</span>
+                              {nutChanges(s).join(' · ') || <span className="text-muted">영양 보기</span>}
+                            </td>
                           </tr>
-                        ))}
+                          {nOpen && <tr className="bg-navy-50/30"><td colSpan={10} className="px-2"><NutCompare s={s} lim={r.sub_limits} /></td></tr>}
+                          </Fragment>)
+                        })}
                       </tbody>
                     </table>
                   </div>

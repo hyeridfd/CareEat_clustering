@@ -394,6 +394,48 @@ def _reason_label(why: list) -> str:
     return " / ".join(out)
 
 
+# [2026-11-09] 대체 전후 영양성분 기록 (대체찬 요약 화면용)
+NUT_SHOW = ("energy", "protein", "sugar", "sodium", "sat_fat", "fat", "fiber", "potassium")
+
+
+def _has(x) -> bool:
+    return x is not None and not (isinstance(x, float) and x != x) and str(x).strip() not in ("", "-")
+
+
+def _meal_nut(items: list, ratio: float = 1.0) -> dict:
+    """끼니 합계 (개인 배식 비율 적용 — 대체 판단에 쓴 양과 같음)
+    값이 없는 반찬이 섞인 항목은 "missing" 에 적는다 (합계가 실제보다 작을 수 있음)"""
+    out = {k: round(sum(_v(m.get(k)) for m in items) * ratio, 1) for k in NUT_SHOW}
+    miss = [k for k in NUT_SHOW if any(m.get("menu_name") != ONE_DISH_RICE_LABEL and not _has(m.get(k)) for m in items)]
+    if miss:
+        out["missing"] = miss
+    return out
+
+
+def _item_nut(m: dict) -> dict:
+    """반찬 1인분 영양 (값이 없으면 None — 0 으로 보이지 않게)"""
+    return {k: (round(_v(m.get(k)), 1) if _has(m.get(k)) else None) for k in NUT_SHOW}
+
+
+def _limits(p, base) -> dict:
+    """대체 판단에 쓴 개인 기준 {항목: {"max"|"min": 값}} — _violation 과 같은 규칙"""
+    c, out = p.constraint, {}
+    for key in ("sodium", "sugar", "sat_fat", "fat", "protein"):
+        lim = getattr(c, f"{key}_max", None)
+        if lim:
+            out.setdefault(key, {})["max"] = round(lim, 1)
+    lows = {
+        "energy":    max(c.energy_min or 0, min(getattr(p, "target_energy", 0) or 0, c.energy_max or 9999)),
+        "protein":   max(c.protein_min or 0, getattr(base, "protein_min", 0) or 0) if not c.protein_max else 0,
+        "fiber":     max(c.fiber_min or 0, getattr(base, "fiber_min", 0) or 0),
+        "potassium": c.potassium_min or 0,
+    }
+    for key, lo in lows.items():
+        if lo:
+            out.setdefault(key, {})["min"] = round(lo, 1)
+    return out
+
+
 def _day_no(day_label: str) -> int:
     m = re.search(r"\d+", str(day_label))
     return int(m.group()) if m else 0
@@ -459,6 +501,7 @@ def substitute_agent(state: MealPlanState) -> dict:
 
                 changes, cur_v, cur_why = {}, base_v, base_why
                 cur_g = _guard(items, p, ratio)
+                meal_before, meal_subs = _meal_nut(items, ratio), []
                 while len(changes) < MAX_SUBS_PER_MEAL and cur_v > 0:
                     best = None
                     used_now = {m["menu_name"] for m in items}
@@ -498,6 +541,7 @@ def substitute_agent(state: MealPlanState) -> dict:
                         break
                     _, slot, i, prod, tv = best
                     orig = items[i]["menu_name"]
+                    orig_nut = _item_nut(items[i])
                     items[i] = prod
                     changes[slot] = prod["menu_name"]
                     last_used[prod["menu_name"]] = day
@@ -515,7 +559,14 @@ def substitute_agent(state: MealPlanState) -> dict:
                         "priority_w": max([_w(p, _why_key(w)) for w in base_why if _why_key(w) != "safety"] or [None],
                                           key=lambda x: x or 0),
                         "v_before": round(base_v, 3), "v_after": round(cur_v, 3),
+                        "nut": {"ratio": round(ratio, 2), "limits": _limits(p, base), "meal_before": meal_before,
+                                "orig": orig_nut, "product": _item_nut(prod)},
                     })
+                    meal_subs.append(subs[-1])
+                if meal_subs:                      # 끼니 최종(이 끼니의 대체를 모두 한 뒤) 합계
+                    after = _meal_nut(items, ratio)
+                    for x in meal_subs:
+                        x["nut"]["meal_after"] = after
                 if changes:
                     personal_menus[key] = changes
                 # 바꾸고도 남은 안전 문제 (밥·김치 칸, 대체 2칸 초과, 맞는 제품 없음) → 영양사 확인 목록

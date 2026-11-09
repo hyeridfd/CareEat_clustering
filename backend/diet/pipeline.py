@@ -463,6 +463,13 @@ def personalize_and_serve(pool, records, profiles, meta, inv_model=None, product
     subs = []
     for s in sub.get("substitutions") or []:
         subs.append({**s, "elderly_id": s["name"], "display_name": meta.get(s["name"], {}).get("display_name", s["name"])})
+    # 배식량 조정까지 마친 그 끼니의 최종 영양 (배식 에이전트가 계산하는 열량·단백질·나트륨)
+    srv_idx = {(eid, x["일차"], x["끼니"]): x for eid, rows in by_res.items() for x in rows}
+    for s in subs:
+        x = srv_idx.get((s["elderly_id"], s["day"], s["meal"]))
+        if x and s.get("nut") is not None:
+            s["nut"]["served"] = {"energy": x.get("예상열량"), "protein": x.get("예상단백질"), "sodium": x.get("예상나트륨"),
+                                  "result": x.get("조정결과"), "portions": x.get("칸별비율")}
     dn = lambda d: int(re.sub(r"\D", "", str(d)) or 0)
     subs.sort(key=lambda s: (dn(s["day"]), order.get(s["meal"], 9), s["display_name"]))
     orders = defaultdict(lambda: {"인분": 0, "총량(g)": 0.0})
@@ -487,11 +494,18 @@ def personalize_and_serve(pool, records, profiles, meta, inv_model=None, product
         for w in s["reason"].split(" / "):
             reason_tot[_reason_key(w)] += 1
 
+    # 대체 판단 기준(개인 영양 기준)은 어르신마다 같으므로 대체찬마다 두지 않고 어르신 정보로 옮긴다 (결과 크기 절약)
+    sub_limits = {}
+    for s in subs:
+        lim = (s.get("nut") or {}).pop("limits", None)
+        if lim is not None:
+            sub_limits.setdefault(s["elderly_id"], lim)
     residents = []
     for p in profiles:
         m = meta[p.name]
         residents.append({"elderly_id": p.name, **m, "substitutions": sub_by_res[p.name]["건수"],
-                          "reasons": dict(sub_by_res[p.name]["사유"]), "serving": per_res.get(p.name, {})})
+                          "reasons": dict(sub_by_res[p.name]["사유"]), "serving": per_res.get(p.name, {}),
+                          "sub_limits": sub_limits.get(p.name)})
     # ── 주간 발주 (식재료 · 고령친화식품) ──
     from .purchase import weekly_purchase
     if progress: progress("주간 발주량 계산")
