@@ -1182,7 +1182,7 @@ function SubsSummaryTab({ run }) {
             <p className="mt-1.5 text-muted leading-5">{without.map((r) => `${r.display_name}(${r.type})`).join(' · ')}</p>
           </details>
         )}
-        <p className="mt-2 text-[11px] text-muted">사유 = 대체 전 그 끼니가 개인 기준을 벗어난 항목 · 해결된 문제 = 대체 후 사라진 항목. 같은 어르신에게 같은 제품은 14일 안에 다시 쓰지 않으며, 끼니당 최대 2칸까지 바꿉니다.</p>
+        <p className="mt-2 text-[11px] text-muted">사유 = 대체 전 그 끼니가 개인 기준을 벗어난 항목 · 해결된 문제 = 대체 후 사라진 항목. 같은 어르신에게 같은 제품은 14일 안에 다시 쓰지 않으며, 어르신 1명은 한 끼에 최대 2칸, 시설 전체로는 한 끼에 대체 제품 최대 2종까지 씁니다.</p>
       </Section>
     </div>
   )

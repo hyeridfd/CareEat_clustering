@@ -25,6 +25,7 @@ substitute_agent.py  ─  질환 맞춤 대체찬 (고령친화우수식품)   [
   · 열량·단백질·지방·포화지방·당류·나트륨 중 하나라도 없으면 제외 (빈 값을 0으로 보면 '저염·저당'으로 오인)
 """
 import os
+from collections import Counter, defaultdict
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 import re
 import pandas as pd
@@ -36,7 +37,8 @@ PRODUCT_XLSX       = os.path.join(DATA_DIR, "products.json")   # [서버] 사랑
 PRODUCT_XLSX_OLD   = os.path.join(DATA_DIR, "고령친화우수식품_대체찬.xlsx")  # 이전 193개 정리본 (형식 자동 인식)
 REQUIRED_NUTS      = ["energy", "protein", "fat", "sat_fat", "sugar", "sodium"]  # 하나라도 없으면 제외 (0으로 오인 방지)
 COOK_BY_TEXTURE    = {"다진찬": "다지기", "갈찬": "갈기"}   # 조리법 칸이 비어 있으면 입소자 식사형태로 결정
-MAX_SUBS_PER_MEAL  = 2
+MAX_SUBS_PER_MEAL  = 2          # 어르신 1명 · 한 끼에 바꾸는 칸 수
+MAX_PRODUCTS_PER_MEAL = 2       # [2026-11-09] 시설 전체 · 한 끼에 쓰는 대체 제품 종류 (None 이면 제한 없음)
 NO_REPEAT_DAYS     = 14
 MIN_GAIN           = 0.02      # V가 이 이상 줄어야 교체
 SODIUM_UP_MAX      = None      # [2026-10-19] 끔 (None). 숫자를 넣으면 기존 반찬 대비 나트륨 증가 상한(mg)
@@ -419,30 +421,100 @@ def substitute_agent(state: MealPlanState) -> dict:
     energies = [p.target_energy for p in patients if getattr(p, "target_energy", None)]
     fac_avg  = sum(energies) / len(energies) if energies else 700
 
-    personal_menus, subs, safety_flags = {}, [], []
-    for p in patients:
-        target = is_target(p)
-        if not target and not getattr(p, "avoid", None):
-            continue
-        so = not target                                   # 질환 대상이 아니면 안전 사유로만 대체
-        ratio = _calc_ratio(p, fac_avg)
-        prefs = weights.get(p.name, {}) if USE_PERSONAL_PREF else {}
-        last_used = {}   # 제품명 → 마지막 사용 일차
-        for r in rows:
-            day = _day_no(r["일차"])
-            key = f"{p.name}||{r['일차']}||{r['끼니']}"
-            over = mf_over.get(key, {})
-            items = []
-            for s in SLOTS:
-                name = r.get(s, "")
-                if s in over and over[s] in mf_items:
-                    items.append(mf_items[over[s]])
-                elif s == "밥" and str(name).startswith("-("):
-                    items.append(no_rice)
-                else:
-                    items.append(pool_index.get((cat_of[s], name), {"menu_name": name, **{k: 0 for k in NUT_KEYS}}))
-            base_v, base_why = _violation(items, p, base, ratio, prefs, so)
-            if base_v <= 0:
+    def _pass(allowed=None):
+        """allowed = {(일차, 끼니): {제품명…}} — 주면 그 끼니에는 이 제품들만 쓴다 (안전 교체는 예외)"""
+        personal_menus, subs, safety_flags = {}, [], []
+        for p in patients:
+            target = is_target(p)
+            if not target and not getattr(p, "avoid", None):
+                continue
+            so = not target                                   # 질환 대상이 아니면 안전 사유로만 대체
+            ratio = _calc_ratio(p, fac_avg)
+            prefs = weights.get(p.name, {}) if USE_PERSONAL_PREF else {}
+            last_used = {}   # 제품명 → 마지막 사용 일차
+            for r in rows:
+                day = _day_no(r["일차"])
+                key = f"{p.name}||{r['일차']}||{r['끼니']}"
+                over = mf_over.get(key, {})
+                items = []
+                for s in SLOTS:
+                    name = r.get(s, "")
+                    if s in over and over[s] in mf_items:
+                        items.append(mf_items[over[s]])
+                    elif s == "밥" and str(name).startswith("-("):
+                        items.append(no_rice)
+                    else:
+                        items.append(pool_index.get((cat_of[s], name), {"menu_name": name, **{k: 0 for k in NUT_KEYS}}))
+                base_v, base_why = _violation(items, p, base, ratio, prefs, so)
+                if base_v <= 0:
+                    if getattr(p, "avoid", None):
+                        for s_, m_ in zip(SLOTS, items):
+                            h_ = safety_hits(m_, p)
+                            if h_:
+                                safety_flags.append({"elderly_id": p.name, "day": r["일차"], "meal": r["끼니"], "slot": s_,
+                                                     "menu": m_.get("menu_name"), "reason": "·".join(sorted(set(h_))),
+                                                     "alternatives": safe_alternatives(m_, cat_of[s_], p, pool_index)})
+                    continue
+
+                changes, cur_v, cur_why = {}, base_v, base_why
+                cur_g = _guard(items, p, ratio)
+                while len(changes) < MAX_SUBS_PER_MEAL and cur_v > 0:
+                    best = None
+                    used_now = {m["menu_name"] for m in items}
+                    for slot, pslot in REPLACEABLE.items():
+                        if slot in changes or items[SLOTS.index(slot)].get("one_dish"):
+                            continue   # 한 그릇 음식은 일반 반찬 제품으로 바꾸지 않음
+                        i = SLOTS.index(slot)
+                        unsafe = bool(safety_hits(items[i], p))       # 이 칸이 안전 문제로 바꿔야 하는 칸인가
+                        gap = SAFETY_NO_REPEAT if unsafe else NO_REPEAT_DAYS
+                        for prod in products.get(pslot, []):
+                            nm = prod["menu_name"]
+                            if nm in used_now or (nm in last_used and day - last_used[nm] < gap):
+                                continue
+                            if safety_hits(prod, p):                 # 안전 게이트: 피할 식재료 제품은 후보에서 제외
+                                continue
+                            if allowed is not None and not unsafe and nm not in allowed.get((r["일차"], r["끼니"]), ()):
+                                continue                             # 이 끼니에 정한 제품 2종이 아님 (안전 교체는 예외)
+                            if SODIUM_UP_MAX is not None and _v(prod.get("sodium")) - _v(items[i].get("sodium")) > SODIUM_UP_MAX:
+                                continue
+                            trial = items[:i] + [prod] + items[i + 1:]
+                            tv, _ = _violation(trial, p, base, ratio, prefs, so)
+                            gain = cur_v - tv
+                            tg = _guard(trial, p, ratio)
+                            if tg > cur_g + GUARD_SLACK and not unsafe:   # 대체로 다른 기준(예: 나트륨)이 나빠지면 제외 (안전 교체는 예외)
+                                continue
+                            if gain < MIN_GAIN:
+                                continue
+                            # 위반 감소 + 선호도 차이 가산, 동률이면 단백질 많은 제품 우선
+                            score = gain + PREF_W * (_pref(prefs, prod) - _pref(prefs, items[i]))
+                            k = (round(score, 6), _v(prod.get("protein")))
+                            if best is None or k > best[0]:
+                                best = (k, slot, i, prod, tv)
+                    if best is None:
+                        break
+                    _, slot, i, prod, tv = best
+                    orig = items[i]["menu_name"]
+                    items[i] = prod
+                    changes[slot] = prod["menu_name"]
+                    last_used[prod["menu_name"]] = day
+                    cur_v, cur_why = _violation(items, p, base, ratio, prefs, so)
+                    cur_g = _guard(items, p, ratio)
+                    subs.append({
+                        "name": p.name, "type": p.disease_type_label + ("·치매" if getattr(p, "dementia", False) else ""),
+                        "texture": f"{p.meal_texture_rice}/{p.meal_texture_side}",
+                        "day": r["일차"], "meal": r["끼니"], "slot": slot, "orig": orig,
+                        "product": prod["menu_name"], "maker": prod["maker"], "stage": prod["stage"],
+                        "cook": prod["cook"] or COOK_BY_TEXTURE.get(p.meal_texture_side, "그대로"), "grams": prod["weight"],
+                        "reason": _reason_label(base_why),
+                        "resolved": [k_ for k_ in dict.fromkeys(_why_key(w) for w in base_why)
+                                     if k_ not in {_why_key(x) for x in cur_why}],
+                        "priority_w": max([_w(p, _why_key(w)) for w in base_why if _why_key(w) != "safety"] or [None],
+                                          key=lambda x: x or 0),
+                        "v_before": round(base_v, 3), "v_after": round(cur_v, 3),
+                    })
+                if changes:
+                    personal_menus[key] = changes
+                # 바꾸고도 남은 안전 문제 (밥·김치 칸, 대체 2칸 초과, 맞는 제품 없음) → 영양사 확인 목록
                 if getattr(p, "avoid", None):
                     for s_, m_ in zip(SLOTS, items):
                         h_ = safety_hits(m_, p)
@@ -450,72 +522,21 @@ def substitute_agent(state: MealPlanState) -> dict:
                             safety_flags.append({"elderly_id": p.name, "day": r["일차"], "meal": r["끼니"], "slot": s_,
                                                  "menu": m_.get("menu_name"), "reason": "·".join(sorted(set(h_))),
                                                  "alternatives": safe_alternatives(m_, cat_of[s_], p, pool_index)})
-                continue
+        return personal_menus, subs, safety_flags
 
-            changes, cur_v, cur_why = {}, base_v, base_why
-            cur_g = _guard(items, p, ratio)
-            while len(changes) < MAX_SUBS_PER_MEAL and cur_v > 0:
-                best = None
-                used_now = {m["menu_name"] for m in items}
-                for slot, pslot in REPLACEABLE.items():
-                    if slot in changes or items[SLOTS.index(slot)].get("one_dish"):
-                        continue   # 한 그릇 음식은 일반 반찬 제품으로 바꾸지 않음
-                    i = SLOTS.index(slot)
-                    unsafe = bool(safety_hits(items[i], p))       # 이 칸이 안전 문제로 바꿔야 하는 칸인가
-                    gap = SAFETY_NO_REPEAT if unsafe else NO_REPEAT_DAYS
-                    for prod in products.get(pslot, []):
-                        nm = prod["menu_name"]
-                        if nm in used_now or (nm in last_used and day - last_used[nm] < gap):
-                            continue
-                        if safety_hits(prod, p):                 # 안전 게이트: 피할 식재료 제품은 후보에서 제외
-                            continue
-                        if SODIUM_UP_MAX is not None and _v(prod.get("sodium")) - _v(items[i].get("sodium")) > SODIUM_UP_MAX:
-                            continue
-                        trial = items[:i] + [prod] + items[i + 1:]
-                        tv, _ = _violation(trial, p, base, ratio, prefs, so)
-                        gain = cur_v - tv
-                        tg = _guard(trial, p, ratio)
-                        if tg > cur_g + GUARD_SLACK and not unsafe:   # 대체로 다른 기준(예: 나트륨)이 나빠지면 제외 (안전 교체는 예외)
-                            continue
-                        if gain < MIN_GAIN:
-                            continue
-                        # 위반 감소 + 선호도 차이 가산, 동률이면 단백질 많은 제품 우선
-                        score = gain + PREF_W * (_pref(prefs, prod) - _pref(prefs, items[i]))
-                        k = (round(score, 6), _v(prod.get("protein")))
-                        if best is None or k > best[0]:
-                            best = (k, slot, i, prod, tv)
-                if best is None:
-                    break
-                _, slot, i, prod, tv = best
-                orig = items[i]["menu_name"]
-                items[i] = prod
-                changes[slot] = prod["menu_name"]
-                last_used[prod["menu_name"]] = day
-                cur_v, cur_why = _violation(items, p, base, ratio, prefs, so)
-                cur_g = _guard(items, p, ratio)
-                subs.append({
-                    "name": p.name, "type": p.disease_type_label + ("·치매" if getattr(p, "dementia", False) else ""),
-                    "texture": f"{p.meal_texture_rice}/{p.meal_texture_side}",
-                    "day": r["일차"], "meal": r["끼니"], "slot": slot, "orig": orig,
-                    "product": prod["menu_name"], "maker": prod["maker"], "stage": prod["stage"],
-                    "cook": prod["cook"] or COOK_BY_TEXTURE.get(p.meal_texture_side, "그대로"), "grams": prod["weight"],
-                    "reason": _reason_label(base_why),
-                    "resolved": [k_ for k_ in dict.fromkeys(_why_key(w) for w in base_why)
-                                 if k_ not in {_why_key(x) for x in cur_why}],
-                    "priority_w": max([_w(p, _why_key(w)) for w in base_why if _why_key(w) != "safety"] or [None],
-                                      key=lambda x: x or 0),
-                    "v_before": round(base_v, 3), "v_after": round(cur_v, 3),
-                })
-            if changes:
-                personal_menus[key] = changes
-            # 바꾸고도 남은 안전 문제 (밥·김치 칸, 대체 2칸 초과, 맞는 제품 없음) → 영양사 확인 목록
-            if getattr(p, "avoid", None):
-                for s_, m_ in zip(SLOTS, items):
-                    h_ = safety_hits(m_, p)
-                    if h_:
-                        safety_flags.append({"elderly_id": p.name, "day": r["일차"], "meal": r["끼니"], "slot": s_,
-                                             "menu": m_.get("menu_name"), "reason": "·".join(sorted(set(h_))),
-                                             "alternatives": safe_alternatives(m_, cat_of[s_], p, pool_index)})
+    # [2026-11-09] 끼니마다 대체 제품 종류를 MAX_PRODUCTS_PER_MEAL(2)개로 묶음 (주방에서 한 끼에 준비할 대체 반찬 수)
+    #   1차: 제한 없이 어르신별로 고름 → 끼니마다 가장 많이 쓰인(=가장 많은 어르신에게 맞는) 제품 2종을 정함
+    #   2차: 그 2종 안에서만 다시 고름. 맞는 제품이 없는 어르신은 대체 없이 배식량 조정으로 넘어감
+    personal_menus, subs, safety_flags = _pass()
+    if MAX_PRODUCTS_PER_MEAL:
+        use = defaultdict(Counter)
+        for x in subs:
+            use[(x["day"], x["meal"])][x["product"]] += 1
+        allowed = {k: {pr for pr, _ in c.most_common(MAX_PRODUCTS_PER_MEAL)} for k, c in use.items()}
+        if any(len(c) > MAX_PRODUCTS_PER_MEAL for c in use.values()):
+            n1 = len(subs)
+            personal_menus, subs, safety_flags = _pass(allowed)
+            print(f"[SubstituteAgent] 끼니당 제품 {MAX_PRODUCTS_PER_MEAL}종 제한: 대체 {n1}건 → {len(subs)}건")
 
     n_people = len({s["name"] for s in subs})
     print(f"[SubstituteAgent] 완료 — 대체 {len(subs)}건 / {len(personal_menus)}끼 / {n_people}명")
