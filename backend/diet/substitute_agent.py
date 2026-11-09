@@ -38,6 +38,7 @@ PRODUCT_XLSX_OLD   = os.path.join(DATA_DIR, "고령친화우수식품_대체찬.
 REQUIRED_NUTS      = ["energy", "protein", "fat", "sat_fat", "sugar", "sodium"]  # 하나라도 없으면 제외 (0으로 오인 방지)
 COOK_BY_TEXTURE    = {"다진찬": "다지기", "갈찬": "갈기"}   # 조리법 칸이 비어 있으면 입소자 식사형태로 결정
 MAX_SUBS_PER_MEAL  = 2          # 어르신 1명 · 한 끼에 바꾸는 칸 수
+REQUIRE_RESOLVE    = True       # True: 대체로 사유가 하나 이상 사라질 때만 교체 (부분 개선만 되는 교체는 배식량 조정에 맡김)
 MAX_PRODUCTS_PER_MEAL = 2       # [2026-11-09] 시설 전체 · 한 끼에 쓰는 대체 제품 종류 (None 이면 제한 없음)
 NO_REPEAT_DAYS     = 14
 MIN_GAIN           = 0.02      # V가 이 이상 줄어야 교체
@@ -478,7 +479,10 @@ def substitute_agent(state: MealPlanState) -> dict:
                             if SODIUM_UP_MAX is not None and _v(prod.get("sodium")) - _v(items[i].get("sodium")) > SODIUM_UP_MAX:
                                 continue
                             trial = items[:i] + [prod] + items[i + 1:]
-                            tv, _ = _violation(trial, p, base, ratio, prefs, so)
+                            tv, t_why = _violation(trial, p, base, ratio, prefs, so)
+                            if REQUIRE_RESOLVE and not unsafe and \
+                                    not ({_why_key(w) for w in cur_why} - {_why_key(w) for w in t_why}):
+                                continue                         # 사유를 하나도 없애지 못하는 교체는 하지 않음 (배식량 조정에 맡김)
                             gain = cur_v - tv
                             tg = _guard(trial, p, ratio)
                             if tg > cur_g + GUARD_SLACK and not unsafe:   # 대체로 다른 기준(예: 나트륨)이 나빠지면 제외 (안전 교체는 예외)
