@@ -130,7 +130,7 @@ def _progress_writer(sb, run_id):
     return say
 
 
-def _job(run_id, home, preset, seed, menu=None, selector="llm", reviewer="llm"):
+def _job(run_id, home, preset, seed, menu=None, selector="llm", reviewer="llm", refiner="llm"):
     from diet import pipeline as P
     sb = get_supabase()
     try:
@@ -142,9 +142,16 @@ def _job(run_id, home, preset, seed, menu=None, selector="llm", reviewer="llm"):
         say = _progress_writer(sb, run_id)
         if menu is None:
             out = P.run_design(residents, assess, settings, inv, pref, preset=preset, seed=seed, progress=say, ehr=ehr,
-                               selector=selector, reviewer=reviewer)
+                               selector=selector, reviewer=reviewer, refiner=refiner)
         else:
-            out = P.redo_personalization(menu, residents, assess, settings, inv, pref, progress=say, ehr=ehr)
+            # 수정본: 원래 설계의 Stage 2 결과(어르신별 AI 종합 판단)를 재사용 — 평가가 같으면 LLM 을 다시 부르지 않음
+            me = _one(sb.table("diet_runs").select("parent_run_id").eq("id", run_id).execute())
+            parent = _one(sb.table("diet_runs").select("params,result").eq("id", me["parent_run_id"]).execute()) \
+                if me.get("parent_run_id") else {}
+            prev_assess = (parent.get("result") or {}).get("assessments")
+            refiner = (parent.get("params") or {}).get("refiner", "off")
+            out = P.redo_personalization(menu, residents, assess, settings, inv, pref, progress=say, ehr=ehr,
+                                         refiner=refiner, prev_assessments=prev_assess)
         sb.table("diet_runs").update({"progress": "결과 저장 중", "updated_at": get_kst_now()}).eq("id", run_id).execute()
         _check_cancel(sb, run_id, {"checked": 0})
         _save_result(sb, run_id, out)
@@ -180,6 +187,7 @@ class RunRequest(BaseModel):
     seed: int = 42
     selector: str = "llm"               # llm (AI 영양사가 파레토 후보 중 선택) | rule (균형점 규칙)
     reviewer: str = "llm"               # llm (AI 식단 검토 → 코드 검증 후 반영) | off
+    refiner: str = "llm"                # llm (Stage 2 AI 임상 영양사 어르신별 종합 판단) | off
 
 
 @router.post("/runs")
@@ -191,11 +199,11 @@ def start_run(req: RunRequest, user: dict = Depends(require_staff)):
     pref = sb.table("diet_preferences").select("nursing_home_id,updated_at").eq("nursing_home_id", home).execute().data
     row = _one(sb.table("diet_runs").insert({
         "nursing_home_id": home, "status": "queued", "progress": "대기 중", "created_by": user["actor"],
-        "params": {"preset": req.preset, "seed": req.seed, "selector": req.selector, "reviewer": req.reviewer,
+        "params": {"preset": req.preset, "seed": req.seed, "selector": req.selector, "reviewer": req.reviewer, "refiner": req.refiner,
                    "inventory_used": bool(inv and inv[0].get("items")), "preference_used": bool(pref),
                    "start_date": (inv[0].get("start_date") if inv else None),
                    "preference_updated_at": pref[0]["updated_at"] if pref else None}}).execute())
-    threading.Thread(target=_job, args=(row["id"], home, req.preset, req.seed, None, req.selector, req.reviewer),
+    threading.Thread(target=_job, args=(row["id"], home, req.preset, req.seed, None, req.selector, req.reviewer, req.refiner),
                      daemon=True).start()
     return {"id": row["id"], "status": "queued"}
 
@@ -371,6 +379,25 @@ def use_candidate(run_id: str, req: CandidateRequest, user: dict = Depends(requi
     menu = [dict(r) for r in cand["menu"]]
     threading.Thread(target=_job, args=(new["id"], home, None, None, menu), daemon=True).start()
     return {"id": new["id"], "status": "queued"}
+
+
+@router.post("/runs/{run_id}/residents/{eid}/plan")
+def care_plan(run_id: str, eid: str, user: dict = Depends(require_staff)):
+    """[Stage 3] 어르신별 영양 관리 계획(ADIME) — 요청할 때 만들고 설계 결과에 저장"""
+    from diet.agents.care_plan import generate
+    sb = get_supabase()
+    run = get_run(run_id, user)
+    result = run.get("result") or {}
+    if eid not in (result.get("assessments") or {}):
+        raise HTTPException(status_code=404, detail="이 설계에 해당 어르신의 평가 결과가 없습니다.")
+    try:
+        plan = generate(result, eid)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"AI 영양 관리 계획 작성 실패: {str(e)[:200]}")
+    plans = dict(result.get("care_plans") or {})
+    plans[eid] = plan
+    sb.table("diet_runs").update(_jsonable({"result": {**result, "care_plans": plans}})).eq("id", run_id).execute()
+    return plan
 
 
 @router.get("/llm-status")

@@ -77,6 +77,45 @@ REPLACEABLE        = {"국": "국", "주찬": "주찬", "부찬1": "부찬", "�
 TEXTURE_SENSITIVE  = ("다진찬", "갈찬")
 NUT_KEYS           = ["energy", "protein", "fat", "sat_fat", "sugar", "sodium", "carb", "potassium", "fiber"]
 
+# ── [Stage 3] 우선순위 S(j) → 대체 배분 ──
+# 위반 항목마다 가중치 w = 0.5 + S(j) 를 곱한다 (S 는 그 영양소를 다루는 문제의 우선순위, 0~1).
+# 우선순위 높은 문제(예: 나트륨 S=0.85 → w 1.35)의 위반을 줄이는 반찬이 먼저 끼니당 2칸을 차지하고,
+# 우선순위 낮은 문제(S=0.3 → w 0.8)는 뒤로 밀린다. 에이전트가 문제로 꼽지 않은 항목(예: 특별한 문제 없이 목표 열량만
+# 조금 모자람)은 PRIORITY_DEFAULT 로 낮춰, 에이전트가 찾은 문제가 끼니당 2칸을 먼저 쓰게 한다. 안전(SAFETY_W)은 그대로 최우선.
+USE_PRIORITY_WEIGHTS = True
+PRIORITY_BASE = 0.5
+PRIORITY_DEFAULT = 0.6
+LIMIT_KEYS = ("sodium", "sugar", "sat_fat", "fat", "protein")
+LOW_KEYS = ("energy", "protein", "fiber", "potassium")
+
+
+def priority_weights(priorities: list) -> dict:
+    """에이전트 문제 목록(priority·action·nutrients) → {위반 항목: 가중치}"""
+    w = {}
+    for it in priorities or []:
+        s, act, ns = float(it.get("priority") or 0), it.get("action"), it.get("nutrients") or []
+        keys = ["dementia"] if it.get("code") == "brain_food" else []
+        keys += [n for n in ns if act == "limit" and n in LIMIT_KEYS]
+        keys += [f"{n}_low" for n in ns if act == "increase" and n in LOW_KEYS]
+        for k in keys:
+            w[k] = round(max(w.get(k, 0.0), PRIORITY_BASE + s), 3)
+    return w
+
+
+def _w(p, key: str) -> float:
+    if not USE_PRIORITY_WEIGHTS:
+        return 1.0
+    pw = getattr(p, "priority_weights", None)
+    if pw is None:                      # 에이전트 평가가 없는 경우 (예전 방식) → 모두 같은 무게
+        return 1.0
+    return pw.get(key, PRIORITY_DEFAULT)
+
+
+def _why_key(w: str) -> str:
+    head = str(w).split(" ")[0]
+    return "dementia" if head.startswith("치매") else "safety" if head.startswith("안전") else head
+
+
 _PRODUCTS = None
 
 
@@ -286,7 +325,7 @@ def _violation(items: list, p, base, ratio: float = 1.0, prefs: dict = None, saf
         if base_lim and lim >= base_lim * 0.98:      # 기본 기준과 같거나 느슨 → 대체 사유 아님
             continue
         if tot[key] > lim * (1 + TOLERANCE):
-            v += (tot[key] - lim) / lim
+            v += _w(p, key) * (tot[key] - lim) / lim
             why.append(f"{key} {tot[key]:.0f}>{lim:.0f}")
 
     # ── [2026-10-19] 부족 ──
@@ -300,13 +339,13 @@ def _violation(items: list, p, base, ratio: float = 1.0, prefs: dict = None, saf
         if not TRIGGERS.get(f"{key}_low") or not lo:
             continue
         if tot[key] < lo * (1 - TOLERANCE):
-            v += (lo - tot[key]) / lo
+            v += _w(p, f"{key}_low") * (lo - tot[key]) / lo
             why.append(f"{key}_low {tot[key]:.0f}<{lo:.0f}")
 
     # ── [2026-10-19] 치매: 뇌건강 식재료 ──
     if TRIGGERS.get("dementia") and getattr(p, "dementia", False):
         if not any(_brain_tag(m) for m in items[1:5]):
-            v += DEMENTIA_W
+            v += _w(p, "dementia") * DEMENTIA_W
             why.append("치매 뇌건강식재료 없음")
 
     # ── [2026-10-19] 선호도: 기피 반찬 ──
@@ -461,6 +500,10 @@ def substitute_agent(state: MealPlanState) -> dict:
                     "product": prod["menu_name"], "maker": prod["maker"], "stage": prod["stage"],
                     "cook": prod["cook"] or COOK_BY_TEXTURE.get(p.meal_texture_side, "그대로"), "grams": prod["weight"],
                     "reason": _reason_label(base_why),
+                    "resolved": [k_ for k_ in dict.fromkeys(_why_key(w) for w in base_why)
+                                 if k_ not in {_why_key(x) for x in cur_why}],
+                    "priority_w": max([_w(p, _why_key(w)) for w in base_why if _why_key(w) != "safety"] or [None],
+                                      key=lambda x: x or 0),
                     "v_before": round(base_v, 3), "v_after": round(cur_v, 3),
                 })
             if changes:

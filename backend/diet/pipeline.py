@@ -135,15 +135,26 @@ def build_profiles(residents: list, assessments: dict, settings: dict, ehr: dict
 USE_AGENT_CONSTRAINTS = True     # True: 에이전트 종합 기준을 개인 기준으로 사용 (숫자는 기존과 같음 · 출처 기록)
 
 
-def apply_agents(profiles: list, progress=None) -> dict:
+def apply_agents(profiles: list, progress=None, refiner: str = "off", prev: dict | None = None) -> dict:
     """[Stage 1] 관리자 에이전트 → 영역별 에이전트 7종 병렬 독립 평가 → 종합
+    [Stage 2] refiner="llm" 이면 LLM 임상 영양사가 어르신별로 충돌 조정·기준 조정·우선순위 재평가 (agents/refine.py)
+              prev = 이전 설계의 {elderly_id: refine 결과} — 입력이 같으면 다시 호출하지 않고 재사용 (영양사 수정본)
+    [Stage 3] 우선순위 S(j) → p.priority_weights → 대체찬 배분 가중치 (substitute_agent.priority_weights)
     · 개인 영양 기준(p.constraint) = 종합 기준 (같은 영양소는 더 엄격한 값, 출처 에이전트 기록)
     · p.avoid = 약물·알레르기로 피할 식재료 (대체찬·제품 선택의 절대 조건)
     → {elderly_id: {agents, synth}} (결과 저장용)"""
     from .agents import assess_residents, to_json
     from .patient_profile_final import NutritionConstraint
     if progress: progress("영역별 에이전트 평가")
-    res = assess_residents({p.name: getattr(p, "context", {}) or {} for p in profiles})
+    ctxs = {p.name: getattr(p, "context", {}) or {} for p in profiles}
+    res = assess_residents(ctxs)
+    refs = {}
+    if refiner == "llm":
+        from .agents.refine import apply_refine, refine_all
+        refs = refine_all(ctxs, res, prev=prev, progress=progress)
+        for eid in res:
+            res[eid]["synth"] = apply_refine(res[eid]["synth"], refs.get(eid) or {})
+    from .substitute_agent import priority_weights
     mismatch = []
     for p in profiles:
         syn = res[p.name]["synth"]
@@ -160,9 +171,24 @@ def apply_agents(profiles: list, progress=None) -> dict:
             p.target_energy = syn["target_energy"]
         p.avoid = [a for a in syn["avoid"] if a.get("hard")]
         p.priorities = syn["priorities"]
+        p.priority_weights = priority_weights(syn["priorities"])
     if mismatch:
         print(f"  [에이전트] 기존 기준과 다른 값 {len(mismatch)}건 (예: {mismatch[:3]})")
-    return to_json(res)
+    out = to_json(res)
+    for eid, v in out.items():
+        p = next(x for x in profiles if x.name == eid)
+        v["priority_weights"] = p.priority_weights
+        if eid in refs:
+            v["refine"] = refs[eid]
+    return out
+
+
+def _sync_meta(profiles, meta):
+    """Stage 2 로 바뀐 목표 열량·나트륨 상한을 화면용 meta 에도 반영"""
+    for p in profiles:
+        if p.name in meta:
+            meta[p.name]["target_energy"] = p.target_energy
+            meta[p.name]["sodium_max"] = p.constraint.sodium_max
 
 
 # ══════════════════════════════════════════════════════════════
@@ -487,10 +513,12 @@ def personalize_and_serve(pool, records, profiles, meta, inv_model=None, product
 # 전체 실행
 # ══════════════════════════════════════════════════════════════
 def run_design(residents, assessments, settings, inventory=None, preference=None,
-               preset="standard", seed=42, progress=None, ehr=None, selector="llm", reviewer="llm") -> dict:
+               preset="standard", seed=42, progress=None, ehr=None, selector="llm", reviewer="llm",
+               refiner="llm") -> dict:
     """→ 결과 dict (menu, metrics, personalization…)
     selector = "llm" (파레토 후보 중 AI 영양사가 선택, 실패·미설정 시 규칙) | "rule" (균형점 규칙)
-    reviewer = "llm" (AI 식단 검토자가 어색한 칸 교체 제안 → 코드 검증 후 반영) | off (검토 안 함)"""
+    reviewer = "llm" (AI 식단 검토자가 어색한 칸 교체 제안 → 코드 검증 후 반영) | off (검토 안 함)
+    refiner  = "llm" (Stage 2 AI 임상 영양사 어르신별 종합 판단) | off (Stage 1 종합 규칙만)"""
     from .inventory import InventoryModel
     with LOCK:
         say = progress or (lambda *_: None)
@@ -498,7 +526,8 @@ def run_design(residents, assessments, settings, inventory=None, preference=None
         profiles, meta, skipped = build_profiles(residents, assessments, settings, ehr)
         if not profiles:
             raise ValueError("식단 설계에 쓸 어르신이 없습니다. 진단 화면에서 평가를 먼저 실행하세요.")
-        agent_json = apply_agents(profiles, say)
+        agent_json = apply_agents(profiles, say, refiner)
+        _sync_meta(profiles, meta)
         pref = preference or {}
         pool = load_pool(pref.get("pool_scores"))
         inv = inventory_from_rows((inventory or {}).get("items"), (inventory or {}).get("start_date"))
@@ -536,12 +565,15 @@ def run_design(residents, assessments, settings, inventory=None, preference=None
 
 
 def redo_personalization(menu: list, residents, assessments, settings, inventory=None, preference=None, progress=None,
-                         ehr=None):
-    """영양사가 식단표를 고친 뒤: 지표·개인화·배식만 다시 계산 (최적화는 다시 돌리지 않음)"""
+                         ehr=None, refiner="off", prev_assessments: dict | None = None):
+    """영양사가 식단표를 고친 뒤: 지표·개인화·배식만 다시 계산 (최적화는 다시 돌리지 않음)
+    prev_assessments = 고치기 전 설계의 assessments → Stage 2 결과를 그대로 재사용 (평가가 같으면 LLM 다시 안 부름)"""
     from .inventory import InventoryModel
     with LOCK:
         profiles, meta, skipped = build_profiles(residents, assessments, settings, ehr)
-        agent_json = apply_agents(profiles, progress)
+        prev = {k: v.get("refine") for k, v in (prev_assessments or {}).items() if isinstance(v, dict) and v.get("refine")}
+        agent_json = apply_agents(profiles, progress, refiner, prev)
+        _sync_meta(profiles, meta)
         pref = preference or {}
         pool = load_pool(pref.get("pool_scores"))
         inv = inventory_from_rows((inventory or {}).get("items"), (inventory or {}).get("start_date"))

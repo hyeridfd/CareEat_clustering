@@ -214,6 +214,7 @@ export default function DietDesign() {
   const [preset, setPreset] = useState('standard')
   const [useAi, setUseAi] = useState(true)          // AI 영양사가 파레토 후보 중 선택
   const [useReview, setUseReview] = useState(true)  // AI 식단 검토 (어색한 칸 교체 제안 → 코드 검증 후 반영)
+  const [useRefine, setUseRefine] = useState(true)  // Stage 2 AI 임상 영양사 어르신별 종합 판단
   const [aiStatus, setAiStatus] = useState(null)
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
@@ -250,7 +251,7 @@ export default function DietDesign() {
   const start = async () => {
     setErr(''); setBusy(true)
     try {
-      const r = await api.post('/care/diet/runs', { preset, selector: useAi ? 'llm' : 'rule', reviewer: useReview ? 'llm' : 'off' })
+      const r = await api.post('/care/diet/runs', { preset, selector: useAi ? 'llm' : 'rule', reviewer: useReview ? 'llm' : 'off', refiner: useRefine ? 'llm' : 'off' })
       setRunId(r.data.id)
       await loadStatus()
     } catch (e) { setErr(errMsg(e)) } finally { setBusy(false) }
@@ -290,6 +291,11 @@ export default function DietDesign() {
             title="AI 영양사가 28일 식단을 읽고 어색한 조합·조리 부담·계절에 안 맞는 칸을 후보 메뉴로 바꾸자고 제안합니다. 영양·반복·조화 점수가 나빠지지 않는 제안만 반영됩니다.">
             <input type="checkbox" checked={useReview} onChange={(e) => setUseReview(e.target.checked)} />
             AI 식단 검토
+          </label>
+          <label className="flex items-center gap-1.5 text-xs font-semibold text-navy-700"
+            title="7개 영역 평가를 AI 임상 영양사가 어르신별로 함께 보고, 영역 간 충돌 조정 · 허용 범위 안 기준 조정 · 문제 우선순위 재평가를 합니다 (NutriOrion Stage 2). 우선순위는 대체찬 배분에 쓰입니다.">
+            <input type="checkbox" checked={useRefine} onChange={(e) => setUseRefine(e.target.checked)} />
+            AI 개인 종합 판단
           </label>
           {active
             ? <button className="btn-secondary" onClick={() => stopRun(active.id)}>계산 멈추기</button>
@@ -777,6 +783,7 @@ function ServingTab({ run }) {
               <summary className="cursor-pointer text-sm font-bold text-navy-900">영역별 에이전트 평가 <span className="font-normal text-xs text-muted">— 7개 영역이 각자 정보만 보고 따로 판단한 결과</span></summary>
               <div className="mt-3"><AgentPanel a={run.result?.assessments?.[eid]} /></div>
             </details>
+            <CarePlan run={run} eid={eid} setErr={setErr} />
             {err && <p className="text-sm text-rose-700">{err}</p>}
             {!meals ? <p className="text-sm text-muted">불러오는 중…</p> : (
               <div className="overflow-x-auto">
@@ -1481,12 +1488,73 @@ const FIELD_LABEL = {
 }
 const ACTION_LABEL = { limit: '줄이기', increase: '늘리기', avoid: '피하기', texture: '식사형태', monitor: '관찰', check: '확인 필요', timing: '복약 시간' }
 
+/* [Stage 3] 어르신별 영양 관리 계획 (ADIME) — 요청할 때 작성 */
+function CarePlan({ run, eid, setErr }) {
+  const [plan, setPlan] = useState(run.result?.care_plans?.[eid] || null)
+  const [busy, setBusy] = useState(false)
+  useEffect(() => { setPlan(run.result?.care_plans?.[eid] || null) }, [run.id, eid])
+  const make = async () => {
+    setBusy(true); setErr('')
+    try {
+      const r = await api.post(`/care/diet/runs/${run.id}/residents/${eid}/plan`)
+      setPlan(r.data)
+      if (run.result) run.result.care_plans = { ...(run.result.care_plans || {}), [eid]: r.data }   // 다른 어르신 보고 돌아와도 유지
+    }
+    catch (e) { setErr(errMsg(e)) } finally { setBusy(false) }
+  }
+  return (
+    <div className="mb-4 rounded-2xl bg-white ring-1 ring-navy-100 px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-bold text-navy-900">AI 영양 관리 계획 <span className="font-normal text-xs text-muted">— 평가 · 영양 진단 · 중재 · 모니터링 (Stage 3)</span></p>
+        <button className="btn-secondary !py-1 text-xs" disabled={busy} onClick={make}>{busy ? '작성 중…' : plan ? '다시 작성' : '계획 작성'}</button>
+      </div>
+      {plan ? (
+        <div className="mt-2 grid md:grid-cols-2 gap-3 text-xs">
+          <div className="space-y-2">
+            <div><p className="font-bold text-muted mb-0.5">A 평가</p><p className="text-navy-900 leading-5">{plan.assessment}</p></div>
+            <div><p className="font-bold text-muted mb-0.5">D 영양 진단 (문제 — 원인 — 근거)</p>
+              <ul className="list-disc pl-4 space-y-0.5">{(plan.diagnosis || []).map((x, i) => <li key={i}>{x}</li>)}</ul></div>
+          </div>
+          <div className="space-y-2">
+            <div><p className="font-bold text-muted mb-0.5">I 중재</p>
+              <ul className="space-y-0.5">{(plan.intervention || []).map((x, i) => <li key={i}><b className="text-navy-900">{x.goal}</b> · {x.action}</li>)}</ul></div>
+            <div><p className="font-bold text-muted mb-0.5">M 모니터링</p>
+              <ul className="list-disc pl-4 space-y-0.5">{(plan.monitoring || []).map((x, i) => <li key={i}>{x}</li>)}</ul></div>
+          </div>
+          <p className="md:col-span-2 text-navy-800"><b>담당자 요약</b> {plan.staff_summary}</p>
+          <p className="md:col-span-2 text-[11px] text-muted">{plan.model} · {plan.latency_sec}초 · {plan.created_at} · 프롬프트 {plan.prompt_version}
+            {(plan.warnings || []).length > 0 && <span className="text-amber-700"> · ⚠ {plan.warnings.join(' · ')} — 숫자는 위 평가표로 확인하세요</span>}</p>
+        </div>
+      ) : <p className="mt-1 text-xs text-muted">이 어르신의 평가 결과와 시스템이 한 조치(대체찬·배식량·식사형태)를 바탕으로 영양 관리 계획을 작성합니다.</p>}
+    </div>
+  )
+}
+
 function AgentPanel({ a }) {
   if (!a) return <p className="text-xs text-muted">이 설계에는 영역별 에이전트 평가가 없습니다. 식단 설계를 다시 실행하면 함께 계산됩니다.</p>
   const syn = a.synth || {}
   const pri = (syn.priorities || []).filter((i) => i.priority >= 0.3)
+  const rf = a.refine
   return (
     <div className="space-y-3">
+      {rf && rf.mode === 'llm' && (
+        <div className="rounded-xl bg-violet-50/70 ring-1 ring-violet-100 px-3 py-2 text-xs space-y-1.5">
+          <p className="font-bold text-violet-900">AI 임상 영양사 종합 판단 <span className="font-normal text-violet-700">(Stage 2 · {rf.model}{rf.reused ? ' · 이전 결과 재사용' : ''})</span></p>
+          {rf.summary && <p className="text-navy-900">{rf.summary}</p>}
+          {(rf.conflicts || []).map((c, k) => (
+            <p key={k}><span className="badge bg-white text-violet-700">충돌</span> {(c.agents || []).map((g) => AGENT_LABEL[g] || g).join(' ↔ ')}: {c.description} → <b>{c.resolution}</b></p>
+          ))}
+          {(rf.adjustments || []).map((x, k) => (
+            <p key={k}><span className="badge bg-white text-violet-700">기준 조정</span> {x.label} {x.before} → <b>{x.after}</b>{x.clamped ? ' (허용 범위로 맞춤)' : ''} — {x.reason}</p>
+          ))}
+          {rf.target_energy && <p><span className="badge bg-white text-violet-700">목표 열량</span> {rf.target_energy.before} → <b>{rf.target_energy.after}</b>kcal/끼{rf.target_energy.clamped ? ' (허용 범위로 맞춤)' : ''} — {rf.target_energy.reason}</p>}
+          {(rf.rescore || []).map((x, k) => (
+            <p key={k}><span className="badge bg-white text-violet-700">우선순위</span> {x.title}: S {x.before.priority} → <b>{x.after.priority}</b> — {x.reason}</p>
+          ))}
+          {(rf.warnings || []).length > 0 && <p className="text-amber-700">⚠ {rf.warnings.join(' · ')}</p>}
+        </div>
+      )}
+      {rf && rf.mode === 'rule' && <p className="text-[11px] text-muted">AI 종합 판단 실패 → 영역 평가 규칙 결과 사용 ({rf.note})</p>}
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2">
         {a.agents.map((g) => (
           <div key={g.agent} className={`rounded-xl px-3 py-2 text-xs ${g.active ? 'bg-navy-50 ring-1 ring-navy-100' : 'bg-slate-50 text-slate-400'}`}>
@@ -1497,13 +1565,15 @@ function AgentPanel({ a }) {
       </div>
       {pri.length > 0 && (
         <div>
-          <p className="text-xs font-bold text-muted mb-1">우선순위 (S = 0.5×심각도 + 0.3×시급성 + 0.2×개선 가능성)</p>
+          <p className="text-xs font-bold text-muted mb-1">우선순위 (S = 0.5×심각도 + 0.3×시급성 + 0.2×개선 가능성) — 높을수록 대체찬을 먼저 배분 (Stage 3)</p>
           <div className="overflow-x-auto">
             <table className="w-full text-xs min-w-[640px]">
               <tbody>
                 {pri.slice(0, 8).map((i, k) => (
                   <tr key={k} className="border-b border-navy-50 last:border-0">
-                    <td className="py-1 pr-2 w-12 tabular-nums font-bold text-navy-900">{i.priority.toFixed(2)}</td>
+                    <td className="py-1 pr-2 w-12 tabular-nums font-bold text-navy-900" title={i.priority_stage1 != null ? `영역 평가 ${i.priority_stage1} → AI 재평가` : undefined}>
+                      {i.priority.toFixed(2)}{i.priority_stage1 != null && <span className="text-violet-600">*</span>}
+                    </td>
                     <td className="py-1 pr-2 whitespace-nowrap"><span className="badge bg-white ring-1 ring-navy-100 text-navy-700">{AGENT_LABEL[i.agent] || i.agent}</span></td>
                     <td className="py-1 pr-2 font-semibold text-navy-900">{i.title}</td>
                     <td className="py-1 pr-2 whitespace-nowrap"><span className={`badge ${i.action === 'avoid' ? 'bg-rose-50 text-rose-700' : i.action === 'check' ? 'bg-amber-50 text-amber-800' : 'bg-slate-100 text-slate-600'}`}>{ACTION_LABEL[i.action] || i.action}</span></td>
