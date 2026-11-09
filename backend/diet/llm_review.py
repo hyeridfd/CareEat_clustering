@@ -31,7 +31,7 @@ import numpy as np
 
 from . import llm_select as LS
 
-PROMPT_VERSION = "2026-11-04-review2"
+PROMPT_VERSION = "2026-11-09-review3"
 MAX_SUGGESTIONS = 10
 TOL = {"f1": 0.01, "f3": 0.01, "f4": 0.01}      # 제안 1건이 나빠지게 해도 되는 최대치
 CUM_TOL = {"f1": 0.01, "f3": 0.01}              # 검토 전체 누적으로 나빠지게 해도 되는 최대치
@@ -39,6 +39,8 @@ CA_SOURCE = 100.0        # 칼슘 급원 반찬 기준 (1회 제공량 mg) — �
 PROTEIN_SOURCE = 5.0     # 단백질 반찬 기준 (1회 g)
 KEEP_RATIO = 0.6         # 바꾼 메뉴가 원래 급원량의 이 비율 이상이면 '같은 급원'으로 인정
 SCORE_W = {"f1": 1.0, "f3": 1.0, "f4": 1.0}     # 대체 메뉴 고를 때 점수 변화 가중치
+MAX_SAME_ING = 2         # 검토 한 번에 같은 주재료로 바꾸는 건 최대 2번 (예: 브로콜리 메뉴로 4번 바꾸는 쏠림 방지)
+ING_WINDOW = 3           # 바꾼 메뉴와 같은 주재료가 앞뒤 3끼 안에 있으면 거절
 F1_PASS = 0.3
 WINDOW = 9                                       # 앞뒤 9끼(3일) 안 같은 메뉴 금지
 SLOTS = {"국": (1, "국"), "주찬": (2, "주찬"), "부찬1": (3, "부찬"), "부찬2": (4, "부찬")}
@@ -63,6 +65,7 @@ SYSTEM_PROMPT = """당신은 요양원 급식을 20년 넘게 담당한 임상 �
 - 같은 끼니 앞뒤 3일 안에 이미 나오는 메뉴로 바꾸지 않습니다.
 - 칼슘·단백질 급원 반찬(후보 목록의 '칼슘 Nmg', '단백질 Ng' 표시, 예: 멸치·건새우·두부·생선·달걀)을 바꿀 때는
   같은 급원이면서 부드러운 메뉴로 바꿉니다. 채소 나물로 바꾸면 칼슘·단백질이 빠집니다.
+- 대체 메뉴의 주재료를 다양하게 고릅니다. 같은 재료(예: 브로콜리)로 여러 번 바꾸지 않습니다 (같은 주재료는 최대 2번).
 - 확실히 나아지는 경우만 제안합니다. 사소한 취향 차이는 제안하지 않습니다. 최대 10개, 중요한 것부터.
 - 영양 수치를 언급하거나 계산하지 않습니다 (영양은 프로그램이 다시 검사합니다).
 - 반드시 아래 JSON 한 개만 출력합니다.
@@ -224,7 +227,12 @@ def _meets(m: dict, need: dict, floor: float) -> bool:
     return True
 
 
-def best_alternative(problem, chrom, gi, cat, old, need, near, cur_f, soft: bool):
+def _ing(problem, cat, j):
+    a = _attr(problem, cat, j)
+    return a.get("main_ingredient") or None
+
+
+def best_alternative(problem, chrom, gi, cat, old, need, near, cur_f, soft: bool, ing_ok=None):
     """같은 분류에서 급원(need)을 지키고, (soft 면) 다진찬 적합이며, 반복·한그릇 조건을 통과하는 메뉴 중
     f1·f3·f4 가중 합이 가장 덜 나빠지는(가장 좋아지는) 메뉴 → (번호, 새 점수) 또는 None"""
     pool = problem.pool[cat]
@@ -238,6 +246,8 @@ def best_alternative(problem, chrom, gi, cat, old, need, near, cur_f, soft: bool
             if soft and m.get("texture") != "적합":
                 continue
             if not _meets(m, need, floor):
+                continue
+            if ing_ok and not ing_ok(j):
                 continue
             trial = np.array(chrom, dtype=int).copy()
             trial[gi] = j
@@ -260,6 +270,26 @@ def apply_suggestions(problem, chrom, suggestions: list) -> tuple[np.ndarray, li
     accepted, rejected = [], []
     cur_f = _f(problem, chrom)
     start_f = dict(cur_f)
+
+    used_ing = {}                                        # 이번 검토에서 바꾼 메뉴의 주재료 → 횟수
+
+    def ing_at(t, k):
+        d, mi = divmod(t, 3)
+        cat_ = SLOTS[[s for s, (kk, _) in SLOTS.items() if kk == k][0]][1]
+        return _ing(problem, cat_, int(chrom[d * N_SLOTS + mi * 6 + k]) % len(pool[cat_]))
+
+    def ing_problem(t, k, cat_, j) -> str | None:
+        """주재료 쏠림 검사 → 거절 사유 또는 None"""
+        ing = _ing(problem, cat_, j)
+        if not ing:
+            return None
+        if used_ing.get(ing, 0) >= MAX_SAME_ING:
+            return f"같은 주재료({ing})로 이미 {MAX_SAME_ING}번 바꿈"
+        for u in range(max(0, t - ING_WINDOW), min(N_DAYS * 3, t + ING_WINDOW + 1)):
+            for kk in (1, 2, 3, 4):
+                if (u, kk) != (t, k) and ing_at(u, kk) == ing:
+                    return f"앞뒤 {ING_WINDOW}끼 안에 같은 주재료({ing})가 있음"
+        return None
 
     def name_at(t, k):
         d, mi = divmod(t, 3)
@@ -293,9 +323,10 @@ def apply_suggestions(problem, chrom, suggestions: list) -> tuple[np.ndarray, li
         if need:
             # 칼슘·단백질 급원이 빠지는 교체 → 코드가 같은 급원의 부드러운 메뉴 중 점수가 가장 좋은 것으로 바꿈
             soft = sg.get("type") == "수용성" or old.get("texture") in ("부적합", "주의")
-            alt = best_alternative(problem, chrom, gi, cat, old, need, near, cur_f, soft)
+            ok = lambda jj: ing_problem(t, k, cat, jj) is None
+            alt = best_alternative(problem, chrom, gi, cat, old, need, near, cur_f, soft, ok)
             if alt is None and soft:
-                alt = best_alternative(problem, chrom, gi, cat, old, need, near, cur_f, False)
+                alt = best_alternative(problem, chrom, gi, cat, old, need, near, cur_f, False, ok)
             if alt is None:
                 rejected.append({**rec, "reason": "칼슘·단백질 급원을 지킬 대체 메뉴가 없음"}); continue
             j = alt[0]
@@ -305,6 +336,9 @@ def apply_suggestions(problem, chrom, suggestions: list) -> tuple[np.ndarray, li
             new_name = rec["replace_with"]
         if new_name in near:
             rejected.append({**rec, "reason": "앞뒤 3일 안에 같은 메뉴가 있음"}); continue
+        why_ing = ing_problem(t, k, cat, j)
+        if why_ing:
+            rejected.append({**rec, "reason": why_ing}); continue
         trial = chrom.copy()
         trial[gi] = j
         new_f = _f(problem, trial)
@@ -317,7 +351,10 @@ def apply_suggestions(problem, chrom, suggestions: list) -> tuple[np.ndarray, li
             rejected.append({**rec, "reason": "점수가 나빠짐: " + ", ".join(
                 f"{x} {cur_f[x]:.3f}→{new_f[x]:.3f}" if x in new_f else x for x in bad)}); continue
         oca, nca = calcium(old["menu_name"]), calcium(new_name)
-        accepted.append({**rec, "delta": {x: round(new_f[x] - cur_f[x], 4) for x in ("f1", "f3", "f4")},
+        ing = _ing(problem, cat, j)
+        if ing:
+            used_ing[ing] = used_ing.get(ing, 0) + 1
+        accepted.append({**rec, "ingredient": ing, "delta": {x: round(new_f[x] - cur_f[x], 4) for x in ("f1", "f3", "f4")},
                          "calcium": [round(oca) if oca is not None else None, round(nca) if nca is not None else None],
                          "protein": [round(old.get("protein") or 0, 1), round(pool[cat][j].get("protein") or 0, 1)]})
         chrom, cur_f = trial, new_f

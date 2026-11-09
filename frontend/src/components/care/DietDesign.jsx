@@ -368,16 +368,16 @@ export default function DietDesign() {
 /* ─────────────────────────── AI 영양사 선택 (파레토 후보 비교) ─────────────────────────── */
 
 const SEL_COLS = [
-  ['f1', '영양', (s) => s.목적함수?.['f1_영양']],
-  ['f3', '다양성', (s) => s.목적함수?.['f3_다양성']],
-  ['f4', '조화', (s) => s.목적함수?.['f4_조화']],
-  ['na', '나트륨 mg/일', (s) => s.하루평균_영양?.나트륨?.하루평균],
-  ['su', '당류 g/일', (s) => s.하루평균_영양?.당류?.하루평균],
-  ['pr', '단백질 g/일', (s) => s.하루평균_영양?.단백질?.하루평균],
-  ['rp', '14일 반복', (s) => s.반복?.['반복_14일안']],
-  ['hm', '한 끼 조화', (s) => s.조화?.한끼_평균],
-  ['lo', '낮은 끼니', (s) => s.조화?.낮은_끼니],
-  ['tx', '다진찬 부적합', (s) => s.다진찬_부적합_끼니],
+  ['f1', '영양 위반 f1 ↓', (s) => s.목적함수?.['f1_영양']],
+  ['f3', '반복·편중 f3 ↓', (s) => s.목적함수?.['f3_다양성']],
+  ['f4', '조화 문제 f4 ↓', (s) => s.목적함수?.['f4_조화']],
+  ['na', '나트륨 mg/일 ↓', (s) => s.하루평균_영양?.나트륨?.하루평균],
+  ['su', '당류 g/일 ↓', (s) => s.하루평균_영양?.당류?.하루평균],
+  ['pr', '단백질 g/일 ↑', (s) => s.하루평균_영양?.단백질?.하루평균],
+  ['rp', '14일 반복 ↓', (s) => s.반복?.['반복_14일안']],
+  ['hm', '한 끼 조화 ↑', (s) => s.조화?.한끼_평균],
+  ['lo', '조화 낮은 끼니 ↓', (s) => s.조화?.낮은_끼니],
+  ['tx', '다진찬 부적합 ↓', (s) => s.다진찬_부적합_끼니],
 ]
 const HIGHER_BETTER = new Set(['pr', 'hm'])
 
@@ -465,7 +465,7 @@ function SelectionPanel({ run, onEdited, setErr }) {
             ))}
           </tbody>
         </table>
-        <p className="mt-1 text-[11px] text-muted">모든 후보는 영양 기준(f1 ≤ 0.3)을 통과한 파레토 식단입니다. 굵은 초록 = 그 항목에서 가장 좋은 후보. '이 후보로'를 누르면 그 식단으로 대체찬·배식량을 다시 계산한 수정본이 만들어집니다.</p>
+        <p className="mt-1 text-[11px] text-muted">모든 후보는 영양 기준(f1 ≤ 0.3)을 통과한 파레토 식단입니다. ↓ 낮을수록 좋음 · ↑ 높을수록 좋음 · 굵은 초록 = 그 항목에서 가장 좋은 후보. '이 후보로'를 누르면 그 식단으로 대체찬·배식량을 다시 계산한 수정본이 만들어집니다.</p>
       </div>
     </Section>
   )
@@ -596,11 +596,11 @@ function MenuTab({ run, onApprove, onEdited, onRerun, setErr }) {
             const isNew = sel['f3_다양성'] != null
             const p3 = m.objective_parts?.f3 || {}, p4 = m.objective_parts?.f4 || {}
             return (<>
-              <Stat label="f1 영양" value={f1} sub="목표 영양소 위반 · 0.3 이하 목표" tone={f1 <= 0.3 ? 'bg-emerald-50' : 'bg-amber-50'} />
-              <Stat label="f2 비용" value={f2} sub={m.inventory_unused != null ? `예산 초과 + 재고 미활용 ${m.inventory_unused}` : '예산 초과 (재고 미입력)'} />
+              <Stat label="f1 영양 위반 ↓" value={f1} sub="낮을수록 좋음 · 0.3 이하 목표" tone={f1 <= 0.3 ? 'bg-emerald-50' : 'bg-amber-50'} />
+              <Stat label="f2 비용 ↓" value={f2} sub={m.inventory_unused != null ? `예산 초과 + 재고 미활용 ${m.inventory_unused}` : '예산 초과 (재고 미입력)'} />
               {isNew ? (<>
-                <Stat label="f3 다양성" value={sel['f3_다양성']} sub={`28일 반복·편중 · 반복 ${p3['14일 반복'] ?? '–'} · 편중 ${p3['편중(1-Simpson)'] ?? '–'}`} />
-                <Stat label="f4 조화" value={sel['f4_조화']} sub={`한 끼 조합·선호·규칙 · 선호 ${p4['시설 선호(섭취율)'] ?? '–'} · 다진찬 ${p4['다진찬 부적합'] ?? '–'}`} />
+                <Stat label="f3 반복·편중 ↓" value={sel['f3_다양성']} sub={`낮을수록 다양함 · 반복 ${p3['14일 반복'] ?? '–'} · 편중 ${p3['편중(1-Simpson)'] ?? '–'}`} />
+                <Stat label="f4 조화 문제 ↓" value={sel['f4_조화']} sub={`낮을수록 잘 어울림 · 선호 ${p4['시설 선호(섭취율)'] ?? '–'} · 다진찬 ${p4['다진찬 부적합'] ?? '–'}`} />
               </>) : (<>
                 <Stat label="f3 다양성·선호 (이전)" value={sel['f3_다양성·선호']} sub="이전 목적함수 — 다시 설계하면 새 기준" />
                 <Stat label="f4 패턴 위반 (이전)" value={sel['f4_패턴위반']} sub="이전 목적함수" />
@@ -608,14 +608,14 @@ function MenuTab({ run, onApprove, onEdited, onRerun, setErr }) {
             </>)
           })()}
           {m.harmony && (
-            <Stat label="한 끼 조화" value={m.harmony.mean} sub={`시설 실제 식단 ${m.harmony.model?.ref_real_mean ?? '–'} · 무작위 ${m.harmony.model?.ref_random_mean ?? '–'} · 낮은 끼니 ${m.harmony.low_meals}`}
+            <Stat label="한 끼 조화 ↑" value={m.harmony.mean} sub={`시설 실제 식단 ${m.harmony.model?.ref_real_mean ?? '–'} · 무작위 ${m.harmony.model?.ref_random_mean ?? '–'} · 낮은 끼니 ${m.harmony.low_meals}`}
               tone={m.harmony.mean >= (m.harmony.model?.ref_real_mean || 0.55) - 0.02 ? 'bg-emerald-50' : 'bg-amber-50'} />
           )}
           {m.harmony && (
-            <Stat label="시설 스타일 유사도" value={m.harmony.style_similarity} sub={`끼니별 국 종류·조리법·주재료 분포 (${m.harmony.model?.facility} ${m.harmony.model?.n_meals}끼 학습)`} />
+            <Stat label="시설 스타일 유사도 ↑" value={m.harmony.style_similarity} sub={`끼니별 국 종류·조리법·주재료 분포 (${m.harmony.model?.facility} ${m.harmony.model?.n_meals}끼 학습)`} />
           )}
-          <Stat label="파레토 해 품질(HV)" value={m.front?.hv?.toFixed?.(3) ?? '–'} sub={m.front ? `비지배해 ${m.front.n_nondom}개 · f1 통과 ${m.front.f1_pass_rate}%` : '수정본은 계산 안 함'} />
-          <Stat label="배식 기준 충족" value={pct(ss.끼니 - ss.조정불가, ss.끼니)} unit="%" sub={`나트륨 ${pct(ss.나트륨OK, ss.끼니) ?? '–'}% · 열량 ${pct(ss.열량OK, ss.끼니) ?? '–'}%`} />
+          <Stat label="파레토 해 품질(HV) ↑" value={m.front?.hv?.toFixed?.(3) ?? '–'} sub={m.front ? `비지배해 ${m.front.n_nondom}개 · f1 통과 ${m.front.f1_pass_rate}%` : '수정본은 계산 안 함'} />
+          <Stat label="배식 기준 충족 ↑" value={pct(ss.끼니 - ss.조정불가, ss.끼니)} unit="%" sub={`나트륨 ${pct(ss.나트륨OK, ss.끼니) ?? '–'}% · 열량 ${pct(ss.열량OK, ss.끼니) ?? '–'}%`} />
           <Stat label="대체찬" value={res.substitutions?.length ?? 0} unit="건" sub={`${(res.residents || []).filter((x) => x.substitutions > 0).length}명 대상`} />
           <Stat label="설계 어르신" value={run.result?.residents?.length} unit="명" sub={m.optimize_sec ? `최적화 ${m.optimize_sec}초` : run.parent_run_id ? '영양사 수정본' : ''} />
         </div>
