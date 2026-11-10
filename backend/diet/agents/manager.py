@@ -6,14 +6,14 @@
     2) 에이전트별로 CONTEXT_KEYS 만 잘라서 넘긴다 (맥락 격리: 다른 영역 정보를 보지 못함)
     3) 해당하는 에이전트만 활성화(applicable)하고, 모든 (어르신 × 에이전트)를 동시에 실행
     4) 종합(synthesize): 영양 기준은 같은 영양소끼리 더 엄격한 값 (출처 에이전트 기록),
-       피할 식재료는 합치고, 문제는 S(j) 순으로 정렬
+       피할 식재료는 합치고, 문제는 Level 1(안전성) → Level 2(영양 중재, 파레토 묶음 → S 순)로 정렬
 """
 from __future__ import annotations
 
 import re
 from concurrent.futures import ThreadPoolExecutor
 
-from .base import ConstraintSpec
+from .base import ConstraintSpec, rank_priorities
 from .domain import BodyAgent, CognitionAgent, DiabetesAgent, HypertensionAgent, IntakeAgent, OralAgent, _num
 from .medication import MedicationAgent
 
@@ -71,6 +71,28 @@ def _slice(ctx: dict, keys) -> dict:
     return {k: ctx.get(k) for k in keys}
 
 
+def resolve_constraints(specs: list, energy: float) -> dict:
+    """기준 목록 → 끼니 기준 {필드: {value, agent, source, others}}.
+    같은 영양소는 더 엄격한 값. 열량 비율(%E) 기준은 energy(목표 열량)로 g 환산
+    → 목표 열량이 바뀌면 이 함수를 다시 부르면 된다 (Stage 2 에서 사용)"""
+    chosen = {}
+    for s in specs:
+        if isinstance(s, dict):
+            s = ConstraintSpec(**s)
+        fld = FIELDS.get((s.nutrient, s.bound))
+        if not fld:
+            continue
+        v = s.resolve(energy)
+        cur = chosen.get(fld)
+        stricter = cur is None or (v < cur["value"] if s.bound == "max" else v > cur["value"])
+        if stricter:
+            chosen[fld] = {"value": v, "agent": s.agent, "source": s.source, "unit": s.unit,
+                           "others": (cur["others"] + [cur["agent"]]) if cur else []}
+        elif cur:
+            cur["others"].append(s.agent)
+    return chosen
+
+
 def synthesize(assessments: list, age: int) -> dict:
     """에이전트 결과 → 개인 영양 기준(출처 포함) · 피할 식재료 · 우선순위 문제 목록"""
     from ..sodium_config import meal_sodium_max_for_age
@@ -79,36 +101,34 @@ def synthesize(assessments: list, age: int) -> dict:
     specs = [s for a in assessments if a.active for s in a.constraints]
     # 기본 기준: 나이별 나트륨 만성질환위험감소섭취량(CDRR) ÷ 3 — 모든 어르신
     specs.append(ConstraintSpec("sodium", "max", meal_sodium_max_for_age(int(age or 80)), source="KDRI2025", agent="base"))
-    chosen = {}
-    for s in specs:
-        fld = FIELDS.get((s.nutrient, s.bound))
-        if not fld:
-            continue
-        v = s.resolve(e)
-        cur = chosen.get(fld)
-        stricter = cur is None or (v < cur["value"] if s.bound == "max" else v > cur["value"])
-        if stricter:
-            chosen[fld] = {"value": v, "agent": s.agent, "source": s.source,
-                           "others": (cur["others"] + [cur["agent"]]) if cur else []}
-        elif cur:
-            cur["others"].append(s.agent)
+    chosen = resolve_constraints(specs, e)
     avoid = [x for a in assessments if a.active for x in a.avoid]
-    issues = sorted((i for a in assessments if a.active for i in a.issues), key=lambda i: -i.priority)
-    return {"target_energy": e, "constraints": chosen, "avoid": [x.to_dict() for x in avoid],
-            "priorities": [i.to_dict() for i in issues],
+    # 우선순위: Level 1(안전성) 먼저, 그 안과 Level 2(영양 중재)는 S 순
+    #   [2026-11-10] Level 2 는 파레토 묶음(심각도·시급성·개선 가능성) → 같은 묶음 안에서 S 순
+    issues = rank_priorities([i.to_dict() for a in assessments if a.active for i in a.issues])
+    return {"target_energy": e, "constraints": chosen, "specs": [x.to_dict() for x in specs],
+            "avoid": [x.to_dict() for x in avoid], "priorities": issues,
             "notes": [n for a in assessments if a.active for n in a.notes]}
 
 
-def assess_residents(contexts: dict, max_workers: int = 8) -> dict:
+def _run(ag, sub, judge, ctx):
+    a = ag.assess(sub)
+    if judge and a.active:
+        judge(ag, sub, a, ctx)        # LLM 영역 전문가: 같은 맥락(sub)만 보고 근거 검색 후 판단을 정제 (실패해도 규칙 결과 유지)
+    return a
+
+
+def assess_residents(contexts: dict, max_workers: int = 8, judge=None) -> dict:
     """contexts: {elderly_id: ctx} → {elderly_id: {"agents": [...], "synth": {...}}}
-    모든 (어르신 × 에이전트) 평가를 병렬로 실행. 에이전트는 서로의 결과를 보지 않는다."""
+    모든 (어르신 × 에이전트) 평가를 병렬로 실행. 에이전트는 서로의 결과를 보지 않는다.
+    judge(agent, sub_ctx, assessment, full_ctx) — 있으면 규칙 평가 직후 같은 작업 안에서 LLM 판단을 덧붙인다 (llm_agent.judge)"""
     jobs = {}
     with ThreadPoolExecutor(max_workers=max_workers) as ex:
         for eid, ctx in contexts.items():
             for ag in AGENTS:
                 sub = _slice(ctx, ag.CONTEXT_KEYS)
                 if ag.NAME == "body" or ag.applicable(sub):
-                    jobs[(eid, ag.NAME)] = ex.submit(ag.assess, sub)
+                    jobs[(eid, ag.NAME)] = ex.submit(_run, ag, sub, judge, ctx)
                 else:
                     jobs[(eid, ag.NAME)] = None
         out = {}

@@ -130,7 +130,7 @@ def _progress_writer(sb, run_id):
     return say
 
 
-def _job(run_id, home, preset, seed, menu=None, selector="llm", reviewer="llm", refiner="llm"):
+def _job(run_id, home, preset, seed, menu=None, selector="llm", reviewer="llm", refiner="llm", agent_mode="rule"):
     from diet import pipeline as P
     sb = get_supabase()
     try:
@@ -142,7 +142,7 @@ def _job(run_id, home, preset, seed, menu=None, selector="llm", reviewer="llm", 
         say = _progress_writer(sb, run_id)
         if menu is None:
             out = P.run_design(residents, assess, settings, inv, pref, preset=preset, seed=seed, progress=say, ehr=ehr,
-                               selector=selector, reviewer=reviewer, refiner=refiner)
+                               selector=selector, reviewer=reviewer, refiner=refiner, agent_mode=agent_mode)
         else:
             # 수정본: 원래 설계의 Stage 2 결과(어르신별 AI 종합 판단)를 재사용 — 평가가 같으면 LLM 을 다시 부르지 않음
             me = _one(sb.table("diet_runs").select("parent_run_id").eq("id", run_id).execute())
@@ -150,8 +150,9 @@ def _job(run_id, home, preset, seed, menu=None, selector="llm", reviewer="llm", 
                 if me.get("parent_run_id") else {}
             prev_assess = (parent.get("result") or {}).get("assessments")
             refiner = (parent.get("params") or {}).get("refiner", "off")
+            agent_mode = (parent.get("params") or {}).get("agent_mode", "rule")
             out = P.redo_personalization(menu, residents, assess, settings, inv, pref, progress=say, ehr=ehr,
-                                         refiner=refiner, prev_assessments=prev_assess)
+                                         refiner=refiner, prev_assessments=prev_assess, agent_mode=agent_mode)
         sb.table("diet_runs").update({"progress": "결과 저장 중", "updated_at": get_kst_now()}).eq("id", run_id).execute()
         _check_cancel(sb, run_id, {"checked": 0})
         _save_result(sb, run_id, out)
@@ -188,6 +189,7 @@ class RunRequest(BaseModel):
     selector: str = "llm"               # llm (AI 영양사가 파레토 후보 중 선택) | rule (균형점 규칙)
     reviewer: str = "llm"               # llm (AI 식단 검토 → 코드 검증 후 반영) | off
     refiner: str = "llm"                # llm (Stage 2 AI 임상 영양사 어르신별 종합 판단) | off
+    agent_mode: str = "rule"            # llm (Stage 1 AI 영역 전문가 — 근거 검색 후 판단·인용) | rule
 
 
 @router.post("/runs")
@@ -200,10 +202,11 @@ def start_run(req: RunRequest, user: dict = Depends(require_staff)):
     row = _one(sb.table("diet_runs").insert({
         "nursing_home_id": home, "status": "queued", "progress": "대기 중", "created_by": user["actor"],
         "params": {"preset": req.preset, "seed": req.seed, "selector": req.selector, "reviewer": req.reviewer, "refiner": req.refiner,
+                   "agent_mode": req.agent_mode,
                    "inventory_used": bool(inv and inv[0].get("items")), "preference_used": bool(pref),
                    "start_date": (inv[0].get("start_date") if inv else None),
                    "preference_updated_at": pref[0]["updated_at"] if pref else None}}).execute())
-    threading.Thread(target=_job, args=(row["id"], home, req.preset, req.seed, None, req.selector, req.reviewer, req.refiner),
+    threading.Thread(target=_job, args=(row["id"], home, req.preset, req.seed, None, req.selector, req.reviewer, req.refiner, req.agent_mode),
                      daemon=True).start()
     return {"id": row["id"], "status": "queued"}
 

@@ -250,14 +250,23 @@ def build_queries(assessment) -> list[str]:
 def evidence_for(assessment, ctx: dict | None = None, sources: list[str] | None = None) -> dict:
     """Assessment 1개 (+ 그 어르신 맥락: 나이·성별로 KDRI 표 선택) → {"snippets", "refs", "linked", "backend", "queries"}
     실패해도 예외를 던지지 않는다 (빈 근거 + "error")."""
-    out = {"snippets": [], "refs": [], "linked": [], "backend": None, "queries": [], "error": None}
     if not enabled() or not assessment.active:
-        return out
+        return {"snippets": [], "refs": [], "linked": [], "backend": None, "queries": [], "error": None}
     srcs = sources or AGENT_SOURCES.get(assessment.agent, [])
-    links = linked_sections(assessment, ctx)
-    queries = build_queries(assessment)
-    out["linked"], out["queries"] = [f"{s} · {sec}" for s, sec in links], queries
-    key = hashlib.sha1(json.dumps([srcs, links, queries, backend()], ensure_ascii=False).encode()).hexdigest()
+    return retrieve(linked_sections(assessment, ctx), build_queries(assessment), srcs, ctx)
+
+
+def retrieve(links: list, queries: list, srcs: list, ctx: dict | None = None, prefix: str = "E",
+             max_linked: int | None = None, max_search: int | None = None) -> dict:
+    """연결 조항(links: [(문헌, 조항)]) + 의미 검색(queries, srcs 문헌 안에서) → 근거 문단 묶음.
+    영역 전문가(evidence_for)와 3단계 충돌 전문가(specialists.py)가 함께 쓴다. 예외를 던지지 않는다."""
+    out = {"snippets": [], "refs": [], "linked": [], "backend": None, "queries": [], "error": None}
+    if not enabled():
+        return out
+    ml, ms = max_linked or MAX_LINKED, max_search or MAX_SEARCH
+    out["linked"], out["queries"] = [f"{s} · {sec}" for s, sec in links], list(queries)
+    key = hashlib.sha1(json.dumps([srcs, links, queries, backend(), prefix, ml, ms, _kdri_section(ctx) if ctx else None],
+                                  ensure_ascii=False).encode()).hexdigest()
     if key in _CACHE:
         return _CACHE[key]
     rows, used = [], backend()
@@ -267,7 +276,7 @@ def evidence_for(assessment, ctx: dict | None = None, sources: list[str] | None 
             for s, sec in links:
                 got = _sb_section(s, sec) if attempt == "supabase" else _local_section(s, sec)
                 rows += [{**r, "kind": "linked"} for r in got[:1]]          # 조항당 첫 문단
-                if len(rows) >= MAX_LINKED:
+                if len(rows) >= ml:
                     break
             got = (_sb_search(queries, srcs, PER_QUERY) if attempt == "supabase"
                    else [r for q in queries for r in _local_search(q, srcs, PER_QUERY)])
@@ -281,13 +290,13 @@ def evidence_for(assessment, ctx: dict | None = None, sources: list[str] | None 
                 if (r["source_id"], r["section"]) not in have:
                     have.add((r["source_id"], r["section"]))
                     extra.append({**r, "kind": "search"})
-            rows += extra[:MAX_SEARCH]
+            rows += extra[:ms]
             used = attempt
             break
         except Exception as e:                       # 임베딩·네트워크·미적재
             out["error"] = f"{attempt}: {e!r}"[:200]
             log.warning("[diet-rag] %s 검색 실패 → %s", attempt, e)
-    snippets, refs = pack(rows)
+    snippets, refs = pack(rows, prefix)
     out.update(snippets=snippets, refs=refs, backend=used)
     _CACHE[key] = out
     return out
@@ -306,7 +315,7 @@ def pack(rows: list, prefix: str = "E") -> tuple[list, list]:
     return snippets, refs
 
 
-def valid_citations(text: str, snippets: list) -> tuple[str, list]:
+def valid_citations(text: str, snippets: list, prefix: str = "E") -> tuple[str, list]:
     """LLM 출력의 [E3] 인용 중 실제로 준 근거 번호만 남긴다 → (고친 문장, 쓰인 번호)"""
     ok = {s["id"] for s in snippets}
     used = []
@@ -316,4 +325,4 @@ def valid_citations(text: str, snippets: list) -> tuple[str, list]:
         keep = [t for t in tags if t in ok]
         used.extend(t for t in keep if t not in used)
         return f"[{', '.join(keep)}]" if keep else ""
-    return re.sub(r"\[((?:E\d+\s*,?\s*)+)\]", fix, text or ""), used
+    return re.sub(r"\[((?:" + prefix + r"\d+\s*,?\s*)+)\]", fix, text or ""), used

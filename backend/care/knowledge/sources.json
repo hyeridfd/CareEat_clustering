@@ -103,6 +103,42 @@
       "url": "https://doi.org/10.5124/jkma.2024.67.7.461",
       "citation": "최정연, 김광일. 근감소증의 진단과 관리. J Korean Med Assoc 2024;67(7):461-466",
       "note": "AWGS 2019 기준과 국내 학회 단백질 권고(1.2 g/kg 이상, 세 끼 분배) 정리."
+    },
+    {
+      "id": "DRUG_FOOD",
+      "title": "약물-식품 상호작용 규칙 (식단 설계용 내부 정리)",
+      "org": "Care-Eat (공개 약품설명서·식약처 의약품안전나라 기반)",
+      "year": 2026,
+      "doc_type": "manual",
+      "license": "내부요약",
+      "url": "https://nedrug.mfds.go.kr",
+      "citation": "약물-식품 상호작용 규칙 — 의약품 허가사항·의약품안전나라 복약정보 기반 내부 정리 (2026)",
+      "note": "diet/data/drug_food_rules.json 과 같은 내용. 약사·의사 확인 전제. 허가사항 원문 쪽번호 대조 예정.",
+      "short": "약물-식품 규칙"
+    },
+    {
+      "id": "BRAIN_DIET",
+      "title": "뇌건강 식사 근거 정리 — MIND 식사 관찰연구·무작위배정 시험, WHO 인지저하·치매 위험 감소 지침",
+      "org": "Morris 2015 · Barnes 2023 · WHO 2019 (내부 요약)",
+      "year": 2026,
+      "doc_type": "paper",
+      "license": "내부요약",
+      "url": "https://www.who.int/publications/i/item/9789241550543",
+      "citation": "Morris MC et al. Alzheimers Dement 2015;11:1007-14 · Barnes LL et al. N Engl J Med 2023;389:602-11 · WHO. Risk reduction of cognitive decline and dementia, 2019",
+      "note": "치매 '뇌건강 식재료' 문제의 근거. 관찰연구 지지, RCT 무효 — 식사 패턴 목표로만 사용.",
+      "short": "뇌건강 식사 근거"
+    },
+    {
+      "id": "MFDS_EASY",
+      "title": "의약품개요정보(e약은요) — 상호작용(문항5) 중 음식·음료 관련 문장",
+      "org": "식품의약품안전처",
+      "year": 2026,
+      "doc_type": "guideline",
+      "license": "공공누리(공공데이터포털)",
+      "url": "https://www.data.go.kr/data/15075057/openapi.do",
+      "citation": "식품의약품안전처 의약품개요정보(e약은요) Open API (2026-11 수집)",
+      "note": "일반의약품 3,278종 중 식단 관련 음식 문장이 있는 707종. scripts/build_mfds_drug_db.py 로 생성. 처방약은 포함되지 않음.",
+      "short": "식약처 e약은요"
     }
   ]
 }

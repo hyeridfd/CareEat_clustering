@@ -24,9 +24,9 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 from .. import llm_select as LS
-from .base import W_MOD, W_SEV, W_URG
+from .base import W_MOD, W_SEV, W_URG, rank_priorities
 
-PROMPT_VERSION = "2026-11-09-refine1"
+PROMPT_VERSION = "2026-11-09-refine2"
 MAX_WORKERS = 8
 RESCORE_MAX_DELTA = 0.3
 ENERGY_DELTA = 0.10
@@ -52,8 +52,10 @@ SYSTEM_PROMPT = """당신은 요양원 어르신의 영양을 총괄하는 임�
    단백질을 늘려야 하는데 단백질 상한이 있음, 연하곤란인데 단백질 공급이 부족함. 충돌이 없으면 빈 목록.
 2. 충돌을 풀거나 어르신 전체 상황에 맞추기 위해 꼭 필요하면 개인 영양 기준을 조정합니다.
    반드시 '조정_허용범위' 안의 값만 씁니다. 범위가 없는 항목은 조정하지 않습니다. 조정이 필요 없으면 빈 목록.
-3. 각 문제(code)의 심각도·시급성·개선 가능성(0~1)을 어르신 전체 상황을 보고 다시 매깁니다.
-   예) 영양불량과 연하곤란이 함께 있으면 둘 다 시급성이 올라감, 섭취율이 매우 낮으면 제한보다 섭취 확보가 먼저.
+   목표 열량을 바꾸면 열량 비율(%E)로 정한 기준(예: 당류 ≤ 열량의 10%)은 시스템이 바뀐 열량으로 다시 계산합니다.
+3. Level 2(영양 중재) 문제(code)의 심각도·시급성·개선 가능성(0~1)을 어르신 전체 상황을 보고 다시 매깁니다.
+   예) 영양불량과 섭취 부족이 함께 있으면 시급성이 올라감, 섭취율이 매우 낮으면 제한보다 섭취 확보가 먼저.
+   Level 1(안전성: 알레르기·연하 안전·약물 상호작용)은 점수와 무관하게 항상 최우선이므로 다시 매기지 않습니다.
    바꿀 필요가 있는 문제만 적습니다.
 4. 담당자가 읽을 2문장 요약을 씁니다.
 
@@ -107,12 +109,18 @@ def build_payload(ctx: dict, res: dict, target_energy: float) -> dict:
             continue
         agents.append({
             "agent": a.agent, "영역": a.label, "요약": a.summary,
-            "문제": [{"code": i.code, "title": i.title, "severity": i.severity, "urgency": i.urgency,
+            "문제": [{"code": i.code, "title": i.title, "level": i.level, "severity": i.severity, "urgency": i.urgency,
                     "modifiability": i.modifiability, "priority": i.priority, "action": i.action,
                     "evidence": i.evidence} for i in a.issues],
-            "기준": [{"nutrient": c.nutrient, "bound": c.bound, "value": _r(c.resolve(target_energy)), "source": c.source}
+            "기준": [{"nutrient": c.nutrient, "bound": c.bound, "value": _r(c.resolve(target_energy)), "source": c.source,
+                    **({"열량_비율": c.value} if c.unit == "pctE" else {})}
                    for c in a.constraints],
             "피할_식재료_사유": [x.reason for x in a.avoid],
+            # Stage 1 AI 영역 전문가 판단 (근거 검색) — 있으면 함께 본다
+            **({"영역_전문가_판단": {"요약": a.llm.get("summary"), "우려": a.llm.get("concerns"),
+                                "추가_확인": a.llm.get("missing"),
+                                "문제별_근거": {i.code: i.rationale for i in a.issues if i.rationale}}}
+               if (a.llm or {}).get("mode") == "llm" else {}),
         })
     current = {k: {"value": _r(v["value"]), "정한_에이전트": v["agent"]} for k, v in syn["constraints"].items()}
     ranges = {k: [_r(v["value"] * BANDS[k][0]), _r(v["value"] * BANDS[k][1])]
@@ -186,6 +194,9 @@ def validate(raw: dict, payload: dict, res: dict) -> dict:
             if code:
                 warn.append(f"없는 문제 code 무시: {code}")
             continue
+        if i.level == 1:                       # 안전성은 점수와 무관하게 최우선 → 다시 매기지 않음
+            warn.append(f"안전성(Level 1) 문제는 우선순위를 바꾸지 않음: {code}")
+            continue
         new = {}
         for k in ("severity", "urgency", "modifiability"):
             try:
@@ -217,7 +228,10 @@ def _eligible(res: dict) -> bool:
 
 def refine_one(ctx: dict, res: dict, caller=None, prev: dict | None = None) -> dict:
     payload = build_payload(ctx, res, res["synth"]["target_energy"])
-    h = _hash(payload)
+    # 모델·추론 강도가 바뀌면 다시 판단 (같은 입력이라도 이전 결과를 재사용하지 않음)
+    _p = LS.provider()
+    _m = LS._model(_p) if _p in ("openai", "anthropic") else ""
+    h = _hash({**payload, "_model": _m, "_effort": LS.effort(_m)})
     if prev and prev.get("hash") == h and prev.get("mode") == "llm":
         return {**prev, "reused": True}
     if h in _CACHE:
@@ -257,19 +271,38 @@ def apply_refine(syn: dict, ref: dict) -> dict:
     if ref.get("mode") != "llm":
         return syn
     syn = json.loads(json.dumps(syn))
+    # [2026-11-09] 목표 열량이 바뀌면 열량 비율(%E) 기준(당류·포화지방·지방 등)을 바뀐 열량으로 다시 계산
+    te = ref.get("target_energy")
+    rescaled = []
+    if te and syn.get("specs"):
+        from .manager import resolve_constraints
+        old_c = syn["constraints"]
+        new_c = resolve_constraints(syn["specs"], te["after"])
+        for k, v in new_c.items():
+            if k in old_c and abs(v["value"] - old_c[k]["value"]) > 1e-6:
+                rescaled.append({"field": k, "label": FIELD_KO.get(k, k), "before": _r(old_c[k]["value"]),
+                                 "after": _r(v["value"]), "energy": [te["before"], te["after"]]})
+                v["energy_rescaled_from"] = _r(old_c[k]["value"])
+        syn["constraints"] = new_c
+    if te:
+        syn["target_energy"] = te["after"]
+    syn["energy_rescaled"] = rescaled
     for a in ref.get("adjustments") or []:
         c = syn["constraints"][a["field"]]
-        c["value"] = a["after"]
+        base = c.get("energy_rescaled_from")
+        # LLM 이 조정한 비율을 바뀐 열량 기준에도 그대로 적용 (예: 당류 상한을 90% 로 낮췄다면 새 기준의 90%)
+        val = a["after"] if base is None or not a["before"] else round(c["value"] * a["after"] / a["before"], 2)
+        c["value"] = val
         c["refined_from"] = a["before"]
         c["agent"] = "refine"
-    if ref.get("target_energy"):
-        syn["target_energy"] = ref["target_energy"]["after"]
+    for x in rescaled:                         # 화면용: 열량 재계산 + LLM 조정까지 반영된 최종값
+        x["final"] = _r(syn["constraints"][x["field"]]["value"])
     by = {r["code"]: r["after"] for r in ref.get("rescore") or []}
     for it in syn.get("priorities") or []:
         if it.get("code") in by:
             it["priority_stage1"] = it["priority"]
             it.update({k: by[it["code"]][k] for k in ("severity", "urgency", "modifiability", "priority")})
-    syn["priorities"] = sorted(syn.get("priorities") or [], key=lambda i: -i["priority"])
+    syn["priorities"] = rank_priorities(syn.get("priorities") or [])
     return syn
 
 

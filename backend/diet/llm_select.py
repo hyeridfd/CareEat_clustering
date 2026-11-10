@@ -13,6 +13,8 @@
   설정 (backend/.env 또는 환경변수)
     DIET_LLM_PROVIDER   openai | anthropic | none   (없으면 LLM_PROVIDER, 그것도 없으면 none = 규칙 선택)
     DIET_LLM_MODEL      모델 이름 (없으면 OPENAI_MODEL / ANTHROPIC_MODEL, 기본 gpt-4o-mini / claude-sonnet-4-5)
+    DIET_LLM_EFFORT     추론형 모델(gpt-5·gpt-6·o 시리즈)의 추론 강도 none|low|medium|high (기본 low)
+                        추론형 모델에는 temperature 를 보내지 않는다 (지원하지 않음)
     OPENAI_API_KEY · ANTHROPIC_API_KEY  (돌봄 솔루션과 같은 키)
 """
 from __future__ import annotations
@@ -243,7 +245,7 @@ SYSTEM_PROMPT = """당신은 요양원 급식을 총괄하는 임상 영양사�
  "check_before_approval": ["영양사가 승인 전에 확인할 점"],
  "summary": "영양사에게 보여 줄 2문장 요약"}"""
 
-_BANNED = re.compile(r"처방|투약|복용|치료제|완치")
+_BANNED = re.compile(r"처방|치료제|완치")   # [2026-11-09] 복용·투약은 사실 서술("당뇨약 복용")이라 가리지 않음
 
 
 def _key(name: str):
@@ -284,6 +286,47 @@ def _extract_json(text: str) -> dict:
     return json.loads(text[s:e + 1])
 
 
+_REASONING = re.compile(r"^(o\d|gpt-5|gpt-6)", re.I)
+USAGE: list = []          # 호출 기록 (모델 비교용): {model, effort, in, out, sec}
+
+
+def effort(model: str) -> str | None:
+    """추론형 모델이면 추론 강도, 아니면 None (temperature 0 사용)"""
+    if not _REASONING.match(model or ""):
+        return None
+    e = (_key("DIET_LLM_EFFORT") or "low").strip().lower()
+    return e if e in ("none", "minimal", "low", "medium", "high", "xhigh", "max") else "low"
+
+
+def _post_openai(httpx, key: str, req: dict):
+    """모델마다 받는 파라미터가 달라서, 400 이 '지원하지 않는 값'이면 그 값만 고쳐 한 번 더 보낸다"""
+    for _ in range(3):
+        r = httpx.post("https://api.openai.com/v1/chat/completions", headers={"Authorization": f"Bearer {key}"},
+                       json=req, timeout=TIMEOUT)
+        if r.status_code != 400:
+            r.raise_for_status()
+            return r, req
+        msg = r.text.lower()
+        if "temperature" in msg and "temperature" in req:
+            req = {k: v for k, v in req.items() if k != "temperature"}
+        elif "reasoning_effort" in msg and req.get("reasoning_effort") == "none":
+            req = {**req, "reasoning_effort": "low"}          # 예: gpt-6.1-sol 은 none 미지원
+        elif "reasoning_effort" in msg and "reasoning_effort" in req:
+            req = {k: v for k, v in req.items() if k != "reasoning_effort"}
+        elif "response_format" in msg and "response_format" in req:
+            req = {k: v for k, v in req.items() if k != "response_format"}   # JSON 은 프롬프트로 요구하고 있음
+        else:
+            r.raise_for_status()
+    r.raise_for_status()
+    return r, req
+
+
+def _log_usage(model, eff, usage: dict, sec: float):
+    USAGE.append({"model": model, "effort": eff, "in": usage.get("prompt_tokens") or usage.get("input_tokens") or 0,
+                  "out": usage.get("completion_tokens") or usage.get("output_tokens") or 0, "sec": round(sec, 1)})
+    del USAGE[:-500]
+
+
 def call_llm(user_payload: dict, p: str | None = None, system: str | None = None, max_tokens: int = 1500) -> tuple[dict, str]:
     """LLM 한 번 호출 → (JSON dict, "제공자:모델"). system 을 주면 다른 역할(예: 식단 검토자)로 쓸 수 있다"""
     system = system or SYSTEM_PROMPT
@@ -297,12 +340,19 @@ def call_llm(user_payload: dict, p: str | None = None, system: str | None = None
         key = _key("OPENAI_API_KEY")
         if not key:
             raise RuntimeError("OPENAI_API_KEY 미설정")
-        r = httpx.post("https://api.openai.com/v1/chat/completions", headers={"Authorization": f"Bearer {key}"},
-                       json={"model": model, "temperature": 0, "response_format": {"type": "json_object"},
-                             "messages": [{"role": "system", "content": system}, {"role": "user", "content": body}]},
-                       timeout=TIMEOUT)
-        r.raise_for_status()
-        return _extract_json(r.json()["choices"][0]["message"]["content"]), f"openai:{model}"
+        req = {"model": model, "response_format": {"type": "json_object"},
+               "messages": [{"role": "system", "content": system}, {"role": "user", "content": body}]}
+        eff = effort(model)
+        if eff:
+            req["reasoning_effort"] = eff                  # 추론형: temperature 대신 추론 강도
+        else:
+            req["temperature"] = 0
+        t0 = time.time()
+        r, req = _post_openai(httpx, key, req)
+        data = r.json()
+        _log_usage(model, req.get("reasoning_effort"), data.get("usage") or {}, time.time() - t0)
+        label = f"openai:{model}" + (f"({req['reasoning_effort']})" if req.get("reasoning_effort") else "")
+        return _extract_json(data["choices"][0]["message"]["content"]), label
     if p == "anthropic":
         key = _key("ANTHROPIC_API_KEY")
         if not key:

@@ -1,0 +1,952 @@
+{
+ "_설명": [
+  "식단 설계 영역 에이전트(diet/agents/domain.py)가 쓰는 숫자를 한곳에 모으고, 각 숫자를 근거 지침의 문단(section)과 연결한 표.",
+  "source = care/knowledge/sources.json 의 문헌 id, section = care/knowledge/docs/<source>.md 의 '## ' 제목 (근거 검색에서 그 문단을 바로 찾는 열쇠).",
+  "status: 일치(문단에 같은 값) · 환산(문단의 하루 값을 끼니로 나누는 등 계산) · 불일치(문단과 값이 다름) · 근거약함(문단에 수치가 없거나 다른 근거) · 설계값(문헌값이 아닌 시스템 설계 결정)",
+  "에이전트 동작은 이 파일 값으로 정해진다 — 값을 바꾸면 바로 반영되므로, 바꿀 때는 근거 문단과 status·note 도 함께 고친다.",
+  "점검: python -m scripts.check_diet_knowledge"
+ ],
+ "version": "2026-11-10b",
+ "thresholds": {
+  "bmi_underweight": {
+   "value": 18.5,
+   "source": "ESPEN_GERIATRIC",
+   "section": "R1 에너지 필요량",
+   "status": "근거약함",
+   "note": "ESPEN 요지는 저체중을 BMI 21 이하로 언급. 18.5 는 일반 성인 기준(WHO)"
+  },
+  "bmi_obese": {
+   "value": 27,
+   "source": "ESPEN_GERIATRIC",
+   "section": "R11 불필요한 식사 제한 금지",
+   "status": "설계값",
+   "note": "고령자는 감량보다 근육 유지 — 27 은 관찰 대상 구분용"
+  },
+  "kmbi_low_ratio": {
+   "value": 0.5,
+   "source": "SARCOPENIA_KR",
+   "section": "근감소증 선별과 진단 (AWGS 2019)",
+   "status": "설계값",
+   "note": "K-MBI 만점 대비 50% 미만을 기능 저하로 봄 (근감소 선별의 대리 지표)"
+  },
+  "hypo_intake_rate": {
+   "value": 0.6,
+   "source": "DRUG_FOOD",
+   "section": "약물-식품 당뇨약 · 저혈당",
+   "status": "설계값",
+   "note": "당뇨약 복용 중 평균 섭취율 60% 미만이면 저혈당 위험"
+  },
+  "sbp_htn": {
+   "value": 140,
+   "source": "KSH_HTN_2026",
+   "section": null,
+   "status": "근거약함",
+   "note": "진단 기준(140/90)은 지침 원문에 있으나 현재 적재 문서(생활요법 장)에는 없음 — 진단 정의 문단 추가 필요"
+  },
+  "dbp_htn": {
+   "value": 90,
+   "source": "KSH_HTN_2026",
+   "section": null,
+   "status": "근거약함",
+   "note": "진단 기준(140/90)은 지침 원문에 있으나 현재 적재 문서(생활요법 장)에는 없음 — 진단 정의 문단 추가 필요"
+  },
+  "sbp_stage2": {
+   "value": 160,
+   "source": "KSH_HTN_2026",
+   "section": null,
+   "status": "근거약함",
+   "note": "2기 고혈압(160/100) — 우선순위 상향용. 진단 정의 문단 추가 필요"
+  },
+  "dbp_stage2": {
+   "value": 100,
+   "source": "KSH_HTN_2026",
+   "section": null,
+   "status": "근거약함",
+   "note": "2기 고혈압(160/100) — 우선순위 상향용. 진단 정의 문단 추가 필요"
+  },
+  "mmse_impaired": {
+   "value": 24,
+   "source": "ESPEN_DEMENTIA",
+   "section": null,
+   "status": "설계값",
+   "note": "MMSE 24 미만 인지 저하 — 국내 선별 관례값 (지침 문단 아님)"
+  },
+  "mmse_severe": {
+   "value": 18,
+   "source": "ESPEN_DEMENTIA",
+   "section": null,
+   "status": "설계값",
+   "note": "MMSE 18 미만 — 중등도 이상 인지 저하 구분용 (관례값)"
+  },
+  "gds_depression": {
+   "value": 8,
+   "source": "ESPEN_GERIATRIC",
+   "section": "R10 저영양·탈수의 원인 제거",
+   "status": "설계값",
+   "note": "GDS 8점 이상 우울 의심 — 척도 판정 관례값. 문단은 우울을 저영양 원인으로 다룸"
+  },
+  "intake_low_ratio": {
+   "value": 0.75,
+   "source": "KDRI2025",
+   "section": "KDRI 75세 이상 여자",
+   "status": "설계값",
+   "note": "조사 기간 섭취가 권장(충분)섭취량의 75% 미만이면 부족"
+  },
+  "intake_very_low": {
+   "value": 0.5,
+   "source": "KDRI2025",
+   "section": "KDRI 75세 이상 여자",
+   "status": "설계값",
+   "note": "50% 미만이면 심각도·시급성 상향"
+  },
+  "slot_low_rate": {
+   "value": 0.5,
+   "source": "LTC_MEAL_GUIDE",
+   "section": "길라잡이 어르신 특성에 맞는 급식 기준",
+   "status": "설계값",
+   "note": "칸별 평균 섭취율 50% 미만 = 잘 안 드시는 칸"
+  },
+  "na_intake_ratio": {
+   "value": 1.3,
+   "source": "KDRI2025",
+   "section": "KDRI 나트륨 만성질환위험감소섭취량",
+   "status": "설계값",
+   "note": "조사 기간 나트륨 섭취가 나이별 기준의 1.3배를 넘으면 문제로 올림"
+  },
+  "k_day_low": {
+   "value": 2000,
+   "source": "KSH_HTN_2026",
+   "section": "고혈압 칼륨 섭취",
+   "status": "근거약함",
+   "note": "고혈압 어르신 칼륨 섭취 하루 2,000 mg 미만이면 부족 — 문단은 1.5~3 g 이상 공급 권장"
+  },
+  "protein_weight_bmi_cap": {
+   "value": 25,
+   "source": "ESPEN_GERIATRIC",
+   "section": "R2 단백질 필요량",
+   "status": "설계값",
+   "note": "BMI 25 이상이면 단백질 계산에 조정체중(BMI 25 에 해당하는 체중 = 25 × 키²) 사용. 임상 관례 — ESPEN 문단은 체중당 권고만 제시"
+  }
+ },
+ "constraints": {
+  "body.energy_min": {
+   "nutrient": "energy",
+   "bound": "min",
+   "value": 500,
+   "unit": "abs",
+   "source": "LTC_MEAL_GUIDE",
+   "section": "길라잡이 어르신 특성에 맞는 급식 기준",
+   "status": "근거약함",
+   "note": "문단은 '표준체중을 유지할 적정 분량'만 제시. 500~800kcal/끼는 기존 고령자 급식 범위(base_standard)"
+  },
+  "body.energy_max": {
+   "nutrient": "energy",
+   "bound": "max",
+   "value": 800,
+   "unit": "abs",
+   "source": "LTC_MEAL_GUIDE",
+   "section": "길라잡이 어르신 특성에 맞는 급식 기준",
+   "status": "근거약함",
+   "note": "문단은 '표준체중을 유지할 적정 분량'만 제시. 500~800kcal/끼는 기존 고령자 급식 범위(base_standard)"
+  },
+  "body.protein_need_per_kg": {
+   "nutrient": "protein",
+   "bound": "min",
+   "value": 1.0,
+   "unit": "g_per_kg_day",
+   "source": "ESPEN_GERIATRIC",
+   "section": "R2 단백질 필요량",
+   "status": "일치",
+   "note": "[2026-11-10] 개인 하한으로 적용: max(하루 50 g ÷ 3, 체중 × 1.0 g/kg ÷ 3). 문단: 노인 최소 1 g/kg/일"
+  },
+  "body.protein_per_kg_risk": {
+   "nutrient": "protein",
+   "bound": "min",
+   "value": 1.2,
+   "unit": "g_per_kg_day",
+   "source": "ESPEN_GERIATRIC",
+   "section": "R2 단백질 필요량",
+   "status": "일치",
+   "note": "저체중·영양불량·근감소 위험이면 1.2 g/kg/일 (문단: 급성·만성 질환이나 영양불량 시 1.2~1.5 g/kg). 근감소증 종설도 1.2 g/kg 이상 권고"
+  },
+  "diabetes.sugar_max": {
+   "nutrient": "sugar",
+   "bound": "max",
+   "value": 0.1,
+   "unit": "pctE",
+   "kcal_per_g": 4,
+   "source": "KDA_DM_2025",
+   "section": "당뇨 의학영양요법 권고 6 첨가당과 가당음료",
+   "status": "근거약함",
+   "note": "문단은 '첨가당 최소화·가당음료 줄이기'만 권고(수치 없음), 총당류 급원(생과일·우유)은 유익하다고 함. 10%E 는 WHO 유리당 기준에 가까움"
+  },
+  "diabetes.protein_min": {
+   "nutrient": "protein",
+   "bound": "min",
+   "value": 18,
+   "unit": "abs",
+   "source": "KDA_DM_2025",
+   "section": "당뇨 의학영양요법 권고 7 단백질을 제한하지 않는다",
+   "status": "근거약함",
+   "note": "문단은 '단백질을 제한하지 않는다'(0.8 g/kg 미만 제한 금지)이며 끼니 18 g 하한은 문단에 없음"
+  },
+  "diabetes.sat_fat_max": {
+   "nutrient": "sat_fat",
+   "bound": "max",
+   "value": 0.07,
+   "unit": "pctE",
+   "kcal_per_g": 9,
+   "source": "KDA_DM_2025",
+   "section": "당뇨 의학영양요법 권고 8 지방의 종류",
+   "status": "일치",
+   "note": "[2026-11-10] 10% → 7% 로 맞춤. 문단: '포화지방산은 총에너지의 7% 이내'"
+  },
+  "diabetes.sodium_max": {
+   "nutrient": "sodium",
+   "bound": "max",
+   "value": 767,
+   "unit": "abs",
+   "source": "KDA_DM_2025",
+   "section": "당뇨 의학영양요법 권고 9 나트륨 — 하루 2,300 mg 이내",
+   "status": "환산",
+   "note": "[2026-11-10] 1,350 → 767 mg/끼 (하루 2,300 mg ÷ 3). 1,500 mg/일 미만 제한은 비권장. 나이별 기준(600~633 mg)이 더 엄격하면 그 값"
+  },
+  "hypertension.fat_min": {
+   "nutrient": "fat",
+   "bound": "min",
+   "value": 0.15,
+   "unit": "pctE",
+   "kcal_per_g": 9,
+   "source": "KSH_HTN_2026",
+   "section": "고혈압 권고 25 건강한 식사요법",
+   "status": "근거약함",
+   "note": "문단은 '지방 섭취 제한'(수치 없음). 15~30%E 는 KDRI 에너지 적정비율·당뇨 지침 권고 8"
+  },
+  "hypertension.fat_max": {
+   "nutrient": "fat",
+   "bound": "max",
+   "value": 0.3,
+   "unit": "pctE",
+   "kcal_per_g": 9,
+   "source": "KSH_HTN_2026",
+   "section": "고혈압 권고 25 건강한 식사요법",
+   "status": "근거약함",
+   "note": "문단은 '지방 섭취 제한'(수치 없음). 15~30%E 는 KDRI 에너지 적정비율·당뇨 지침 권고 8"
+  },
+  "hypertension.sat_fat_max": {
+   "nutrient": "sat_fat",
+   "bound": "max",
+   "value": 0.07,
+   "unit": "pctE",
+   "kcal_per_g": 9,
+   "source": "KSH_HTN_2026",
+   "section": "고혈압 권고 20 체중 조절",
+   "status": "근거약함",
+   "note": "문단은 '포화지방산 최소화'(수치 없음). 7%E 는 당뇨 지침 권고 8·KDRI 와 같은 값"
+  },
+  "hypertension.sodium_max": {
+   "nutrient": "sodium",
+   "bound": "max",
+   "value": 667,
+   "unit": "abs",
+   "source": "KSH_HTN_2026",
+   "section": "고혈압 권고 21 소금 섭취 제한",
+   "status": "환산",
+   "note": "[2026-11-10] 1,350 → 667 mg/끼 (하루 소금 5 g = 나트륨 2,000 mg ÷ 3). 나이별 기준(600~633 mg)이 더 엄격하면 그 값"
+  },
+  "hypertension.potassium_min": {
+   "nutrient": "potassium",
+   "bound": "min",
+   "value": 1167,
+   "unit": "abs",
+   "source": "KDRI2025",
+   "section": "KDRI 75세 이상 여자",
+   "status": "환산",
+   "note": "[2026-11-10] 700 → 1,167 mg/끼 (KDRI 충분섭취량 3,500 mg/일 ÷ 3). 고혈압 지침 문단: 채소·과일로 칼륨 섭취(1.5~3 g 이상)·만성콩팥병은 주의"
+  },
+  "hypertension.fiber_min": {
+   "nutrient": "fiber",
+   "bound": "min",
+   "value": 8.3,
+   "unit": "abs",
+   "source": "KDRI2025",
+   "section": "KDRI 75세 이상 여자",
+   "status": "환산",
+   "note": "[2026-11-10] 7 → 8.3 g/끼 (KDRI 충분섭취량 75세 이상 여 25 g/일 ÷ 3, 남 30 g 은 10 g). 공통 기준과 같은 값"
+  },
+  "base.sodium_daily_65_74": {
+   "nutrient": "sodium",
+   "bound": "max",
+   "value": 1900,
+   "unit": "abs_day",
+   "source": "KDRI2025",
+   "section": "KDRI 나트륨 만성질환위험감소섭취량",
+   "status": "환산",
+   "note": "끼니 = 하루 ÷ 3 (sodium_config.py)"
+  },
+  "base.sodium_daily_75": {
+   "nutrient": "sodium",
+   "bound": "max",
+   "value": 1800,
+   "unit": "abs_day",
+   "source": "KDRI2025",
+   "section": "KDRI 나트륨 만성질환위험감소섭취량",
+   "status": "환산",
+   "note": "위와 같음"
+  },
+  "base.protein_daily": {
+   "nutrient": "protein",
+   "bound": "min",
+   "value": 50,
+   "unit": "abs_day",
+   "source": "KDRI2025",
+   "section": "KDRI 75세 이상 여자",
+   "status": "일치",
+   "note": "75세 이상 여자 권장섭취량(남자 60 g). base_standard.py"
+  },
+  "base.fiber_daily": {
+   "nutrient": "fiber",
+   "bound": "min",
+   "value": 25,
+   "unit": "abs_day",
+   "source": "KDRI2025",
+   "section": "KDRI 75세 이상 여자",
+   "status": "일치",
+   "note": "[2026-11-10] 20 → 25 g/일 (2025 KDRI 충분섭취량 75세 이상 여자 25 g, 남자 30 g). base_standard.py FIBER_DAILY_MIN"
+  }
+ },
+ "issues": {
+  "underweight": {
+   "severity": 0.8,
+   "urgency": 0.7,
+   "modifiability": 0.7,
+   "source": "ESPEN_GERIATRIC",
+   "section": "R1 에너지 필요량",
+   "status": "설계값"
+  },
+  "obesity": {
+   "severity": 0.4,
+   "urgency": 0.2,
+   "modifiability": 0.5,
+   "source": "ESPEN_GERIATRIC",
+   "section": "R11 불필요한 식사 제한 금지",
+   "status": "설계값"
+  },
+  "malnutrition_risk": {
+   "variants": {
+    "risk": {
+     "severity": 0.6,
+     "urgency": 0.6,
+     "modifiability": 0.7
+    },
+    "malnourished": {
+     "severity": 0.9,
+     "urgency": 0.9,
+     "modifiability": 0.7
+    }
+   },
+   "source": "ESPEN_GERIATRIC",
+   "section": "R6 선별 양성 후 절차",
+   "status": "설계값"
+  },
+  "sarcopenia_risk": {
+   "severity": 0.6,
+   "urgency": 0.4,
+   "modifiability": 0.5,
+   "source": "SARCOPENIA_KR",
+   "section": "근감소증 영양요법 — 단백질 목표량",
+   "status": "설계값"
+  },
+  "sugar_control": {
+   "severity": 0.7,
+   "urgency": 0.5,
+   "modifiability": 0.8,
+   "source": "KDA_DM_2025",
+   "section": "당뇨 의학영양요법 권고 6 첨가당과 가당음료",
+   "status": "설계값"
+  },
+  "hypoglycemia_risk": {
+   "severity": 0.9,
+   "urgency": 0.9,
+   "modifiability": 0.6,
+   "source": "DRUG_FOOD",
+   "section": "약물-식품 당뇨약 · 저혈당",
+   "status": "설계값"
+  },
+  "sodium_control": {
+   "variants": {
+    "stage2": {
+     "severity": 0.9,
+     "urgency": 0.8,
+     "modifiability": 0.8
+    },
+    "stage1": {
+     "severity": 0.7,
+     "urgency": 0.6,
+     "modifiability": 0.8
+    },
+    "normal": {
+     "severity": 0.5,
+     "urgency": 0.3,
+     "modifiability": 0.8
+    },
+    "unknown": {
+     "severity": 0.6,
+     "urgency": 0.5,
+     "modifiability": 0.8
+    }
+   },
+   "source": "KSH_HTN_2026",
+   "section": "고혈압 권고 21 소금 섭취 제한",
+   "status": "설계값",
+   "note": "혈압 단계로 심각도·시급성 결정 (stage2: ≥160/100, stage1: ≥140/90, normal: 그 미만, unknown: 혈압 기록 없음)"
+  },
+  "sodium_intake_high": {
+   "severity": 0.7,
+   "urgency": 0.6,
+   "modifiability": 0.7,
+   "source": "KDRI2025",
+   "section": "KDRI 나트륨 만성질환위험감소섭취량",
+   "status": "설계값"
+  },
+  "potassium_low": {
+   "severity": 0.4,
+   "urgency": 0.3,
+   "modifiability": 0.6,
+   "source": "KSH_HTN_2026",
+   "section": "고혈압 칼륨 섭취",
+   "status": "설계값"
+  },
+  "brain_food": {
+   "variants": {
+    "default": {
+     "severity": 0.5,
+     "urgency": 0.3,
+     "modifiability": 0.8
+    },
+    "severe": {
+     "severity": 0.7,
+     "urgency": 0.3,
+     "modifiability": 0.8
+    }
+   },
+   "source": "BRAIN_DIET",
+   "section": "뇌건강 식사 이 시스템의 적용",
+   "status": "근거약함",
+   "note": "관찰연구(MIND, Morris 2015)는 지지하나 무작위배정 시험(Barnes 2023)은 효과 없음, WHO(2019)는 지중해식 조건부 권고. 치료가 아닌 식사 패턴 목표로만 사용 — 심각도·시급성 낮게 유지"
+  },
+  "eating_assist": {
+   "severity": 0.5,
+   "urgency": 0.4,
+   "modifiability": 0.4,
+   "source": "ESPEN_DEMENTIA",
+   "section": "치매 권고 16 식사 돕기",
+   "status": "설계값"
+  },
+  "appetite_mood": {
+   "severity": 0.5,
+   "urgency": 0.4,
+   "modifiability": 0.3,
+   "source": "ESPEN_GERIATRIC",
+   "section": "R10 저영양·탈수의 원인 제거",
+   "status": "설계값"
+  },
+  "aspiration_risk": {
+   "severity": 0.9,
+   "urgency": 0.8,
+   "modifiability": 0.6,
+   "source": "IDDSI",
+   "section": "IDDSI 레벨 4 퓌레(갈찬)",
+   "status": "설계값"
+  },
+  "chewing": {
+   "severity": 0.6,
+   "urgency": 0.5,
+   "modifiability": 0.8,
+   "source": "IDDSI",
+   "section": "IDDSI 레벨 5 다진·촉촉한 음식(다진찬)",
+   "status": "설계값"
+  },
+  "texture_mismatch": {
+   "severity": 0.8,
+   "urgency": 0.8,
+   "modifiability": 0.9,
+   "source": "IDDSI",
+   "section": "IDDSI 식사형태는 평가로 정한다",
+   "status": "설계값"
+  },
+  "energy_intake_low": {
+   "severity": 0.7,
+   "source": "KDRI2025",
+   "section": "KDRI 75세 이상 여자",
+   "status": "설계값",
+   "modifiability": 0.7
+  },
+  "protein_intake_low": {
+   "severity": 0.8,
+   "source": "KDRI2025",
+   "section": "KDRI 75세 이상 여자",
+   "status": "설계값",
+   "modifiability": 0.7
+  },
+  "fiber_intake_low": {
+   "severity": 0.4,
+   "source": "KDRI2025",
+   "section": "KDRI 75세 이상 여자",
+   "status": "설계값",
+   "modifiability": 0.7
+  },
+  "ca_intake_low": {
+   "severity": 0.4,
+   "source": "KDRI2025",
+   "section": "KDRI 75세 이상 여자",
+   "status": "설계값",
+   "modifiability": 0.4
+  },
+  "vd_intake_low": {
+   "severity": 0.3,
+   "source": "KDRI2025",
+   "section": "KDRI 75세 이상 여자",
+   "status": "설계값",
+   "modifiability": 0.4
+  },
+  "slot_low_intake": {
+   "severity": 0.4,
+   "urgency": 0.4,
+   "modifiability": 0.6,
+   "source": "LTC_MEAL_GUIDE",
+   "section": "길라잡이 어르신 특성에 맞는 급식 기준",
+   "status": "설계값"
+  },
+  "allergy": {
+   "urgency": 0.9,
+   "modifiability": 0.9,
+   "source": "DRUG_FOOD",
+   "section": "알레르기 식재료 제외 원칙",
+   "status": "설계값",
+   "note": "심각도는 기록된 반응 정도(mild/moderate/severe)로 정함"
+  }
+ },
+ "intake_rules": {
+  "_설명": "섭취·선호 에이전트 — 영양소별 부족 시 urgency (부족 정도에 따라). very_low 이하면 severity +0.15",
+  "urgency_low": 0.4,
+  "urgency_very_low": 0.6,
+  "severity_bonus_very_low": 0.15
+ },
+ "conflicts": {
+  "_설명": [
+   "[2026-11-10] 3단계 종합의 '지침 충돌 조정' 표 (agents/synthesis.py · specialists.py).",
+   "when: 묶음 목록 — 묶음마다 하나 이상 맞으면 충돌. 표시: issue:<문제 code> · field:<기준 이름> · disease:<질환명 일부>",
+   "rule: 규칙 조정 (LLM 없이도 항상 적용) — lock(1단계 값 기준 keep_or_raise / keep_or_lower), rescore(문제 code 묶음의 점수 증감), text(담당자용 해결 문장)",
+   "llm: true 면 AI 임상 영양사를 켰을 때 그 충돌만 맡는 질환 전문가가 근거(links + 의미 검색)를 보고 fields 안에서만 조정",
+   "status 는 다른 표와 같다 — 이 표의 조정 방향은 지침 문단에 근거하지만 증감 폭은 설계값"
+  ],
+  "energy_vs_sugar": {
+   "title": "열량·단백질 확보 ↔ 당류 제한",
+   "specialist": "당뇨·영양불량 전문 영양사",
+   "when": [
+    [
+     "issue:underweight",
+     "issue:malnutrition_risk",
+     "issue:energy_intake_low",
+     "issue:hypoglycemia_risk"
+    ],
+    [
+     "issue:sugar_control"
+    ]
+   ],
+   "agents": [
+    "body",
+    "intake",
+    "diabetes"
+   ],
+   "fields": [
+    "protein_min",
+    "energy_min",
+    "fat_max"
+   ],
+   "rule": {
+    "lock": {
+     "sugar_max": "keep_or_raise"
+    },
+    "rescore": {
+     "codes": [
+      "sugar_control"
+     ],
+     "urgency": -0.1
+    },
+    "text": "당류는 열량 비율(%E)로만 묶고 더 조이지 않음 — 부족한 열량은 단백질·지방 반찬으로 보충"
+   },
+   "links": [
+    [
+     "ESPEN_GERIATRIC",
+     "R11 불필요한 식사 제한 금지"
+    ],
+    [
+     "KDA_DM_2025",
+     "당뇨 의학영양요법 권고 7 단백질을 제한하지 않는다"
+    ],
+    [
+     "ESPEN_GERIATRIC",
+     "R1 에너지 필요량"
+    ]
+   ],
+   "llm": true,
+   "source": "ESPEN_GERIATRIC",
+   "section": "R11 불필요한 식사 제한 금지",
+   "status": "설계값"
+  },
+  "dysphagia_vs_protein": {
+   "title": "식사형태 제약(연하·저작) ↔ 열량·단백질 확보",
+   "specialist": "연하곤란·영양불량 전문 영양사",
+   "when": [
+    [
+     "issue:aspiration_risk",
+     "issue:chewing",
+     "issue:texture_mismatch"
+    ],
+    [
+     "issue:underweight",
+     "issue:malnutrition_risk",
+     "issue:sarcopenia_risk",
+     "issue:protein_intake_low",
+     "issue:energy_intake_low"
+    ]
+   ],
+   "agents": [
+    "oral",
+    "body",
+    "intake"
+   ],
+   "fields": [
+    "protein_min",
+    "energy_min"
+   ],
+   "rule": {
+    "lock": {},
+    "rescore": {
+     "codes": [
+      "underweight",
+      "malnutrition_risk",
+      "sarcopenia_risk",
+      "protein_intake_low",
+      "energy_intake_low"
+     ],
+     "urgency": 0.1
+    },
+    "text": "식사형태를 바꾸면 섭취량이 줄기 쉬워 열량·단백질 확보가 더 시급 — 부드러운 고단백 반찬·영양 강화식"
+   },
+   "links": [
+    [
+     "ESPEN_GERIATRIC",
+     "R22 식사 형태 조정"
+    ],
+    [
+     "ESPEN_GERIATRIC",
+     "R20 영양 강화식"
+    ],
+    [
+     "IDDSI",
+     "IDDSI 이 시스템의 대응"
+    ]
+   ],
+   "llm": true,
+   "source": "ESPEN_GERIATRIC",
+   "section": "R22 식사 형태 조정",
+   "status": "설계값"
+  },
+  "sodium_vs_low_intake": {
+   "title": "나트륨 제한 ↔ 섭취 저하",
+   "specialist": "고혈압·섭취 저하 전문 영양사",
+   "when": [
+    [
+     "issue:sodium_control",
+     "issue:sodium_intake_high"
+    ],
+    [
+     "issue:energy_intake_low",
+     "issue:slot_low_intake",
+     "issue:malnutrition_risk",
+     "issue:underweight"
+    ]
+   ],
+   "agents": [
+    "hypertension",
+    "intake",
+    "body"
+   ],
+   "fields": [
+    "energy_min",
+    "protein_min"
+   ],
+   "rule": {
+    "lock": {
+     "sodium_max": "keep_or_raise"
+    },
+    "rescore": {},
+    "text": "섭취가 낮은 어르신은 나트륨을 기본 상한보다 더 조이지 않음 — 향신채·감칠맛으로 맛을 보완해 섭취 유지"
+   },
+   "links": [
+    [
+     "ESPEN_GERIATRIC",
+     "R11 불필요한 식사 제한 금지"
+    ],
+    [
+     "KSH_HTN_2026",
+     "고혈압 염분감수성 — 고령자에서 더 높다"
+    ],
+    [
+     "LTC_MEAL_GUIDE",
+     "길라잡이 삼삼한 조리 전략 (저염)"
+    ]
+   ],
+   "llm": true,
+   "source": "ESPEN_GERIATRIC",
+   "section": "R11 불필요한 식사 제한 금지",
+   "status": "설계값"
+  },
+  "obesity_vs_muscle": {
+   "title": "비만(체중 관리) ↔ 근육 유지",
+   "specialist": "비만·근감소 전문 영양사",
+   "when": [
+    [
+     "issue:obesity"
+    ],
+    [
+     "issue:sarcopenia_risk",
+     "issue:protein_intake_low",
+     "issue:malnutrition_risk"
+    ]
+   ],
+   "agents": [
+    "body",
+    "intake"
+   ],
+   "fields": [
+    "protein_min",
+    "energy_max"
+   ],
+   "rule": {
+    "lock": {
+     "protein_min": "keep_or_raise",
+     "energy_min": "keep_or_raise"
+    },
+    "rescore": {},
+    "text": "고령자는 감량보다 근육 유지 — 열량 하한·단백질 하한은 낮추지 않음"
+   },
+   "links": [
+    [
+     "ESPEN_GERIATRIC",
+     "R2 단백질 필요량"
+    ],
+    [
+     "SARCOPENIA_KR",
+     "근감소증 영양요법 — 단백질 목표량"
+    ],
+    [
+     "KSH_HTN_2026",
+     "고혈압 권고 20 체중 조절"
+    ]
+   ],
+   "llm": true,
+   "source": "ESPEN_GERIATRIC",
+   "section": "R2 단백질 필요량",
+   "status": "설계값"
+  },
+  "warfarin_vs_vegetables": {
+   "title": "채소 섭취 권장(칼륨·식이섬유) ↔ 와파린 녹색 잎채소 일정량",
+   "specialist": "고혈압·항응고 전문 영양사",
+   "when": [
+    [
+     "issue:warfarin_vitk"
+    ],
+    [
+     "field:potassium_min",
+     "field:fiber_min",
+     "issue:potassium_low",
+     "issue:fiber_intake_low"
+    ]
+   ],
+   "agents": [
+    "medication",
+    "hypertension",
+    "intake"
+   ],
+   "fields": [
+    "potassium_min",
+    "fiber_min"
+   ],
+   "rule": {
+    "lock": {},
+    "rescore": {},
+    "text": "칼륨·식이섬유는 녹색 잎채소 대신 뿌리채소·버섯·과일로 채우고, 잎채소는 매일 비슷한 양 (잎채소 30 g 이상 반찬은 대체찬에서 제외 유지)"
+   },
+   "links": [
+    [
+     "DRUG_FOOD",
+     "약물-식품 와파린 · 비타민 K"
+    ],
+    [
+     "KSH_HTN_2026",
+     "고혈압 칼륨 섭취"
+    ]
+   ],
+   "llm": true,
+   "source": "DRUG_FOOD",
+   "section": "약물-식품 와파린 · 비타민 K",
+   "status": "설계값"
+  },
+  "k_sparing_vs_potassium": {
+   "title": "칼륨 섭취 권장 ↔ 칼륨 보존 이뇨제",
+   "specialist": "",
+   "when": [
+    [
+     "issue:k_sparing"
+    ],
+    [
+     "field:potassium_min",
+     "issue:potassium_low"
+    ]
+   ],
+   "agents": [
+    "medication",
+    "hypertension"
+   ],
+   "fields": [],
+   "rule": {
+    "lock": {},
+    "rescore": {},
+    "text": "칼륨 보존 이뇨제 복용 → 칼륨 하한을 두지 않음 (4단계 약물 강제 제약에서 해제)"
+   },
+   "links": [
+    [
+     "DRUG_FOOD",
+     "약물-식품 칼륨 보존 이뇨제 · 고칼륨 식품"
+    ]
+   ],
+   "llm": false,
+   "source": "DRUG_FOOD",
+   "section": "약물-식품 칼륨 보존 이뇨제 · 고칼륨 식품",
+   "status": "근거약함"
+  },
+  "protein_vs_kidney": {
+   "title": "단백질 증량 ↔ 신장 질환",
+   "specialist": "",
+   "when": [
+    [
+     "disease:신장",
+     "disease:콩팥",
+     "disease:신부전",
+     "disease:투석"
+    ],
+    [
+     "issue:underweight",
+     "issue:malnutrition_risk",
+     "issue:sarcopenia_risk",
+     "issue:protein_intake_low",
+     "field:protein_min"
+    ]
+   ],
+   "agents": [
+    "body",
+    "intake"
+   ],
+   "fields": [],
+   "rule": {
+    "lock": {
+     "protein_min": "keep_or_lower"
+    },
+    "rescore": {},
+    "confirm": [
+     "신장 기능 검사(eGFR)·투석 여부"
+    ],
+    "text": "신장 질환 기록이 있어 단백질 하한을 1단계 값보다 올리지 않음 — 증량 전 의료진 확인"
+   },
+   "links": [
+    [
+     "ESPEN_GERIATRIC",
+     "R2 단백질 필요량"
+    ]
+   ],
+   "llm": false,
+   "source": "ESPEN_GERIATRIC",
+   "section": "R2 단백질 필요량",
+   "status": "근거약함"
+  }
+ },
+ "hard_overrides": {
+  "_설명": [
+   "[2026-11-10] 3단계 종합의 마지막 '약물·질환 강제 제약' — 앞 단계(AI 조정 포함)가 무엇을 정했든 끝에 적용한다.",
+   "op: remove(기준 삭제) · keep_or_raise / keep_or_lower(1단계 값으로 되돌림) · mute_issue(문제를 '관찰'로 낮춰 대체찬 가중치에서 뺌)"
+  ],
+  "k_sparing_potassium": {
+   "label": "칼륨 보존 이뇨제 → 칼륨 하한 해제",
+   "when": [
+    [
+     "issue:k_sparing"
+    ]
+   ],
+   "ops": [
+    {
+     "op": "remove",
+     "field": "potassium_min"
+    },
+    {
+     "op": "mute_issue",
+     "code": "potassium_low"
+    }
+   ],
+   "source": "DRUG_FOOD",
+   "section": "약물-식품 칼륨 보존 이뇨제 · 고칼륨 식품",
+   "status": "근거약함"
+  },
+  "kidney_potassium": {
+   "label": "신장 질환 기록 → 칼륨 하한 해제 (의료진 확인)",
+   "when": [
+    [
+     "disease:신장",
+     "disease:콩팥",
+     "disease:신부전",
+     "disease:투석"
+    ]
+   ],
+   "ops": [
+    {
+     "op": "remove",
+     "field": "potassium_min"
+    },
+    {
+     "op": "mute_issue",
+     "code": "potassium_low"
+    }
+   ],
+   "confirm": [
+    "신장 기능 검사(eGFR)·혈중 칼륨"
+   ],
+   "source": "KSH_HTN_2026",
+   "section": "고혈압 칼륨 섭취",
+   "status": "근거약함"
+  },
+  "hypoglycemia_energy": {
+   "label": "당뇨약 + 섭취 저하(저혈당 위험) → 열량 하한·당류 상한을 1단계보다 조이지 않음",
+   "when": [
+    [
+     "issue:hypoglycemia_risk"
+    ]
+   ],
+   "ops": [
+    {
+     "op": "keep_or_raise",
+     "field": "energy_min"
+    },
+    {
+     "op": "keep_or_raise",
+     "field": "sugar_max"
+    }
+   ],
+   "source": "DRUG_FOOD",
+   "section": "약물-식품 당뇨약 · 저혈당",
+   "status": "설계값"
+  }
+ }
+}

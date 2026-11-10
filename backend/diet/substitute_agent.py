@@ -88,15 +88,19 @@ NUT_KEYS           = ["energy", "protein", "fat", "sat_fat", "sugar", "sodium", 
 USE_PRIORITY_WEIGHTS = True
 PRIORITY_BASE = 0.5
 PRIORITY_DEFAULT = 0.6
+PRIORITY_SAFETY    = 1.5        # Level 1(안전성) 문제와 연결된 위반 항목의 가중치 (0.5+S 의 최댓값)
 LIMIT_KEYS = ("sodium", "sugar", "sat_fat", "fat", "protein")
 LOW_KEYS = ("energy", "protein", "fiber", "potassium")
 
 
 def priority_weights(priorities: list) -> dict:
-    """에이전트 문제 목록(priority·action·nutrients) → {위반 항목: 가중치}"""
+    """에이전트 문제 목록(priority·action·nutrients) → {위반 항목: 가중치}
+    Level 1(안전성) 문제는 S 와 무관하게 최대 가중치(PRIORITY_SAFETY) — 예: 당뇨약 복용 중 섭취 저하(저혈당) → 열량 부족"""
     w = {}
     for it in priorities or []:
         s, act, ns = float(it.get("priority") or 0), it.get("action"), it.get("nutrients") or []
+        if (it.get("level") or 2) == 1:
+            s = PRIORITY_SAFETY - PRIORITY_BASE
         keys = ["dementia"] if it.get("code") == "brain_food" else []
         keys += [n for n in ns if act == "limit" and n in LIMIT_KEYS]
         keys += [f"{n}_low" for n in ns if act == "increase" and n in LOW_KEYS]

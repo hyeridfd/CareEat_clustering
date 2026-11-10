@@ -216,6 +216,7 @@ export default function DietDesign() {
   const [useAi, setUseAi] = useState(true)          // AI 영양사가 파레토 후보 중 선택
   const [useReview, setUseReview] = useState(true)  // AI 식단 검토 (어색한 칸 교체 제안 → 코드 검증 후 반영)
   const [useRefine, setUseRefine] = useState(true)  // Stage 2 AI 임상 영양사 어르신별 종합 판단
+  const [useAgentAi, setUseAgentAi] = useState(false)  // Stage 1 AI 영역 전문가 (근거 검색 RAG + 판단·인용)
   const [aiStatus, setAiStatus] = useState(null)
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
@@ -252,7 +253,7 @@ export default function DietDesign() {
   const start = async () => {
     setErr(''); setBusy(true)
     try {
-      const r = await api.post('/care/diet/runs', { preset, selector: useAi ? 'llm' : 'rule', reviewer: useReview ? 'llm' : 'off', refiner: useRefine ? 'llm' : 'off' })
+      const r = await api.post('/care/diet/runs', { preset, selector: useAi ? 'llm' : 'rule', reviewer: useReview ? 'llm' : 'off', refiner: useRefine ? 'llm' : 'off', agent_mode: useAgentAi ? 'llm' : 'rule' })
       setRunId(r.data.id)
       await loadStatus()
     } catch (e) { setErr(errMsg(e)) } finally { setBusy(false) }
@@ -292,6 +293,11 @@ export default function DietDesign() {
             title="AI 영양사가 28일 식단을 읽고 어색한 조합·조리 부담·계절에 안 맞는 칸을 후보 메뉴로 바꾸자고 제안합니다. 영양·반복·조화 점수가 나빠지지 않는 제안만 반영됩니다.">
             <input type="checkbox" checked={useReview} onChange={(e) => setUseReview(e.target.checked)} />
             AI 식단 검토
+          </label>
+          <label className="flex items-center gap-1.5 text-xs font-semibold text-navy-700"
+            title="7개 영역마다 AI 영역 전문가가 그 영역 임상 지침(당뇨·고혈압·ESPEN·KDRI·IDDSI·식약처 약물 정보)에서 근거 문단을 찾아 판단 근거를 인용하고, 문제 점수를 규칙 값 ±0.2 안에서 다듬습니다. 안전성 문제 점수와 영양 기준 숫자는 바꾸지 않습니다. 어르신 수만큼 AI를 여러 번 부르므로 시간이 더 걸립니다.">
+            <input type="checkbox" checked={useAgentAi} onChange={(e) => setUseAgentAi(e.target.checked)} />
+            AI 영역 전문가(근거 검색)
           </label>
           <label className="flex items-center gap-1.5 text-xs font-semibold text-navy-700"
             title="7개 영역 평가를 AI 임상 영양사가 어르신별로 함께 보고, 영역 간 충돌 조정 · 허용 범위 안 기준 조정 · 문제 우선순위 재평가를 합니다 (NutriOrion Stage 2). 우선순위는 대체찬 배분에 쓰입니다.">
@@ -1867,7 +1873,7 @@ function StockEntry({ onSaved, items }) {
 
 const SRC_SHORT = {
   KDRI2025: '2025 영양소 섭취기준', ESPEN_GERIATRIC: 'ESPEN 노인영양', ESPEN_DEMENTIA: 'ESPEN 치매영양', IDDSI: 'IDDSI',
-  LTC_MEAL_GUIDE: '복지부 급식관리', KSH_HTN_2026: '고혈압학회 2026', KDA_DM_2025: '당뇨병학회 2025', SARCOPENIA_KR: '근감소증 종설',
+  LTC_MEAL_GUIDE: '복지부 급식관리', KSH_HTN_2026: '고혈압학회 2026', KDA_DM_2025: '당뇨병학회 2025', SARCOPENIA_KR: '근감소증 종설', DRUG_FOOD: '약물-식품 규칙', BRAIN_DIET: '뇌건강 식사 근거', MFDS_EASY: '식약처 e약은요',
 }
 const AGENT_LABEL = { body: '신체·영양', diabetes: '당뇨', hypertension: '고혈압', cognition: '인지·정서', oral: '구강·연하',
   intake: '섭취·선호', medication: '약물·알레르기', base: '기본 기준' }
@@ -1907,11 +1913,16 @@ function CarePlan({ run, eid, setErr }) {
           </div>
           <div className="space-y-2">
             <div><p className="font-bold text-muted mb-0.5">I 중재</p>
-              <ul className="space-y-0.5">{(plan.intervention || []).map((x, i) => <li key={i}><b className="text-navy-900">{x.goal}</b> · {x.action}</li>)}</ul></div>
+              <ul className="space-y-0.5">{(plan.intervention || []).map((x, i) => <li key={i}><b className="text-navy-900">{x.goal}</b> · {x.action}{x.auto && <span className="badge bg-slate-100 text-slate-600 ml-1" title="배식 결과를 보고 시스템이 붙인 권장">자동</span>}</li>)}</ul></div>
             <div><p className="font-bold text-muted mb-0.5">M 모니터링</p>
               <ul className="list-disc pl-4 space-y-0.5">{(plan.monitoring || []).map((x, i) => <li key={i}>{x}</li>)}</ul></div>
           </div>
           <p className="md:col-span-2 text-navy-800"><b>담당자 요약</b> {plan.staff_summary}</p>
+          {(plan.to_confirm || []).length > 0 && <p className="md:col-span-2 text-amber-800"><b>추가 확인 정보</b> · {plan.to_confirm.join(' · ')}</p>}
+          {(plan.evidence || []).length > 0 && (
+            <div className="md:col-span-2 text-[11px] text-muted"><b className="text-navy-800">근거</b>{' '}
+              {plan.evidence.map((e) => <span key={e.id} className="mr-2"><b className="text-navy-800">[{e.id}]</b> {e.short} — {e.조항}</span>)}</div>
+          )}
           <p className="md:col-span-2 text-[11px] text-muted">{plan.model} · {plan.latency_sec}초 · {plan.created_at} · 프롬프트 {plan.prompt_version}
             {(plan.warnings || []).length > 0 && <span className="text-amber-700"> · ⚠ {plan.warnings.join(' · ')} — 숫자는 위 평가표로 확인하세요</span>}</p>
         </div>
@@ -1920,10 +1931,104 @@ function CarePlan({ run, eid, setErr }) {
   )
 }
 
+// 우선순위 2단계 (backend agents/base.py 와 같은 규칙 — 예전 설계 결과에는 level 이 없어서 여기서도 판정)
+const SAFETY_CODES = new Set(['allergy', 'aspiration_risk', 'texture_mismatch', 'chewing', 'hypoglycemia_risk'])
+const issueLevel = (i) => i.level || (SAFETY_CODES.has(i.code) || i.agent === 'medication' ? 1 : 2)
+
+/* Stage 1 AI 영역 전문가 판단 (근거 검색 RAG) — 요약 · 우려 · 추가 확인 · 근거 문단 */
+function AgentLlm({ g }) {
+  const l = g.llm
+  if (!l) return null
+  if (l.mode !== 'llm') return l.note ? <p className="mt-1 text-[11px] text-muted">{l.note}</p> : null
+  return (
+    <div className="mt-1.5 space-y-1 border-t border-navy-100 pt-1.5">
+      {l.summary && <p className="text-violet-900 leading-5"><span className="badge bg-violet-50 text-violet-700 mr-1">AI</span>{l.summary}</p>}
+      {(l.concerns || []).map((x, k) => <p key={`c${k}`} className="text-amber-800 leading-5">⚠ {x}</p>)}
+      {(l.missing || []).length > 0 && <p className="text-muted leading-5">추가 확인: {l.missing.join(' · ')}</p>}
+      {(g.evidence || []).length > 0 && (
+        <details>
+          <summary className="cursor-pointer text-[11px] text-navy-700">근거 문단 {g.evidence.length}개</summary>
+          <ul className="mt-1 space-y-0.5 text-[11px] text-muted">
+            {g.evidence.map((e) => (
+              <li key={e.tag}><b className="text-navy-800">{e.tag}</b> {SRC_SHORT[e.source_id] || e.short} — {e.section}{e.page ? ` · p.${e.page}` : ''}{e.kind === 'search' ? ' (검색)' : ''}</li>
+            ))}
+          </ul>
+        </details>
+      )}
+      {(l.warnings || []).length > 0 && <p className="text-[11px] text-amber-700" title={l.warnings.join('\n')}>검증 경고 {l.warnings.length}건</p>}
+    </div>
+  )
+}
+
+const agentName = (g) => (String(g || '').startsWith('specialist:') ? '질환 전문가' : AGENT_LABEL[g] || g)
+
+/* [3단계] 종합·안전성 검증 — 안전성 → 우선순위(파레토) → 지침 충돌 조정 → 약물·질환 강제 제약 (agents/synthesis.py) */
+function SynthesisBox({ s }) {
+  if (!s) return null
+  return (
+    <div className="rounded-xl bg-teal-50/60 ring-1 ring-teal-100 px-3 py-2 text-xs space-y-1.5">
+      <p className="font-bold text-teal-900">종합·안전성 검증 <span className="font-normal text-teal-700">(3단계 · 고정 순서{s.specialists_on ? ' · 충돌별 질환 전문가 AI' : ' · 규칙'})</span></p>
+      <ol className="space-y-1">
+        {(s.steps || []).map((st) => (
+          <li key={st.step}>
+            <b className="text-navy-900">{st.step}. {st.name}</b>
+            <ul className="pl-4 list-disc text-navy-800 leading-5">{st.items.map((t, k) => <li key={k}>{t}</li>)}</ul>
+          </li>
+        ))}
+      </ol>
+      {(s.conflicts || []).filter((c) => c.specialist).map((c) => {
+        const sp = c.specialist
+        return (
+          <div key={c.id} className="border-t border-teal-100 pt-1">
+            <p><span className="badge bg-white text-teal-700">{sp.specialist || '전문가'}</span> {c.title}
+              {sp.mode !== 'llm' && <span className="text-muted"> — {sp.note}</span>}</p>
+            {sp.mode === 'llm' && <>
+              <p className="text-violet-900 leading-5">{sp.resolution}</p>
+              {(sp.adjustments || []).map((x, k) => <p key={k}>기준 {x.label} {x.before} → <b>{x.after}</b>{x.clamped ? ' (허용 범위로 맞춤)' : ''} — {x.reason}</p>)}
+              {(sp.rescore || []).map((x, k) => <p key={`r${k}`}>우선순위 {x.title}: S {x.before.priority} → <b>{x.after.priority}</b> — {x.reason}</p>)}
+              {(sp.evidence || []).length > 0 && (
+                <details><summary className="cursor-pointer text-[11px] text-navy-700">근거 문단 {sp.evidence.length}개</summary>
+                  <ul className="mt-1 space-y-0.5 text-[11px] text-muted">{sp.evidence.map((e) => <li key={e.tag}><b className="text-navy-800">{e.tag}</b> {SRC_SHORT[e.source_id] || e.short} — {e.section}{e.kind === 'search' ? ' (검색)' : ''}</li>)}</ul>
+                </details>
+              )}
+              {(sp.warnings || []).length > 0 && <p className="text-[11px] text-amber-700" title={sp.warnings.join('\n')}>검증 경고 {sp.warnings.length}건</p>}
+            </>}
+          </div>
+        )
+      })}
+      {(s.to_confirm || []).length > 0 && <p className="text-amber-800 leading-5"><b>추가 확인 정보</b> · {s.to_confirm.join(' · ')}</p>}
+    </div>
+  )
+}
+
+function PriorityRow({ i }) {
+  const l1 = issueLevel(i) === 1
+  const ai = i.scores_rule && Math.abs((i.scores_rule.priority ?? i.priority) - i.priority) > 0.0005
+  return (
+    <tr className="border-b border-navy-50 last:border-0">
+      <td className="py-1 pr-2 w-14 tabular-nums font-bold text-navy-900" title={l1 ? `안전성 — 점수(S ${i.priority.toFixed(2)})와 무관하게 최우선` : i.priority_stage1 != null ? `영역 평가 ${i.priority_stage1} → AI 재평가` : undefined}>
+        {l1 ? <span className="badge bg-rose-50 text-rose-700">안전</span> : <>{i.priority.toFixed(2)}{i.priority_stage1 != null && <span className="text-violet-600">*</span>}{ai && <span className="text-sky-600" title={`규칙 S ${i.scores_rule.priority} → AI 영역 전문가 ${i.priority}`}>†</span>}{(i.adjusted_by || []).length > 0 && <span className="text-teal-600" title={`3단계 종합에서 조정: ${i.adjusted_by.join(', ')}${i.scores_before_synthesis ? ` (S ${i.scores_before_synthesis.priority} → ${i.priority})` : ''}`}>‡</span>}</>}
+      </td>
+      <td className="py-1 pr-2 whitespace-nowrap"><span className="badge bg-white ring-1 ring-navy-100 text-navy-700">{AGENT_LABEL[i.agent] || i.agent}</span></td>
+      <td className="py-1 pr-2 font-semibold text-navy-900">{i.pareto_rank > 0 && <span className="badge bg-slate-100 text-slate-600 mr-1" title="파레토 묶음 — 심각도·시급성·개선 가능성 세 가지 모두에서 앞서는 다른 문제가 없으면 1묶음">{i.pareto_rank}묶음</span>}{i.title}
+        {i.rationale && <p className="font-normal text-[11px] text-violet-800 leading-4 mt-0.5">{i.rationale}</p>}</td>
+      <td className="py-1 pr-2 whitespace-nowrap"><span className={`badge ${i.action === 'avoid' ? 'bg-rose-50 text-rose-700' : i.action === 'check' ? 'bg-amber-50 text-amber-800' : 'bg-slate-100 text-slate-600'}`}>{ACTION_LABEL[i.action] || i.action}</span></td>
+      <td className="py-1 pr-2 text-muted">{(i.evidence || []).join(' · ')}</td>
+      <td className="py-1 text-muted whitespace-nowrap">{SRC_SHORT[i.source] || i.source}</td>
+    </tr>
+  )
+}
+
 function AgentPanel({ a }) {
   if (!a) return <p className="text-xs text-muted">이 설계에는 영역별 에이전트 평가가 없습니다. 식단 설계를 다시 실행하면 함께 계산됩니다.</p>
   const syn = a.synth || {}
-  const pri = (syn.priorities || []).filter((i) => i.priority >= 0.3)
+  const all = syn.priorities || []
+  const pri1 = all.filter((i) => issueLevel(i) === 1)
+  const pareto = all.some((i) => i.pareto_rank != null)
+  // 3단계 이후 결과는 백엔드 순서(파레토 묶음 → S) 그대로, 예전 결과는 S 순
+  const pri2 = all.filter((i) => issueLevel(i) === 2 && i.priority >= 0.3)
+  if (!pareto) pri2.sort((x, y) => y.priority - x.priority)
+  const pri = [...pri1, ...pri2]
   const rf = a.refine
   return (
     <div className="space-y-3">
@@ -1938,6 +2043,9 @@ function AgentPanel({ a }) {
             <p key={k}><span className="badge bg-white text-violet-700">기준 조정</span> {x.label} {x.before} → <b>{x.after}</b>{x.clamped ? ' (허용 범위로 맞춤)' : ''} — {x.reason}</p>
           ))}
           {rf.target_energy && <p><span className="badge bg-white text-violet-700">목표 열량</span> {rf.target_energy.before} → <b>{rf.target_energy.after}</b>kcal/끼{rf.target_energy.clamped ? ' (허용 범위로 맞춤)' : ''} — {rf.target_energy.reason}</p>}
+          {(rf.energy_rescaled || []).length > 0 && (
+            <p><span className="badge bg-white text-violet-700">열량 기준 재계산</span> 바뀐 목표 열량으로 다시 계산: {rf.energy_rescaled.map((x) => `${x.label} ${x.before} → ${x.final ?? x.after}`).join(' · ')}</p>
+          )}
           {(rf.rescore || []).map((x, k) => (
             <p key={k}><span className="badge bg-white text-violet-700">우선순위</span> {x.title}: S {x.before.priority} → <b>{x.after.priority}</b> — {x.reason}</p>
           ))}
@@ -1945,32 +2053,30 @@ function AgentPanel({ a }) {
         </div>
       )}
       {rf && rf.mode === 'rule' && <p className="text-[11px] text-muted">AI 종합 판단 실패 → 영역 평가 규칙 결과 사용 ({rf.note})</p>}
+      <SynthesisBox s={syn.synthesis} />
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2">
         {a.agents.map((g) => (
           <div key={g.agent} className={`rounded-xl px-3 py-2 text-xs ${g.active ? 'bg-navy-50 ring-1 ring-navy-100' : 'bg-slate-50 text-slate-400'}`}>
             <p className="font-bold text-navy-900">{g.label}{!g.active && <span className="ml-1 font-normal">· 해당 없음</span>}</p>
             {g.active && <p className="mt-0.5 text-navy-700 leading-5">{g.summary || '특이 사항 없음'}</p>}
+            {g.active && <AgentLlm g={g} />}
           </div>
         ))}
       </div>
       {pri.length > 0 && (
         <div>
-          <p className="text-xs font-bold text-muted mb-1">우선순위 (S = 0.5×심각도 + 0.3×시급성 + 0.2×개선 가능성) — 높을수록 대체찬을 먼저 배분 (Stage 3)</p>
+          <p className="text-xs font-bold text-muted mb-1">우선순위 — 높을수록 대체찬을 먼저 배분 (Stage 3)</p>
           <div className="overflow-x-auto">
             <table className="w-full text-xs min-w-[640px]">
               <tbody>
-                {pri.slice(0, 8).map((i, k) => (
-                  <tr key={k} className="border-b border-navy-50 last:border-0">
-                    <td className="py-1 pr-2 w-12 tabular-nums font-bold text-navy-900" title={i.priority_stage1 != null ? `영역 평가 ${i.priority_stage1} → AI 재평가` : undefined}>
-                      {i.priority.toFixed(2)}{i.priority_stage1 != null && <span className="text-violet-600">*</span>}
-                    </td>
-                    <td className="py-1 pr-2 whitespace-nowrap"><span className="badge bg-white ring-1 ring-navy-100 text-navy-700">{AGENT_LABEL[i.agent] || i.agent}</span></td>
-                    <td className="py-1 pr-2 font-semibold text-navy-900">{i.title}</td>
-                    <td className="py-1 pr-2 whitespace-nowrap"><span className={`badge ${i.action === 'avoid' ? 'bg-rose-50 text-rose-700' : i.action === 'check' ? 'bg-amber-50 text-amber-800' : 'bg-slate-100 text-slate-600'}`}>{ACTION_LABEL[i.action] || i.action}</span></td>
-                    <td className="py-1 pr-2 text-muted">{(i.evidence || []).join(' · ')}</td>
-                    <td className="py-1 text-muted whitespace-nowrap">{SRC_SHORT[i.source] || i.source}</td>
-                  </tr>
-                ))}
+                {pri1.length > 0 && (
+                  <tr><td colSpan={6} className="pt-1 pb-0.5 text-[11px] font-bold text-rose-700">Level 1 · 안전성 — 알레르기·연하 안전·약물 상호작용, 점수와 무관하게 최우선 확인</td></tr>
+                )}
+                {pri1.map((i, k) => <PriorityRow key={`a${k}`} i={i} />)}
+                {pri2.length > 0 && (
+                  <tr><td colSpan={6} className="pt-2 pb-0.5 text-[11px] font-bold text-navy-700">Level 2 · 영양 중재 — {pareto ? '파레토 묶음(심각도·시급성·개선 가능성) → 묶음 안에서 ' : ''}S = 0.5×심각도 + 0.3×시급성 + 0.2×개선 가능성 순</td></tr>
+                )}
+                {pri2.slice(0, Math.max(3, 8 - pri1.length)).map((i, k) => <PriorityRow key={`b${k}`} i={i} />)}
               </tbody>
             </table>
           </div>
@@ -1984,7 +2090,10 @@ function AgentPanel({ a }) {
               const [lab, op, unit] = FIELD_LABEL[k] || [k, '', '']
               return (
                 <span key={k} className="badge bg-white ring-1 ring-navy-100 text-navy-800" title={`근거: ${SRC_SHORT[c.source] || c.source || '-'}${c.others?.length ? ` · 같은 항목 제시: ${c.others.map((o) => AGENT_LABEL[o] || o).join(', ')}` : ''}`}>
-                  {lab} {op}{Math.round(c.value * 10) / 10}{unit} <span className="text-muted">· {AGENT_LABEL[c.agent] || c.agent}</span>
+                  {lab} {op}{Math.round(c.value * 10) / 10}{unit} <span className="text-muted">· {agentName(c.agent)}</span>
+                  {c.specialist_from != null && <span className="text-teal-600" title={`충돌 전문가 조정 ${c.specialist_from} → ${c.value}`}> ‡</span>}
+                  {c.locked_by && <span className="text-rose-600" title={`${c.locked_by} — 1단계 값으로 고정`}> 🔒</span>}
+                  {c.energy_rescaled_from != null && <span className="text-violet-600" title={`목표 열량 변경으로 ${c.energy_rescaled_from} → 재계산`}> ↻</span>}
                 </span>
               )
             })}
