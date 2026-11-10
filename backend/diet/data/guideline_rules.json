@@ -4,9 +4,10 @@
   "source = care/knowledge/sources.json 의 문헌 id, section = care/knowledge/docs/<source>.md 의 '## ' 제목 (근거 검색에서 그 문단을 바로 찾는 열쇠).",
   "status: 일치(문단에 같은 값) · 환산(문단의 하루 값을 끼니로 나누는 등 계산) · 불일치(문단과 값이 다름) · 근거약함(문단에 수치가 없거나 다른 근거) · 설계값(문헌값이 아닌 시스템 설계 결정)",
   "에이전트 동작은 이 파일 값으로 정해진다 — 값을 바꾸면 바로 반영되므로, 바꿀 때는 근거 문단과 status·note 도 함께 고친다.",
-  "점검: python -m scripts.check_diet_knowledge"
+  "점검: python -m scripts.check_diet_knowledge",
+  "[2026-11-10] 영양 기준 구조: ① 최적화(공통) = KDRI 만 (base_standard.py, kdri.* 와 같은 값) ② 개인화(배식률·대체찬) = 영양소마다 — 질환(당뇨·고혈압)이 정한 영양소는 식약처 식단형 식사관리식품 규격과 학회 진료지침 중 더 엄격한 값, 질환이 정하지 않은 영양소는 KDRI. 나트륨만 나이별 KDRI 만성질환위험감소섭취량과도 비교(질환자가 일반 어르신보다 느슨해지지 않게). 목표 열량 = ESPEN 30 kcal/kg/일(비만은 조정체중) ÷ 3 을 열량 범위(질환 500~800 식단형, 그 외 450~700 KDRI) 안으로"
  ],
- "version": "2026-11-10b",
+ "version": "2026-11-10d",
  "thresholds": {
   "bmi_underweight": {
    "value": 18.5,
@@ -125,29 +126,114 @@
    "source": "ESPEN_GERIATRIC",
    "section": "R2 단백질 필요량",
    "status": "설계값",
-   "note": "BMI 25 이상이면 단백질 계산에 조정체중(BMI 25 에 해당하는 체중 = 25 × 키²) 사용. 임상 관례 — ESPEN 문단은 체중당 권고만 제시"
+   "note": "BMI 25 이상이면 열량·단백질 계산에 조정체중 사용 (조정체중 공식은 std_bmi_male/female · adj_weight_factor). 임상 관례 — ESPEN 문단은 체중당 권고만 제시"
+  },
+  "std_bmi_male": {
+   "value": 22,
+   "source": "ESPEN_GERIATRIC",
+   "section": "R1 에너지 필요량",
+   "status": "설계값",
+   "note": "[2026-11-10] 표준체중 = 키(m)² × 22 (남자). 국내 임상영양 관례"
+  },
+  "std_bmi_female": {
+   "value": 21,
+   "source": "ESPEN_GERIATRIC",
+   "section": "R1 에너지 필요량",
+   "status": "설계값",
+   "note": "[2026-11-10] 표준체중 = 키(m)² × 21 (여자). 국내 임상영양 관례"
+  },
+  "adj_weight_factor": {
+   "value": 0.25,
+   "source": "ESPEN_GERIATRIC",
+   "section": "R1 에너지 필요량",
+   "status": "설계값",
+   "note": "[2026-11-10] 조정체중 = 표준체중 + (실제체중 − 표준체중) × 0.25. 비만(BMI 25 이상)일 때만, 열량(30 kcal/kg)·단백질(g/kg) 모두"
   }
  },
  "constraints": {
-  "body.energy_min": {
+  "kdri.energy_min": {
    "nutrient": "energy",
    "bound": "min",
-   "value": 500,
+   "value": 450,
    "unit": "abs",
-   "source": "LTC_MEAL_GUIDE",
-   "section": "길라잡이 어르신 특성에 맞는 급식 기준",
-   "status": "근거약함",
-   "note": "문단은 '표준체중을 유지할 적정 분량'만 제시. 500~800kcal/끼는 기존 고령자 급식 범위(base_standard)"
+   "source": "KDRI2025",
+   "section": "KDRI 75세 이상 여자",
+   "status": "환산",
+   "note": "[2026-11-10] 에너지필요추정량 75세 이상 여 1,500 kcal/일 × 0.9 ÷ 3 = 450. 공통 범위 = 필요추정량(여~남) ±10%"
   },
-  "body.energy_max": {
+  "kdri.energy_max": {
    "nutrient": "energy",
    "bound": "max",
-   "value": 800,
+   "value": 700,
    "unit": "abs",
-   "source": "LTC_MEAL_GUIDE",
-   "section": "길라잡이 어르신 특성에 맞는 급식 기준",
-   "status": "근거약함",
-   "note": "문단은 '표준체중을 유지할 적정 분량'만 제시. 500~800kcal/끼는 기존 고령자 급식 범위(base_standard)"
+   "source": "KDRI2025",
+   "section": "KDRI 75세 이상 남자",
+   "status": "환산",
+   "note": "[2026-11-10] 에너지필요추정량 75세 이상 남 1,900 kcal/일 × 1.1 ÷ 3 ≈ 697 → 700"
+  },
+  "kdri.protein_min": {
+   "nutrient": "protein",
+   "bound": "min",
+   "value": 16.7,
+   "unit": "abs",
+   "source": "KDRI2025",
+   "section": "KDRI 75세 이상 여자",
+   "status": "환산",
+   "note": "권장섭취량 75세 이상 여 50 g/일 ÷ 3 (남 60 g). base_standard.PROTEIN_DAILY_MIN"
+  },
+  "kdri.fat_min": {
+   "nutrient": "fat",
+   "bound": "min",
+   "value": 0.15,
+   "unit": "pctE",
+   "kcal_per_g": 9,
+   "source": "KDRI2025",
+   "section": "KDRI 에너지 적정비율",
+   "status": "일치",
+   "note": "지방 에너지적정비율 15~30%"
+  },
+  "kdri.fat_max": {
+   "nutrient": "fat",
+   "bound": "max",
+   "value": 0.3,
+   "unit": "pctE",
+   "kcal_per_g": 9,
+   "source": "KDRI2025",
+   "section": "KDRI 에너지 적정비율",
+   "status": "일치",
+   "note": "지방 에너지적정비율 15~30%"
+  },
+  "kdri.sat_fat_max": {
+   "nutrient": "sat_fat",
+   "bound": "max",
+   "value": 0.07,
+   "unit": "pctE",
+   "kcal_per_g": 9,
+   "source": "KDRI2025",
+   "section": "KDRI 에너지 적정비율",
+   "status": "일치",
+   "note": "포화지방 7% 미만"
+  },
+  "kdri.sugar_max": {
+   "nutrient": "sugar",
+   "bound": "max",
+   "value": 0.2,
+   "unit": "pctE",
+   "kcal_per_g": 4,
+   "source": "KDRI2025",
+   "section": "KDRI 에너지 적정비율",
+   "status": "일치",
+   "note": "총당류 10~20% → 상한 20%"
+  },
+  "kdri.fiber_min": {
+   "nutrient": "fiber",
+   "bound": "min",
+   "value": 8.3,
+   "unit": "abs",
+   "source": "KDRI2025",
+   "section": "KDRI 75세 이상 여자",
+   "status": "환산",
+   "note": "충분섭취량 75세 이상 여 25 g/일 ÷ 3 (남 30 g). base_standard.FIBER_DAILY_MIN"
   },
   "body.protein_need_per_kg": {
    "nutrient": "protein",
@@ -175,20 +261,20 @@
    "value": 0.1,
    "unit": "pctE",
    "kcal_per_g": 4,
-   "source": "KDA_DM_2025",
-   "section": "당뇨 의학영양요법 권고 6 첨가당과 가당음료",
-   "status": "근거약함",
-   "note": "문단은 '첨가당 최소화·가당음료 줄이기'만 권고(수치 없음), 총당류 급원(생과일·우유)은 유익하다고 함. 10%E 는 WHO 유리당 기준에 가까움"
+   "source": "MFDS_MEAL_STD",
+   "section": "식품규격 당뇨환자용 식단형 식품",
+   "status": "일치",
+   "note": "[2026-11-10] 당뇨환자용 식단형 식품·영양조제식품 규격: 단당류·이당류 유래 열량 총열량의 10% 미만. 시스템은 메뉴 DB 의 총당류로 적용(과일·우유 당 포함 → 규격보다 약간 엄격). 당뇨병 진료지침 권고 6(첨가당 최소화)과 방향 같음"
   },
   "diabetes.protein_min": {
    "nutrient": "protein",
    "bound": "min",
    "value": 18,
    "unit": "abs",
-   "source": "KDA_DM_2025",
-   "section": "당뇨 의학영양요법 권고 7 단백질을 제한하지 않는다",
-   "status": "근거약함",
-   "note": "문단은 '단백질을 제한하지 않는다'(0.8 g/kg 미만 제한 금지)이며 끼니 18 g 하한은 문단에 없음"
+   "source": "MFDS_MEAL_STD",
+   "section": "식품규격 당뇨환자용 식단형 식품",
+   "status": "일치",
+   "note": "[2026-11-10] 당뇨환자용 식단형 식품 규격: 단백질 18 g 이상(한 끼). 당뇨병 진료지침 권고 7(단백질 제한 안 함)과 방향 같음"
   },
   "diabetes.sat_fat_max": {
    "nutrient": "sat_fat",
@@ -199,7 +285,7 @@
    "source": "KDA_DM_2025",
    "section": "당뇨 의학영양요법 권고 8 지방의 종류",
    "status": "일치",
-   "note": "[2026-11-10] 10% → 7% 로 맞춤. 문단: '포화지방산은 총에너지의 7% 이내'"
+   "note": "[2026-11-10] 10% → 7% 로 맞춤. 문단: '포화지방산은 총에너지의 7% 이내' · 식약처 당뇨환자용 식단형 식품 규격은 10% 미만 — 더 엄격한 진료지침 값 사용"
   },
   "diabetes.sodium_max": {
    "nutrient": "sodium",
@@ -209,7 +295,7 @@
    "source": "KDA_DM_2025",
    "section": "당뇨 의학영양요법 권고 9 나트륨 — 하루 2,300 mg 이내",
    "status": "환산",
-   "note": "[2026-11-10] 1,350 → 767 mg/끼 (하루 2,300 mg ÷ 3). 1,500 mg/일 미만 제한은 비권장. 나이별 기준(600~633 mg)이 더 엄격하면 그 값"
+   "note": "[2026-11-10] 1,350 → 767 mg/끼 (하루 2,300 mg ÷ 3). 1,500 mg/일 미만 제한은 비권장. 나이별 기준(600~633 mg)이 더 엄격하면 그 값 · 식약처 당뇨환자용 식단형 식품 규격 1,350 mg 이하보다 엄격"
   },
   "hypertension.fat_min": {
    "nutrient": "fat",
@@ -217,10 +303,10 @@
    "value": 0.15,
    "unit": "pctE",
    "kcal_per_g": 9,
-   "source": "KSH_HTN_2026",
-   "section": "고혈압 권고 25 건강한 식사요법",
-   "status": "근거약함",
-   "note": "문단은 '지방 섭취 제한'(수치 없음). 15~30%E 는 KDRI 에너지 적정비율·당뇨 지침 권고 8"
+   "source": "MFDS_MEAL_STD",
+   "section": "식품규격 고혈압환자용 식단형 식품",
+   "status": "일치",
+   "note": "[2026-11-10] 고혈압환자용 식단형 식품 규격: 지방 유래열량 15~30%, 포화지방 유래열량 7% 이하. 고혈압 진료지침 권고 25(지방·포화지방 제한)와 방향 같음"
   },
   "hypertension.fat_max": {
    "nutrient": "fat",
@@ -228,10 +314,10 @@
    "value": 0.3,
    "unit": "pctE",
    "kcal_per_g": 9,
-   "source": "KSH_HTN_2026",
-   "section": "고혈압 권고 25 건강한 식사요법",
-   "status": "근거약함",
-   "note": "문단은 '지방 섭취 제한'(수치 없음). 15~30%E 는 KDRI 에너지 적정비율·당뇨 지침 권고 8"
+   "source": "MFDS_MEAL_STD",
+   "section": "식품규격 고혈압환자용 식단형 식품",
+   "status": "일치",
+   "note": "[2026-11-10] 고혈압환자용 식단형 식품 규격: 지방 유래열량 15~30%, 포화지방 유래열량 7% 이하. 고혈압 진료지침 권고 25(지방·포화지방 제한)와 방향 같음"
   },
   "hypertension.sat_fat_max": {
    "nutrient": "sat_fat",
@@ -239,10 +325,10 @@
    "value": 0.07,
    "unit": "pctE",
    "kcal_per_g": 9,
-   "source": "KSH_HTN_2026",
-   "section": "고혈압 권고 20 체중 조절",
-   "status": "근거약함",
-   "note": "문단은 '포화지방산 최소화'(수치 없음). 7%E 는 당뇨 지침 권고 8·KDRI 와 같은 값"
+   "source": "MFDS_MEAL_STD",
+   "section": "식품규격 고혈압환자용 식단형 식품",
+   "status": "일치",
+   "note": "[2026-11-10] 고혈압환자용 식단형 식품 규격: 지방 유래열량 15~30%, 포화지방 유래열량 7% 이하. 고혈압 진료지침 권고 25(지방·포화지방 제한)와 방향 같음"
   },
   "hypertension.sodium_max": {
    "nutrient": "sodium",
@@ -252,27 +338,27 @@
    "source": "KSH_HTN_2026",
    "section": "고혈압 권고 21 소금 섭취 제한",
    "status": "환산",
-   "note": "[2026-11-10] 1,350 → 667 mg/끼 (하루 소금 5 g = 나트륨 2,000 mg ÷ 3). 나이별 기준(600~633 mg)이 더 엄격하면 그 값"
+   "note": "[2026-11-10] 1,350 → 667 mg/끼 (하루 소금 5 g = 나트륨 2,000 mg ÷ 3). 나이별 기준(600~633 mg)이 더 엄격하면 그 값 · 식약처 고혈압환자용 식단형 식품 규격 800 mg 미만보다 엄격"
   },
   "hypertension.potassium_min": {
    "nutrient": "potassium",
    "bound": "min",
-   "value": 1167,
+   "value": 500,
    "unit": "abs",
-   "source": "KDRI2025",
-   "section": "KDRI 75세 이상 여자",
+   "source": "KSH_HTN_2026",
+   "section": "고혈압 칼륨 섭취",
    "status": "환산",
-   "note": "[2026-11-10] 700 → 1,167 mg/끼 (KDRI 충분섭취량 3,500 mg/일 ÷ 3). 고혈압 지침 문단: 채소·과일로 칼륨 섭취(1.5~3 g 이상)·만성콩팥병은 주의"
+   "note": "[2026-11-10] 채소·과일 4~5접시로 하루 1.5~3 g 이상 → 1,500 ÷ 3 = 500 mg/끼 (식단형 규격 700 이 더 엄격). 이전 값 1,167(KDRI 충분섭취량 ÷ 3)은 공통 기준에서 칼륨을 모니터링만 하기로 해 제외"
   },
   "hypertension.fiber_min": {
    "nutrient": "fiber",
    "bound": "min",
-   "value": 8.3,
+   "value": 7,
    "unit": "abs",
-   "source": "KDRI2025",
-   "section": "KDRI 75세 이상 여자",
-   "status": "환산",
-   "note": "[2026-11-10] 7 → 8.3 g/끼 (KDRI 충분섭취량 75세 이상 여 25 g/일 ÷ 3, 남 30 g 은 10 g). 공통 기준과 같은 값"
+   "source": "MFDS_MEAL_STD",
+   "section": "식품규격 고혈압환자용 식단형 식품",
+   "status": "일치",
+   "note": "[2026-11-10] 고혈압환자용 식단형 식품: 식이섬유 7 g 이상 (학회는 수치 없음). KDRI 공통 8.3 g 이 더 엄격하므로 최종값은 8.3"
   },
   "base.sodium_daily_65_74": {
    "nutrient": "sodium",
@@ -313,6 +399,129 @@
    "section": "KDRI 75세 이상 여자",
    "status": "일치",
    "note": "[2026-11-10] 20 → 25 g/일 (2025 KDRI 충분섭취량 75세 이상 여자 25 g, 남자 30 g). base_standard.py FIBER_DAILY_MIN"
+  },
+  "diabetes.energy_min": {
+   "nutrient": "energy",
+   "bound": "min",
+   "value": 500,
+   "unit": "abs",
+   "source": "MFDS_MEAL_STD",
+   "section": "식품규격 식단형 식사관리식품 한 끼 열량 500~800 kcal",
+   "status": "일치",
+   "note": "식단형 식사관리식품 한 끼 500~800 kcal"
+  },
+  "diabetes.energy_max": {
+   "nutrient": "energy",
+   "bound": "max",
+   "value": 800,
+   "unit": "abs",
+   "source": "MFDS_MEAL_STD",
+   "section": "식품규격 식단형 식사관리식품 한 끼 열량 500~800 kcal",
+   "status": "일치",
+   "note": "식단형 식사관리식품 한 끼 500~800 kcal"
+  },
+  "diabetes.sat_fat_max_mfds": {
+   "nutrient": "sat_fat",
+   "bound": "max",
+   "value": 0.1,
+   "unit": "pctE",
+   "kcal_per_g": 9,
+   "source": "MFDS_MEAL_STD",
+   "section": "식품규격 당뇨환자용 식단형 식품",
+   "status": "일치",
+   "note": "당뇨환자용 식단형 식품: 포화지방 유래열량 10% 미만 (학회 7% 가 더 엄격)"
+  },
+  "diabetes.sodium_max_mfds": {
+   "nutrient": "sodium",
+   "bound": "max",
+   "value": 1350,
+   "unit": "abs",
+   "source": "MFDS_MEAL_STD",
+   "section": "식품규격 당뇨환자용 식단형 식품",
+   "status": "일치",
+   "note": "당뇨환자용 식단형 식품: 나트륨 1,350 mg 이하 (학회 767·KDRI 나이별 값이 더 엄격)"
+  },
+  "diabetes.fiber_min": {
+   "nutrient": "fiber",
+   "bound": "min",
+   "value": 8.3,
+   "unit": "abs",
+   "source": "KDA_DM_2025",
+   "section": "당뇨 의학영양요법 탄수화물의 질 — 식이섬유",
+   "status": "환산",
+   "note": "[2026-11-10] 하루 식이섬유 25~29 g → 25 ÷ 3. 식단형 규격은 수치 없음(식이섬유 높은 식품 우선)"
+  },
+  "hypertension.energy_min": {
+   "nutrient": "energy",
+   "bound": "min",
+   "value": 500,
+   "unit": "abs",
+   "source": "MFDS_MEAL_STD",
+   "section": "식품규격 식단형 식사관리식품 한 끼 열량 500~800 kcal",
+   "status": "일치",
+   "note": "식단형 식사관리식품 한 끼 500~800 kcal"
+  },
+  "hypertension.energy_max": {
+   "nutrient": "energy",
+   "bound": "max",
+   "value": 800,
+   "unit": "abs",
+   "source": "MFDS_MEAL_STD",
+   "section": "식품규격 식단형 식사관리식품 한 끼 열량 500~800 kcal",
+   "status": "일치",
+   "note": "식단형 식사관리식품 한 끼 500~800 kcal"
+  },
+  "hypertension.sodium_max_mfds": {
+   "nutrient": "sodium",
+   "bound": "max",
+   "value": 800,
+   "unit": "abs",
+   "source": "MFDS_MEAL_STD",
+   "section": "식품규격 고혈압환자용 식단형 식품",
+   "status": "일치",
+   "note": "고혈압환자용 식단형 식품: 나트륨 800 mg 미만 (학회 667·KDRI 나이별 값이 더 엄격)"
+  },
+  "hypertension.potassium_min_mfds": {
+   "nutrient": "potassium",
+   "bound": "min",
+   "value": 700,
+   "unit": "abs",
+   "source": "MFDS_MEAL_STD",
+   "section": "식품규격 고혈압환자용 식단형 식품",
+   "status": "일치",
+   "note": "고혈압환자용 식단형 식품: 칼륨 700 mg 이상"
+  },
+  "body.energy_per_kg": {
+   "nutrient": "energy",
+   "bound": "target",
+   "value": 30,
+   "unit": "kcal_per_kg_day",
+   "source": "ESPEN_GERIATRIC",
+   "section": "R1 에너지 필요량",
+   "status": "일치",
+   "note": "[2026-11-10] 목표 열량 = 체중 × 30 kcal/일 ÷ 3. BMI 25 이상이면 조정체중(BMI 25 에 해당하는 체중, thresholds.protein_weight_bmi_cap) — 단백질과 같은 방식. 체중이 없으면 예전 BMI 점수 방식"
+  },
+  "kdri.carb_min": {
+   "nutrient": "carb",
+   "bound": "min",
+   "value": 0.55,
+   "unit": "pctE",
+   "kcal_per_g": 4,
+   "source": "KDRI2025",
+   "section": "KDRI 에너지 적정비율",
+   "status": "근거약함",
+   "note": "[2026-11-10] 탄수화물 에너지적정비율 55~65% — 배식률 최적화의 목표 범위(벌점)로만 사용. 근거 문서 문단에 탄수화물 비율 추가·원문 표 대조 필요"
+  },
+  "kdri.carb_max": {
+   "nutrient": "carb",
+   "bound": "max",
+   "value": 0.65,
+   "unit": "pctE",
+   "kcal_per_g": 4,
+   "source": "KDRI2025",
+   "section": "KDRI 에너지 적정비율",
+   "status": "근거약함",
+   "note": "위와 같음"
   }
  },
  "issues": {

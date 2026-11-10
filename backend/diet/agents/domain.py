@@ -51,7 +51,7 @@ def C(key: str) -> dict:
     return rules()["constraints"][key]
 
 
-E_MIN, E_MAX = C("body.energy_min")["value"], C("body.energy_max")["value"]
+E_MIN, E_MAX = C("kdri.energy_min")["value"], C("kdri.energy_max")["value"]   # 공통(KDRI) 끼니 열량 범위
 
 
 def _num(v, d=None):
@@ -87,6 +87,32 @@ def bp_hypertension(sbp, dbp) -> bool:
 
 
 # ─────────────────────────── 신체·영양 ───────────────────────────
+def _specs(agent) -> list:
+    """[2026-11-10] 그 영역의 끼니 기준 전부 (예: 당뇨 = 식단형 규격 + 당뇨병학회). 같은 영양소가 여러 개면
+    종합(manager.resolve_constraints)에서 KDRI 공통까지 셋 중 가장 엄격한 값이 고른다"""
+    pre = agent.NAME + "."
+    return [_spec(agent, k[len(pre):]) for k, r in rules()["constraints"].items()
+            if k.startswith(pre) and r.get("unit") in ("abs", "pctE")]
+
+
+def strictest(prefixes, nutrient: str, bound: str):
+    """요약 문구용: 여러 출처 중 가장 엄격한 절대값 (열량 비율 기준은 제외)"""
+    vals = [r["value"] for k, r in rules()["constraints"].items()
+            if k.split(".")[0] in prefixes and r["nutrient"] == nutrient and r["bound"] == bound and r.get("unit") == "abs"]
+    return (min(vals) if bound == "max" else max(vals)) if vals else None
+
+
+def adjusted_weight(w, h_cm, bmi, female) -> float:
+    """[2026-11-10] 열량·단백질 계산용 체중. BMI 25 이상(비만)이면 조정체중:
+    조정체중 = 표준체중 + (실제체중 − 표준체중) × 0.25,  표준체중 = 키(m)² × 22(남) / 21(여)
+    키가 없으면 BMI 로 키² 를 역산 (체중 ÷ BMI)"""
+    if not w or not bmi or bmi < T("protein_weight_bmi_cap"):
+        return w
+    h2 = (h_cm / 100) ** 2 if h_cm and h_cm > 100 else w / bmi
+    std = h2 * T("std_bmi_female" if female else "std_bmi_male")
+    return round(std + (w - std) * T("adj_weight_factor"), 1)
+
+
 def _spec(agent, key):
     """guideline_rules.json 기준값 → ConstraintSpec"""
     c = C(f"{agent.NAME}.{key}")
@@ -104,9 +130,21 @@ class BodyAgent(DomainAgent):
         bmi, age = c.get("bmi"), c.get("age") or 80
         female = bool(c.get("female"))
         # 목표 열량: BMI 기반 (허리둘레는 조사 항목에 없어 성별 기본값) — 기존 PatientProfile 과 같은 식
-        e = calc_target_energy(bmi or 22.0, 82.0 if female else 87.0, Sex.FEMALE if female else Sex.MALE)
+        #   [2026-11-10] 열량 범위는 공통(KDRI 450~700) 또는 질환(식단형 500~800)과 합친 범위 → 종합에서 다시 계산.
+        #   여기서는 BMI 점수(0~1)를 넘기고, 임시 목표 열량은 공통 범위로 계산
+        from ..patient_profile_final import bmi_score, waist_score
+        sex = Sex.FEMALE if female else Sex.MALE
+        score = max(0.0, min(1.0, bmi_score(bmi or 22.0) + waist_score(82.0 if female else 87.0, sex)))
+        e = calc_target_energy(bmi or 22.0, 82.0 if female else 87.0, sex, energy_min=E_MIN, energy_max=E_MAX)
+        a.outputs["energy_score"] = round(score, 3)
+        # [2026-11-10] ESPEN R1: 하루 30 kcal/kg — BMI 25 이상이면 조정체중 (단백질과 같은 방식)
+        w0, h0 = c.get("weight_kg"), c.get("height_cm")
+        if w0:
+            wt0 = adjusted_weight(w0, h0, bmi, female)
+            e = round(C("body.energy_per_kg")["value"] * wt0 / 3, 0)
+            a.outputs["energy_by_weight"] = e
+            a.outputs["energy_weight_used"] = wt0
         a.outputs["target_energy"] = e
-        a.constraints += [_spec(self, "energy_min"), _spec(self, "energy_max")]
         w = c.get("weight_kg")
         if bmi is not None and bmi < T("bmi_underweight"):
             a.issues.append(self.issue(code="underweight", title=f"저체중 (BMI {bmi})", **SC("underweight"),
@@ -134,18 +172,16 @@ class BodyAgent(DomainAgent):
             risk = any(i.code in ("underweight", "malnutrition_risk", "sarcopenia_risk") for i in a.issues)
             per_kg = C("body.protein_per_kg_risk" if risk else "body.protein_need_per_kg")["value"]
             from ..base_standard import PROTEIN_DAILY_MIN
-            # 비만이면 실제 체중 대신 조정체중(BMI 기준값에 해당하는 체중)으로 계산 — 과도한 하한 방지
-            cap, wt = T("protein_weight_bmi_cap"), w
-            if bmi and bmi >= cap:
-                h = c.get("height_cm")
-                wt = round(cap * (h / 100) ** 2, 1) if h and h > 100 else round(w * cap / bmi, 1)
+            # 비만이면 실제 체중 대신 조정체중(표준체중 + 초과분 × 0.25)으로 계산 — 과도한 하한 방지
+            wt = adjusted_weight(w, c.get("height_cm"), bmi, female)
             need = round(max(PROTEIN_DAILY_MIN / 3, per_kg * wt / 3), 1)
             a.outputs["protein_need_meal"] = need
             a.outputs["protein_per_kg"] = per_kg
             if wt != w:
                 a.outputs["protein_weight_used"] = wt
             a.constraints.append(self.spec("protein", "min", need, source="ESPEN_GERIATRIC"))
-        a.summary = f"목표 열량 {e:.0f}kcal/끼" + (f" · BMI {bmi}" if bmi else "") + \
+        a.summary = f"목표 열량 {e:.0f}kcal/끼" + (" (30kcal/kg" + (f", 조정체중 {a.outputs['energy_weight_used']}kg" if a.outputs.get("energy_weight_used") != w else "") + ")"
+                                                 if "energy_by_weight" in a.outputs else "") + (f" · BMI {bmi}" if bmi else "") + \
                     (f" · 단백질 ≥{a.outputs['protein_need_meal']}g/끼 ({a.outputs['protein_per_kg']}g/kg"
                      + (f", 조정체중 {a.outputs['protein_weight_used']}kg" if "protein_weight_used" in a.outputs else "") + ")"
                      if "protein_need_meal" in a.outputs else "")
@@ -162,7 +198,7 @@ class DiabetesAgent(DomainAgent):
 
     def assess(self, c):
         a = self._a()
-        a.constraints += [_spec(self, k) for k in ("sugar_max", "protein_min", "sat_fat_max", "sodium_max")]
+        a.constraints += _specs(self)          # 식단형 규격 + 당뇨병학회 (더 엄격한 값은 종합에서)
         sp = C("diabetes.sugar_max")["value"]
         a.issues.append(self.issue(code="sugar_control", title=f"당류 관리 (끼니 열량의 {sp * 100:.0f}% 이하)", **SC("sugar_control"),
                                    nutrients=["sugar"], action="limit", evidence=["당뇨 진단"],
@@ -194,8 +230,7 @@ class HypertensionAgent(DomainAgent):
         dx = dx_rec or by_bp                 # 진단 기록이 없어도 혈압 기준을 넘으면 고혈압으로 판단
         a.outputs["hypertension_by_bp"] = by_bp and not dx_rec
         if dx:
-            a.constraints += [_spec(self, k) for k in ("fat_min", "fat_max", "sat_fat_max", "sodium_max",
-                                                       "potassium_min", "fiber_min")]
+            a.constraints += _specs(self)      # 식단형 규격 + 고혈압학회 (더 엄격한 값은 종합에서)
         stage = None
         if sbp or dbp:
             stage = 2 if ((sbp or 0) >= T("sbp_stage2") or (dbp or 0) >= T("dbp_stage2")) else 1 if by_bp else 0
@@ -218,8 +253,9 @@ class HypertensionAgent(DomainAgent):
                                        **SC("potassium_low"), nutrients=["potassium"], action="increase",
                                        evidence=[f"목측 섭취 {c['k_day']:.0f}mg/일"], source="KSH_HTN_2026"))
         a.summary = ("혈압 기준 고혈압 (진단 기록 없음) · " if a.outputs["hypertension_by_bp"] else "") + \
-                    (f"나트륨 ≤{C('hypertension.sodium_max')['value']:,.0f}mg/끼(나이별 기준이 더 엄격하면 그 값) · "
-                     f"칼륨 ≥{C('hypertension.potassium_min')['value']:.0f}mg · 식이섬유 ≥{C('hypertension.fiber_min')['value']:.0f}g") + \
+                    (f"나트륨 ≤{strictest(('hypertension',), 'sodium', 'max'):,.0f}mg/끼(나이별 KDRI 가 더 엄격하면 그 값) · "
+                     f"칼륨 ≥{strictest(('hypertension',), 'potassium', 'min'):.0f}mg · "
+                     f"식이섬유 ≥{strictest(('hypertension',), 'fiber', 'min'):.0f}g (식단형 규격·고혈압학회 중 더 엄격한 값)") + \
                     (f" · {bp_txt}" if bp_txt else "")
         if a.outputs["hypertension_by_bp"]:
             a.notes.append(f"{bp_txt} — 고혈압 진단 기록은 없지만 혈압 기준({T('sbp_htn'):.0f}/{T('dbp_htn'):.0f})을 넘어 고혈압 식단 기준을 적용함. 의료진 확인 권장")
