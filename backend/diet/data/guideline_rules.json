@@ -148,6 +148,20 @@
    "section": "R1 에너지 필요량",
    "status": "설계값",
    "note": "[2026-11-10] 조정체중 = 표준체중 + (실제체중 − 표준체중) × 0.25. 비만(BMI 25 이상)일 때만, 열량(30 kcal/kg)·단백질(g/kg) 모두"
+  },
+  "mna_malnourished_max": {
+   "value": 7,
+   "source": "ESPEN_GERIATRIC",
+   "section": "R6 선별 양성 후 절차",
+   "status": "설계값",
+   "note": "[2026-11-11] MNA-SF 0~7점 = 영양불량 (MNA-SF 표준 판정 기준)"
+  },
+  "mna_risk_max": {
+   "value": 11,
+   "source": "ESPEN_GERIATRIC",
+   "section": "R6 선별 양성 후 절차",
+   "status": "설계값",
+   "note": "[2026-11-11] MNA-SF 8~11점 = 영양불량 위험, 12~14점 = 정상 영양"
   }
  },
  "constraints": {

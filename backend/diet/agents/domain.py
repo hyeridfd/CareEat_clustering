@@ -122,7 +122,7 @@ def _spec(agent, key):
 
 class BodyAgent(DomainAgent):
     NAME, LABEL = "body", "신체·영양"
-    CONTEXT_KEYS = ("age", "female", "height_cm", "weight_kg", "bmi", "mna_risk", "kmbi_score", "kmbi_max")
+    CONTEXT_KEYS = ("age", "female", "height_cm", "weight_kg", "bmi", "mna_sf", "mna_risk", "kmbi_score", "kmbi_max")
 
     def assess(self, c):
         from ..patient_profile_final import calc_target_energy, Sex
@@ -154,11 +154,20 @@ class BodyAgent(DomainAgent):
             a.issues.append(self.issue(code="obesity", title=f"비만 (BMI {bmi}) — 고령자는 감량보다 근육 유지",
                                        **SC("obesity"), nutrients=["energy"], action="monitor",
                                        evidence=[f"BMI {bmi}"], source="ESPEN_GERIATRIC"))
-        mna = c.get("mna_risk")
-        if mna is not None and mna >= 1:
-            a.issues.append(self.issue(code="malnutrition_risk", title="영양불량" + (" " if mna >= 2 else " 위험 ") + "(MNA-SF)",
-                                       **SC("malnutrition_risk", "malnourished" if mna >= 2 else "risk"), nutrients=["energy", "protein"],
-                                       action="increase", evidence=[f"MNA 위험 단계 {int(mna)}"], source="ESPEN_GERIATRIC"))
+        # [2026-11-11] MNA-SF 점수로 판정: 0~7 영양불량 · 8~11 영양불량 위험 · 12~14 정상
+        #   (mna_risk 는 '12점 미만 = 1' 인 0/1 값 — 점수가 없을 때만 '위험'으로 사용)
+        sf, mr = c.get("mna_sf"), c.get("mna_risk")
+        level = None
+        if sf is not None:
+            level = "malnourished" if sf <= T("mna_malnourished_max") else "risk" if sf <= T("mna_risk_max") else None
+            ev = [f"MNA-SF {sf:.0f}점"]
+        elif mr is not None and mr >= 1:
+            level, ev = "risk", ["MNA-SF 12점 미만 (점수 없음)"]
+        if level:
+            a.issues.append(self.issue(code="malnutrition_risk",
+                                       title="영양불량 (MNA-SF)" if level == "malnourished" else "영양불량 위험 (MNA-SF)",
+                                       **SC("malnutrition_risk", level), nutrients=["energy", "protein"],
+                                       action="increase", evidence=ev, source="ESPEN_GERIATRIC"))
         ks, km = c.get("kmbi_score"), c.get("kmbi_max")
         if ks is not None and km:
             pct = ks / km

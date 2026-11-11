@@ -97,7 +97,7 @@ def build_payload(ctx: dict, res: dict, target_energy: float) -> dict:
     person = {
         "나이": _age_band(ctx.get("age")), "성별": "여" if ctx.get("female") else "남", "BMI": ctx.get("bmi"),
         "질환": ctx.get("diseases") or [], "식사형태": ctx.get("meal_form"),
-        "MNA_위험": ctx.get("mna_risk"), "K-MBI": ctx.get("kmbi_score"), "MMSE": ctx.get("mmse"), "GDS": ctx.get("gds"),
+        "MNA_SF": ctx.get("mna_sf"), "MNA_위험": ctx.get("mna_risk"), "K-MBI": ctx.get("kmbi_score"), "MMSE": ctx.get("mmse"), "GDS": ctx.get("gds"),
         "혈압": [ctx.get("sbp"), ctx.get("dbp")], "저작곤란": ctx.get("chewing_difficulty"),
         "연하곤란": ctx.get("swallowing_difficulty"), "식사_도움": ctx.get("eating_dependence"),
         "전체_섭취율": ctx.get("intake_rate"),

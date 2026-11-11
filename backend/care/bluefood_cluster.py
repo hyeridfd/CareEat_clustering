@@ -248,6 +248,10 @@ def build_health(b):
     mna = sum(pd.to_numeric(b[c], errors="coerce").fillna(d) for c, d in defaults.items()) + bmi_cat
     out["mna_sf"] = mna.values
     out["mna_risk"] = (out["mna_sf"] < 12).astype(float)
+    # [2026-11-11] 응답이 없어 기본값(정상 쪽 점수)으로 채운 문항 수 — 식이설계 '추가 확인 정보'에 'MNA-SF 미응답 문항'으로 표시
+    miss = sum(pd.to_numeric(b[c], errors="coerce").isna().astype(int) for c in defaults)
+    miss = miss + pd.Series(np.isnan(bmi_cat).astype(int), index=b.index)
+    out["mna_missing"] = miss.values.astype(float)
 
     km = b.apply(kmbi_row, axis=1, result_type="expand")
     out["kmbi_pct"] = km[0].values

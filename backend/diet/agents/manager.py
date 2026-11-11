@@ -51,7 +51,7 @@ def build_context(resident: dict, features: dict, rice: str, side: str, med_reco
     bmi = round(w / (h / 100) ** 2, 1) if h and w and h > 100 else None
     rate, slot_rates = _rates(f.get("meal_log"))
     avg = ((f.get("nutrition") or {}).get("avg_day") or {}) if isinstance(f.get("nutrition"), dict) else {}
-    ctx = {k: _num(f.get(k)) for k in ("age", "female", "mna_risk", "kmbi_score", "kmbi_max", "dx_diabetes", "dx_hypertension",
+    ctx = {k: _num(f.get(k)) for k in ("age", "female", "mna_risk", "mna_sf", "mna_missing", "kmbi_score", "kmbi_max", "dx_diabetes", "dx_hypertension",
                                          "dx_dementia", "dx_depression", "sbp", "dbp", "mmse", "gds", "texture_level",
                                          "eating_dependence", "pref_meat", "pref_seafood", "pref_vegetable", "pref_fruit",
                                          "cmt_portion", "cmt_seasoning", "cmt_diabetic")}

@@ -103,6 +103,8 @@ def _data_gaps(ctx: dict) -> list[str]:
     out = []
     if not ctx.get("weight_kg"):
         out.append("[신체] 체중 (단백질 필요량·BMI 계산)")
+    if (ctx.get("mna_missing") or 0) > 0:
+        out.append("MNA-SF 미응답 문항")
     if ctx.get("intake_rate") is None and not ctx.get("avg_day"):
         out.append("[섭취] 조사 기간 섭취 기록")
     if any("고혈압" in str(d) for d in ctx.get("diseases") or []) and not (ctx.get("sbp") or ctx.get("dbp")):
