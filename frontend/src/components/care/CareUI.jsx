@@ -84,6 +84,7 @@ export function fmtDate(iso) {
 
 export function errMsg(e, fallback = '요청에 실패했습니다.') {
   const d = e?.response?.data?.detail
+  if (e?.code === 'ECONNABORTED') return '응답 시간이 초과됐습니다. 서버에서 작업이 계속되고 있을 수 있으니 잠시 후 새로고침해 보세요.'
   if (typeof d === 'string') return d
   if (Array.isArray(d)) return d.map((x) => x.msg).join(', ')
   return fallback

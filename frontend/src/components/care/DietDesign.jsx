@@ -630,7 +630,7 @@ function MenuTab({ run, onApprove, onEdited, onRerun, setErr }) {
             <Stat label="시설 스타일 유사도 ↑" value={m.harmony.style_similarity} sub={`끼니별 국 종류·조리법·주재료 분포 (${m.harmony.model?.facility} ${m.harmony.model?.n_meals}끼 학습)`} />
           )}
           <Stat label="파레토 해 품질(HV) ↑" value={m.front?.hv?.toFixed?.(3) ?? '–'} sub={m.front ? `비지배해 ${m.front.n_nondom}개 · f1 통과 ${m.front.f1_pass_rate}%` : '수정본은 계산 안 함'} />
-          <Stat label="배식 기준 충족 ↑" value={pct(ss.끼니 - ss.조정불가, ss.끼니)} unit="%" sub={`나트륨 ${pct(ss.나트륨OK, ss.끼니) ?? '–'}% · 열량 ${pct(ss.열량OK, ss.끼니) ?? '–'}%`} />
+          <Stat label="배식 기준 충족 ↑" value={pct(ss.끼니 - ss.조정불가, ss.끼니)} unit="%" sub={`나트륨 ${pct(ss.나트륨OK, ss.끼니) ?? '–'}% · 열량 ${pct(ss.열량OK, ss.끼니) ?? '–'}% · 단백질 ${pct(ss.단백질OK, ss.끼니) ?? '–'}%${ss.식이섬유OK != null ? ` · 식이섬유 ${pct(ss.식이섬유OK, ss.끼니)}% · 칼륨 ${pct(ss.칼륨OK, ss.끼니)}% · 탄수화물 ${pct(ss.탄수화물OK, ss.끼니)}%` : ''}`} />
           <Stat label="대체찬" value={res.substitutions?.length ?? 0} unit="건" sub={`${(res.residents || []).filter((x) => x.substitutions > 0).length}명 대상`} />
           <Stat label="설계 어르신" value={run.result?.residents?.length} unit="명" sub={m.optimize_sec ? `최적화 ${m.optimize_sec}초` : run.parent_run_id ? '영양사 수정본' : ''} />
         </div>
@@ -1873,10 +1873,10 @@ function StockEntry({ onSaved, items }) {
 
 const SRC_SHORT = {
   KDRI2025: '2025 영양소 섭취기준', ESPEN_GERIATRIC: 'ESPEN 노인영양', ESPEN_DEMENTIA: 'ESPEN 치매영양', IDDSI: 'IDDSI',
-  LTC_MEAL_GUIDE: '복지부 급식관리', KSH_HTN_2026: '고혈압학회 2026', KDA_DM_2025: '당뇨병학회 2025', SARCOPENIA_KR: '근감소증 종설', DRUG_FOOD: '약물-식품 규칙', BRAIN_DIET: '뇌건강 식사 근거', MFDS_EASY: '식약처 e약은요',
+  LTC_MEAL_GUIDE: '복지부 급식관리', KSH_HTN_2026: '고혈압학회 2026', KDA_DM_2025: '당뇨병학회 2025', SARCOPENIA_KR: '근감소증 종설', DRUG_FOOD: '약물-식품 규칙', BRAIN_DIET: '뇌건강 식사 근거', MFDS_EASY: '식약처 e약은요', MFDS_MEAL_STD: '식약처 식단형 규격',
 }
 const AGENT_LABEL = { body: '신체·영양', diabetes: '당뇨', hypertension: '고혈압', cognition: '인지·정서', oral: '구강·연하',
-  intake: '섭취·선호', medication: '약물·알레르기', base: '기본 기준' }
+  intake: '섭취·선호', medication: '약물·알레르기', base: '기본 기준', kdri: 'KDRI 공통' }
 const FIELD_LABEL = {
   energy_min: ['열량', '≥', 'kcal'], energy_max: ['열량', '≤', 'kcal'], protein_min: ['단백질', '≥', 'g'], protein_max: ['단백질', '≤', 'g'],
   sugar_max: ['당류', '≤', 'g'], fat_min: ['지방', '≥', 'g'], fat_max: ['지방', '≤', 'g'], sat_fat_max: ['포화지방', '≤', 'g'],
@@ -1892,7 +1892,7 @@ function CarePlan({ run, eid, setErr }) {
   const make = async () => {
     setBusy(true); setErr('')
     try {
-      const r = await api.post(`/care/diet/runs/${run.id}/residents/${eid}/plan`)
+      const r = await api.post(`/care/diet/runs/${run.id}/residents/${eid}/plan`, {}, { timeout: 180000 })   // LLM 작성 — 기본 15초로는 부족
       setPlan(r.data)
       if (run.result) run.result.care_plans = { ...(run.result.care_plans || {}), [eid]: r.data }   // 다른 어르신 보고 돌아와도 유지
     }
@@ -2084,12 +2084,12 @@ function AgentPanel({ a }) {
       )}
       <div className="grid md:grid-cols-2 gap-3">
         <div>
-          <p className="text-xs font-bold text-muted mb-1">개인 영양 기준 (끼니) · 정한 에이전트</p>
+          <p className="text-xs font-bold text-muted mb-1">개인 영양 기준 (끼니) · 정한 기준 <span className="font-normal">— KDRI 공통 + 질환(식단형 규격·학회 지침) 중 가장 엄격한 값, 마우스를 올리면 후보</span></p>
           <div className="flex flex-wrap gap-1.5">
             {Object.entries(syn.constraints || {}).map(([k, c]) => {
               const [lab, op, unit] = FIELD_LABEL[k] || [k, '', '']
               return (
-                <span key={k} className="badge bg-white ring-1 ring-navy-100 text-navy-800" title={`근거: ${SRC_SHORT[c.source] || c.source || '-'}${c.others?.length ? ` · 같은 항목 제시: ${c.others.map((o) => AGENT_LABEL[o] || o).join(', ')}` : ''}`}>
+                <span key={k} className="badge bg-white ring-1 ring-navy-100 text-navy-800" title={`근거: ${SRC_SHORT[c.source] || c.source || '-'}${(c.candidates || []).length > 1 ? `\n후보(가장 엄격한 값 선택): ${c.candidates.map((x) => `${SRC_SHORT[x.source] || x.source} ${Math.round(x.value * 10) / 10}`).join(' · ')}` : c.others?.length ? ` · 같은 항목 제시: ${c.others.map((o) => AGENT_LABEL[o] || o).join(', ')}` : ''}`}>
                   {lab} {op}{Math.round(c.value * 10) / 10}{unit} <span className="text-muted">· {agentName(c.agent)}</span>
                   {c.specialist_from != null && <span className="text-teal-600" title={`충돌 전문가 조정 ${c.specialist_from} → ${c.value}`}> ‡</span>}
                   {c.locked_by && <span className="text-rose-600" title={`${c.locked_by} — 1단계 값으로 고정`}> 🔒</span>}
