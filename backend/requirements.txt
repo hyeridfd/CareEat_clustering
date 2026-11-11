@@ -13,3 +13,5 @@ scikit-learn>=1.3
 joblib>=1.3
 httpx>=0.27
 neo4j>=5.20
+# 개인화 에이전트 워크플로우 (diet/agents/graph.py)
+langgraph>=1.0,<2

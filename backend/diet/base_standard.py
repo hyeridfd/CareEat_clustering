@@ -6,7 +6,9 @@ base_standard.py  ─  기본 일반식 영양 기준 (일반 노인, KDRI)
            고령친화우수식품 대체찬으로 교체 (substitute_agent.py)
 
 [근거]  한국인 영양소 섭취기준(KDRI) 75세 이상
-  · 에너지: 끼니 500~800kcal / 하루 1,500~2,400kcal (기존 고령자 범위 유지)
+  · 에너지: [2026-11-10] 에너지필요추정량 75세 이상 여 1,500 · 남 1,900 kcal/일의 ±10%
+            → 하루 1,350~2,100kcal / 끼니 450~700kcal
+            (이전 500~800kcal/끼 는 식약처 식단형 식사관리식품 규격 → 질환 어르신의 맞춤 단계에서 사용)
   · 비율 기준 산정용 기준 열량 ENERGY_REF = 2,000kcal/일
       (기존 2,400kcal 기준은 실제 식단 열량보다 높아 지방 하한 등이 과하게 잡혔음)
   · 단백질: 권장섭취량 75세↑ 남 60g · 여 50g → 하루 50g 이상 (끼니 1/3)
@@ -15,6 +17,11 @@ base_standard.py  ─  기본 일반식 영양 기준 (일반 노인, KDRI)
   · 식이섬유: 충분섭취량(2025 KDRI) 75세↑ 여 25g · 남 30g → 하루 25g 이상
   · 칼륨: 기본 일반식에서는 제약하지 않음 (신장질환자는 오히려 제한 대상)
           → 하루 합계는 보고서에서 모니터링만
+[2026-11-10] 영양 기준 2단계
+  ① 공통(이 파일) = KDRI — 첫 최적화(NSGA-II). 맞춤 단계에서도 모든 어르신의 바닥 기준으로 함께 쓴다
+     (diet/data/guideline_rules.json 의 kdri.* 와 같은 값 — 바꿀 때는 두 곳을 함께)
+  ② 맞춤 = 질환이 있으면 식약처 식단형 식사관리식품 규격 + 학회 진료지침 → KDRI 공통까지 셋 중 가장 엄격한 값
+     (agents/manager.synthesize → 배식량 조절·대체찬)
 ※ 모든 값은 아래 상수만 바꾸면 반영됩니다.
 """
 from .sodium_config import DAILY_SODIUM_MAX, MEAL_SODIUM_MAX
@@ -22,8 +29,8 @@ from .sodium_config import DAILY_SODIUM_MAX, MEAL_SODIUM_MAX
 BASE_MODE = "일반식"        # "일반식" | "최엄격"(기존: 모든 입소자 중 가장 엄격한 기준)
 
 ENERGY_REF        = 2000   # kcal/일 — 비율 기준(지방·포화지방·당류) 환산용
-ENERGY_MEAL       = (500, 800)
-ENERGY_DAILY      = (1500, 2400)
+ENERGY_MEAL       = (450, 700)   # [2026-11-10] KDRI 필요추정량 ±10% (이전 500~800)
+ENERGY_DAILY      = (1350, 2100) # [2026-11-10] 1,500×0.9 ~ 1,900×1.1 (이전 1,500~2,400)
 PROTEIN_DAILY_MIN = 50     # g/일
 FAT_RATIO         = (0.15, 0.30)
 SAT_FAT_RATIO_MAX = 0.07

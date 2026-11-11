@@ -135,15 +135,27 @@ def apply(a, res: dict):
         i.rationale, i.cites = r["rationale"], r["cites"]
 
 
-def judge(agent, sub: dict, a, ctx: dict | None = None, caller=None) -> None:
-    """manager.assess_residents(judge=...) 훅 — Assessment 를 그 자리에서 정제. 예외를 밖으로 던지지 않는다."""
+def gather(agent, sub: dict, a, ctx: dict | None = None) -> dict | None:
+    """[근거 검색] 이 영역 문헌에서 근거 문단을 찾아 Assessment 에 붙인다. 근거가 없으면 None (규칙 결과 유지).
+    LangGraph 경로에서는 <영역>_rag 노드 (agents/graph.py)"""
     t0 = time.time()
     try:
         ev = rag.evidence_for(a, ctx)
-        a.evidence = ev["refs"]
-        if not ev["snippets"]:
-            a.llm = {"mode": "rule", "note": "근거 문단을 찾지 못해 규칙 결과 사용" + (f" ({ev['error']})" if ev.get("error") else "")}
-            return
+    except Exception as e:
+        a.llm = {"mode": "rule", "note": f"근거 검색 실패 → 규칙 결과 사용: {str(e)[:160]}"}
+        return None
+    a.evidence = ev["refs"]
+    if not ev["snippets"]:
+        a.llm = {"mode": "rule", "note": "근거 문단을 찾지 못해 규칙 결과 사용" + (f" ({ev['error']})" if ev.get("error") else "")}
+        return None
+    return {**ev, "_t0": t0}
+
+
+def decide(agent, sub: dict, a, ev: dict, caller=None) -> None:
+    """[LLM 영역 전문가] 근거 문단을 보고 판단을 정제 → 코드 검증 → Assessment 에 반영. 예외를 밖으로 던지지 않는다.
+    LangGraph 경로에서는 <영역>_expert 노드"""
+    t0 = ev.get("_t0") or time.time()
+    try:
         payload = _payload(agent, sub, a, ev)
         k = _key(payload)
         if k in _CACHE:
@@ -163,8 +175,17 @@ def judge(agent, sub: dict, a, ctx: dict | None = None, caller=None) -> None:
         a.llm = {"mode": "rule", "note": f"AI 영역 판단 실패 → 규칙 결과 사용: {str(e)[:160]}"}
 
 
+def judge(agent, sub: dict, a, ctx: dict | None = None, caller=None) -> None:
+    """manager.assess_residents(judge=...) 훅 — 근거 검색(gather) + LLM 판단(decide)을 한 번에"""
+    ev = gather(agent, sub, a, ctx)
+    if ev is not None:
+        decide(agent, sub, a, ev, caller)
+
+
 def make_judge(caller=None):
-    """LLM 이 설정돼 있지 않으면 None (규칙만)"""
+    """LLM 이 설정돼 있지 않으면 None (규칙만). LangGraph 경로는 .caller 를 읽어 gather/decide 노드로 나눠 실행"""
     if caller is None and not LS.status().get("ready"):
         return None
-    return lambda ag, sub, a, ctx=None: judge(ag, sub, a, ctx, caller=caller)
+    f = lambda ag, sub, a, ctx=None: judge(ag, sub, a, ctx, caller=caller)
+    f.caller = caller
+    return f

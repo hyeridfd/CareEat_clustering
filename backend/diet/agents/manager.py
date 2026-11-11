@@ -23,7 +23,9 @@ SLOT_GROUP = {"밥": "밥", "죽": "밥", "국/탕": "국", "국": "국", "주�
 FIELDS = {("energy", "min"): "energy_min", ("energy", "max"): "energy_max", ("sugar", "max"): "sugar_max",
           ("protein", "min"): "protein_min", ("protein", "max"): "protein_max", ("fat", "min"): "fat_min",
           ("fat", "max"): "fat_max", ("sat_fat", "max"): "sat_fat_max", ("sodium", "max"): "sodium_max",
-          ("potassium", "min"): "potassium_min", ("fiber", "min"): "fiber_min"}
+          ("potassium", "min"): "potassium_min", ("fiber", "min"): "fiber_min",
+          ("carb", "min"): "carb_min", ("carb", "max"): "carb_max"}
+DISEASE_AGENTS = {"diabetes", "hypertension"}      # 식단형 규격·학회 지침 기준을 내는 영역
 
 
 def _rates(meal_log) -> tuple:
@@ -84,23 +86,54 @@ def resolve_constraints(specs: list, energy: float) -> dict:
             continue
         v = s.resolve(energy)
         cur = chosen.get(fld)
+        cand = {"agent": s.agent, "source": s.source, "value": v}          # 후보 (KDRI 공통 · 식단형 규격 · 학회 지침 …)
         stricter = cur is None or (v < cur["value"] if s.bound == "max" else v > cur["value"])
         if stricter:
             chosen[fld] = {"value": v, "agent": s.agent, "source": s.source, "unit": s.unit,
-                           "others": (cur["others"] + [cur["agent"]]) if cur else []}
-        elif cur:
+                           "others": (cur["others"] + [cur["agent"]]) if cur else [],
+                           "candidates": (cur["candidates"] if cur else []) + [cand]}
+        else:
             cur["others"].append(s.agent)
+            cur["candidates"].append(cand)
     return chosen
 
 
-def synthesize(assessments: list, age: int) -> dict:
-    """에이전트 결과 → 개인 영양 기준(출처 포함) · 피할 식재료 · 우선순위 문제 목록"""
+def kdri_specs(age: int) -> list:
+    """[2026-11-10] 공통 기준 (KDRI) — 모든 어르신. 최적화(base_standard.py)와 같은 값 + 나이별 나트륨"""
     from ..sodium_config import meal_sodium_max_for_age
+    from .domain import rules
+    out = []
+    for k, r in rules()["constraints"].items():
+        if k.startswith("kdri.") and r.get("unit") in ("abs", "pctE"):
+            kw = {"unit": "pctE", "kcal_per_g": r["kcal_per_g"]} if r["unit"] == "pctE" else {}
+            out.append(ConstraintSpec(r["nutrient"], r["bound"], r["value"], source=r["source"], agent="kdri", **kw))
+    # 나이별 나트륨 만성질환위험감소섭취량(CDRR) ÷ 3
+    out.append(ConstraintSpec("sodium", "max", meal_sodium_max_for_age(int(age or 80)), source="KDRI2025", agent="kdri"))
+    return out
+
+
+def synthesize(assessments: list, age: int) -> dict:
+    """에이전트 결과 → 개인 영양 기준(출처 포함) · 피할 식재료 · 우선순위 문제 목록
+    [2026-11-10] 영양 기준 = KDRI 공통 + 질환별(식단형 식사관리식품 규격 · 학회 진료지침) → 영양소마다 가장 엄격한 값"""
     body = next(a for a in assessments if a.agent == "body")
-    e = body.outputs["target_energy"]
-    specs = [s for a in assessments if a.active for s in a.constraints]
-    # 기본 기준: 나이별 나트륨 만성질환위험감소섭취량(CDRR) ÷ 3 — 모든 어르신
-    specs.append(ConstraintSpec("sodium", "max", meal_sodium_max_for_age(int(age or 80)), source="KDRI2025", agent="base"))
+    agent_specs = [s for a in assessments if a.active for s in a.constraints]
+    # [2026-11-10] 개인화 기준: 질환(식단형 규격·학회 지침)이 정한 영양소는 그 값들만, 나머지는 KDRI.
+    #   나트륨은 나이별 KDRI 도 함께 비교 (질환자가 일반 어르신보다 짜게 먹지 않도록)
+    by_disease = {(s.nutrient, s.bound) for s in agent_specs if s.agent in DISEASE_AGENTS}
+    kd = [s for s in kdri_specs(age) if (s.nutrient, s.bound) not in by_disease or s.nutrient == "sodium"]
+    specs = kd + agent_specs
+    # 목표 열량: ESPEN 30 kcal/kg(비만은 조정체중) ÷ 3 을 열량 범위(질환 500~800, 그 외 450~700) 안으로.
+    #   체중이 없으면 BMI 점수로 범위 안에서 계산 (예전 방식)
+    rng = resolve_constraints([s for s in specs if s.nutrient == "energy"], 0)
+    lo, hi = (rng.get("energy_min") or {}).get("value"), (rng.get("energy_max") or {}).get("value")
+    e = body.outputs.get("energy_by_weight")
+    score = body.outputs.get("energy_score")
+    if e is None:
+        e = round(lo + score * (max(hi, lo) - lo), 0) if (lo and hi and score is not None) else body.outputs["target_energy"]
+    if lo and hi:
+        e = min(max(e, lo), hi)
+    if e != body.outputs["target_energy"]:
+        body.summary = body.summary.replace(f"목표 열량 {body.outputs['target_energy']:.0f}", f"목표 열량 {e:.0f}", 1)
     chosen = resolve_constraints(specs, e)
     avoid = [x for a in assessments if a.active for x in a.avoid]
     # 우선순위: Level 1(안전성) 먼저, 그 안과 Level 2(영양 중재)는 S 순
@@ -121,7 +154,14 @@ def _run(ag, sub, judge, ctx):
 def assess_residents(contexts: dict, max_workers: int = 8, judge=None) -> dict:
     """contexts: {elderly_id: ctx} → {elderly_id: {"agents": [...], "synth": {...}}}
     모든 (어르신 × 에이전트) 평가를 병렬로 실행. 에이전트는 서로의 결과를 보지 않는다.
-    judge(agent, sub_ctx, assessment, full_ctx) — 있으면 규칙 평가 직후 같은 작업 안에서 LLM 판단을 덧붙인다 (llm_agent.judge)"""
+    judge(agent, sub_ctx, assessment, full_ctx) — 있으면 규칙 평가 직후 같은 작업 안에서 LLM 판단을 덧붙인다 (llm_agent.judge)
+    [2026-11-11] langgraph 가 설치돼 있으면 LangGraph 워크플로우(agents/graph.py, 1단계까지)로 실행 — 7개 영역 노드 병렬.
+                 DIET_LANGGRAPH=0 이면 아래 스레드 풀 경로"""
+    import os
+    from . import graph as G
+    if G.available() and os.getenv("DIET_LANGGRAPH", "1") != "0":
+        r = G.run(contexts, judge=judge, upto="stage1", max_concurrency=max_workers)
+        return {eid: {"agents": v["agents"], "synth": v["synth"]} for eid, v in r.items()}
     jobs = {}
     with ThreadPoolExecutor(max_workers=max_workers) as ex:
         for eid, ctx in contexts.items():

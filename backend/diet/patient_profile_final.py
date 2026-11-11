@@ -43,6 +43,8 @@ class NutritionConstraint:
     sodium_max:    Optional[float] = None
     potassium_min: Optional[float] = None
     fiber_min:     Optional[float] = None
+    carb_min:      Optional[float] = None   # [2026-11-10] 배식률 최적화 목표 범위 (KDRI 55~65%E)
+    carb_max:      Optional[float] = None
 
 # ── 고령자 에너지 범위 ────────────────────────────────────────
 # 요양원 노인 기준: 끼니당 최소 500kcal 보장 (근감소·영양불량 예방)

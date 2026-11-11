@@ -70,6 +70,12 @@ def _split_ratio(ratio_e: float, menu_by_slot: dict, sodium_cap) -> tuple:
 # ══════════════════════════════════════════════════════════════
 BALANCED_SERVING = True
 W_ENERGY     = 10.0                     # 목표 열량을 맞추는 중요도 (칸 비율 변화 대비)
+# [2026-11-10] 배식률 최적화에 영양소 목표 추가 (벌점 — '조정불가' 판정에는 넣지 않음)
+#   지방 하한 · 식이섬유 하한 · 칼륨 하한(고혈압) · 탄수화물 55~65%E 범위 — 모자라거나 넘친 비율² × W_NUT
+#   (열량 범위·단백질·나트륨·당류·포화지방·지방 상한은 지금처럼 '기준' — 못 맞추면 조정불가)
+W_NUT        = 3.0
+SOFT_MIN     = ("fat", "fiber", "potassium", "carb")      # 개인 기준 *_min
+SOFT_MAX     = ("carb",)                                   # 개인 기준 *_max (지방·당류 상한은 기준으로 처리)
 SPREAD       = 1.0                      # 0: 짠 칸 위주로 줄임 · 1: 모든 칸을 비슷한 비율로 줄임
 # [2026-10-19] 현장 배식 단계: 국자·집게로 담기 쉬운 값만 사용 (0 = 해당 칸 미배식)
 SERVING_LEVELS = [0, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
@@ -126,10 +132,22 @@ def _balanced_ratios(patient, menu_by_slot: dict, base_ratio: float) -> tuple:
     Na = vec("sodium")
     w = (1 - SPREAD) + SPREAD * (Na / Na.mean() if Na.mean() > 0 else np.ones_like(Na))
 
+    soft = []                                          # (값 벡터, 고정 합, 목표, 방향)
+    for q in SOFT_MIN:
+        t = getattr(c, f"{q}_min", None)
+        if t:
+            soft.append((vec(q), fixed_sum(q), t, 1))
+    for q in SOFT_MAX:
+        t = getattr(c, f"{q}_max", None)
+        if t:
+            soft.append((vec(q), fixed_sum(q), t, -1))
+
     def obj(x):
         # x: (칸 수,) 또는 (칸 수, 후보 수) — 후보 여러 개를 한 번에 평가할 수 있게
         X = x if x.ndim == 2 else x[:, None]
         val = (w[:, None] * ((X - p0) / p0) ** 2).sum(axis=0) + W_ENERGY * ((fE + E @ X - e_target) / e_target) ** 2
+        for v, f, t, sg in soft:
+            val = val + W_NUT * np.maximum(0, sg * (t - f - v @ X) / t) ** 2
         return val if x.ndim == 2 else float(val[0])
 
     bounds = [SLOT_BOUNDS[s] for s in free]
@@ -180,7 +198,8 @@ def _snap_levels(x, obj, cons):
 #     · 모든 행을 numpy 로 동시에 계산 → 수천 건이 1초 안팎
 # ══════════════════════════════════════════════════════════════
 FAST_SERVING = True
-_KEYS = ("energy", "protein", "sodium", "sugar", "sat_fat", "fat")
+_KEYS = ("energy", "protein", "sodium", "sugar", "sat_fat", "fat", "carb", "fiber", "potassium")
+_SOFT_IDX = {"fat": 5, "carb": 6, "fiber": 7, "potassium": 8}
 
 
 def _batch_discrete(rows: list, max_iter: int = 60, init=None, return_score=False):
@@ -196,6 +215,7 @@ def _batch_discrete(rows: list, max_iter: int = 60, init=None, return_score=Fals
     cap = np.full((R, 4), np.inf)                  # sodium, sugar, sat_fat, fat
     pmin = np.zeros(R); pmax = np.full(R, np.inf)
     emin = np.zeros(R); emax = np.zeros(R); etg = np.zeros(R); p0 = np.zeros(R)
+    smin = np.zeros((R, len(SOFT_MIN))); smax = np.full((R, len(SOFT_MAX)), np.inf)     # 영양소 목표 (벌점)
     for r, (p, mbs, base) in enumerate(rows):
         c = p.constraint
         for k, s in enumerate(slots):
@@ -215,6 +235,10 @@ def _batch_discrete(rows: list, max_iter: int = 60, init=None, return_score=Fals
             pmin[r] = c.protein_min
         emin[r], emax[r] = c.energy_min or 500, c.energy_max or 800
         etg[r] = _target_energy(p)
+        for j, q in enumerate(SOFT_MIN):
+            smin[r, j] = getattr(c, f"{q}_min", None) or 0
+        for j, q in enumerate(SOFT_MAX):
+            smax[r, j] = getattr(c, f"{q}_max", None) or np.inf
         p0[r] = max(base, 1e-3)
     Na = V[:, :, 2]
     nfree = np.maximum(free.sum(1), 1)
@@ -222,6 +246,16 @@ def _batch_discrete(rows: list, max_iter: int = 60, init=None, return_score=Fals
     w = np.where(na_mean[:, None] > 0, (1 - SPREAD) + SPREAD * Na / np.where(na_mean > 0, na_mean, 1)[:, None], 1.0) * free
 
     capd = np.where(np.isfinite(cap), cap, 1); pmaxd = np.where(np.isfinite(pmax), pmax, 1); pmind = np.where(pmin > 0, pmin, 1)
+    imin = [_SOFT_IDX[q] for q in SOFT_MIN]; imax = [_SOFT_IDX[q] for q in SOFT_MAX]
+    smind = np.where(smin > 0, smin, 1); smaxd = np.where(np.isfinite(smax), smax, 1)
+
+    def soft_pen(T, ri):                            # T (..., Q) · 목표는 (n, j) → 마지막 축 맞춤
+        lo, lod, hi, hid = smin[ri], smind[ri], smax[ri], smaxd[ri]
+        if T.ndim == 3:
+            lo, lod, hi, hid = lo[:, None], lod[:, None], hi[:, None], hid[:, None]
+        pen = (np.where(lo > 0, np.maximum(0, (lo - T[..., imin]) / lod), 0) ** 2).sum(-1)
+        pen += (np.where(np.isfinite(hi), np.maximum(0, (T[..., imax] - hi) / hid), 0) ** 2).sum(-1)
+        return W_NUT * pen
 
     def totals(X, ri=None):                         # X (n, K) 비율 → (n, Q)
         ri = slice(None) if ri is None else ri
@@ -235,6 +269,7 @@ def _batch_discrete(rows: list, max_iter: int = 60, init=None, return_score=Fals
         viol += np.where(pmin[ri] > 0, np.maximum(0, (pmin[ri] - T[:, 1]) / pmind[ri]) ** 2, 0)
         viol += np.maximum(0, (T[:, 0] - emax[ri]) / emax[ri]) ** 2 + np.maximum(0, (emin[ri] - T[:, 0]) / emin[ri]) ** 2
         obj = (w[ri] * ((X - p0[ri][:, None]) / p0[ri][:, None]) ** 2).sum(1) + W_ENERGY * ((T[:, 0] - etg[ri]) / etg[ri]) ** 2
+        obj = obj + soft_pen(T, ri)
         # 기준을 조금이라도 넘으면 고정 벌점 → 기준을 모두 맞추는 조합을 우선 (그다음 덜 줄이는 조합)
         return 1e4 * viol + 5.0 * (viol > 1e-7) + obj, viol
 
@@ -306,6 +341,7 @@ def _batch_discrete(rows: list, max_iter: int = 60, init=None, return_score=Fals
         viol += np.maximum(0, (T[..., 0] - ex) / ex) ** 2 + np.maximum(0, (en - T[..., 0]) / en) ** 2
         pp = p0[rr][:, None, None]
         obj = (w[rr][:, None, :] * ((Xc - pp) / pp) ** 2).sum(-1) + W_ENERGY * ((T[..., 0] - et) / et) ** 2
+        obj = obj + soft_pen(T, rr)
         return 1e4 * viol + 5.0 * (viol > 1e-7) + obj
 
     for _ in range(3):
@@ -502,6 +538,12 @@ def serving_agent(state: MealPlanState) -> dict:
             ok_p = (p_val >= (c.protein_min or 0)) and \
                    (p_val <= (c.protein_max or 9999))
             ok_s = s_val <= (c.sodium_max or 9999)
+            # [2026-11-10] 배식률 목표 영양소 (벌점 대상) — 충족 여부 기록
+            f_val, k_val, c_val = round(_sum("fiber"), 1), round(_sum("potassium"), 0), round(_sum("carb"), 1)
+            fat_val, sug_val = round(_sum("fat"), 1), round(_sum("sugar"), 1)
+            ok_f = f_val >= (c.fiber_min or 0) * 0.999
+            ok_k = k_val >= (c.potassium_min or 0) * 0.999
+            ok_c = (c.carb_min or 0) * 0.999 <= c_val <= (c.carb_max or 9999) * 1.001
 
             entry = {
                 **srv,
@@ -511,7 +553,14 @@ def serving_agent(state: MealPlanState) -> dict:
                 "예상열량":       e_val,
                 "예상단백질":     p_val,
                 "예상나트륨":     s_val,
-                "예상탄수화물":   round(_sum("carb"), 1),
+                "예상탄수화물":   c_val,
+                "예상지방":       fat_val,
+                "예상당류":       sug_val,
+                "예상식이섬유":   f_val,
+                "예상칼륨":       k_val,
+                "식이섬유OK": "✅" if ok_f else "⚠️",
+                "칼륨OK":    "✅" if ok_k else "⚠️",
+                "탄수화물OK": "✅" if ok_c else "⚠️",
                 "열량OK":  "✅" if ok_e else "⚠️",
                 "단백질OK": "✅" if ok_p else "⚠️",
                 "나트륨OK": "✅" if ok_s else "⚠️",

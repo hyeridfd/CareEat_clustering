@@ -158,6 +158,17 @@ def apply_agents(profiles: list, progress=None, refiner: str = "off", prev: dict
         # [Stage 1 + RAG] 영역마다 근거 문단을 검색하고 LLM 영역 전문가가 판단을 정제 (agents/llm_agent.py)
         from .agents.llm_agent import make_judge
         judge = make_judge()
+    import os
+    from .agents import graph as G
+    if G.available() and os.getenv("DIET_LANGGRAPH", "1") != "0":
+        # [2026-11-11] LangGraph 워크플로우: START → 7개 영역 노드(병렬) → 1단계 종합 → (2단계 정제) → 3단계 종합·안전성 → END
+        #   어르신마다 그래프 1회, 여러 명은 batch 로 동시에 (agents/graph.py)
+        if progress: progress("LangGraph 에이전트 워크플로우" + (" · AI 영역 전문가(근거 검색)" if judge else "")
+                              + (" · AI 임상 영양사" if refiner == "llm" else ""))
+        gr = G.run(ctxs, judge=judge, refiner=refiner, prev=prev)
+        res = {eid: {"agents": v["agents"], "synth": v["synth"]} for eid, v in gr.items()}
+        refs = {eid: v["refine"] for eid, v in gr.items() if refiner == "llm" and v["refine"]}
+        return _finish_agents(profiles, res, refs)
     if progress: progress("영역별 에이전트 평가" + (" · AI 영역 전문가(근거 검색)" if judge else ""))
     res = assess_residents(ctxs, judge=judge)
     stage1 = {eid: json.loads(json.dumps(v["synth"], default=str)) for eid, v in res.items()}   # 3단계 잠금·범위 기준점
@@ -181,6 +192,13 @@ def apply_agents(profiles: list, progress=None, refiner: str = "off", prev: dict
                 for eid in res}
         for eid, f in futs.items():
             res[eid]["synth"] = f.result()
+    return _finish_agents(profiles, res, refs)
+
+
+def _finish_agents(profiles: list, res: dict, refs: dict) -> dict:
+    """종합 결과 → 어르신 프로필(개인 기준·목표 열량·피할 식재료·우선순위 가중치) + 저장용 JSON"""
+    from .agents import to_json
+    from .patient_profile_final import NutritionConstraint
     from .substitute_agent import priority_weights
     mismatch = []
     for p in profiles:
@@ -427,35 +445,72 @@ def _reason_key(w: str) -> str:
     return w.split(":")[0]
 
 
-def personalize_and_serve(pool, records, profiles, meta, inv_model=None, product_scores=None, progress=None,
-                          inventory=None) -> dict:
+def ps_begin(pool, records, profiles, inv_model=None, product_scores=None) -> dict:
+    """[개인화·배식] 공용 상태 준비 — 시설 그래프(workflow.py)의 meal_form 노드가 시작, assemble 노드에서 정리"""
     from . import substitute_agent as SA
-    from .meal_form import build_meal_form
-    from .serving_agent import serving_agent
-
     key = uuid.uuid4().hex[:8]
     registry.put(f"patients_{key}", profiles)
     registry.put(f"constraint_{key}", BaseStandard())
     SA._PROD_SCORES = dict(product_scores or {})          # 시설 제품 선호 점수 (없으면 0.7)
+    return {"key": key, "pool": pool, "records": records, "profiles": profiles, "inv_model": inv_model}
+
+
+def ps_end(ps: dict):
+    registry._STORE.pop(f"patients_{ps['key']}", None)
+    registry._STORE.pop(f"constraint_{ps['key']}", None)
+
+
+def ps_meal_form(ps: dict, progress=None) -> dict:
+    """식사형태(죽·백김치 등) 적용"""
+    from .meal_form import build_meal_form
+    if progress: progress("식사형태(죽·백김치) 적용")
+    records, key = ps["records"], ps["key"]
+    mf = build_meal_form(records, ps["profiles"], ps["inv_model"])
+    state = {"df_menu_records": records, "df_menu_columns": list(records[0].keys()), "pool": ps["pool"],
+             "patients_key": f"patients_{key}", "constraint_key": f"constraint_{key}",
+             "meal_form_overrides": mf["overrides"], "meal_form_items": mf["items"], "preference_weights": {}}
+    return {**ps, "mf": mf, "state": state}
+
+
+def ps_substitute(ps: dict, progress=None) -> dict:
+    """개인 대체찬"""
+    from . import substitute_agent as SA
+    if progress: progress("대체찬 산출")
+    mf = ps["mf"]
+    sub = SA.substitute_agent(ps["state"])
+    personal = {k: dict(v) for k, v in mf["overrides"].items()}
+    for k, ch in (sub.get("personal_menus") or {}).items():
+        personal.setdefault(k, {}).update(ch)
+    sub_products = {**(sub.get("sub_products") or {}), **mf["items"]}
+    return {**ps, "sub": sub, "personal": personal, "sub_products": sub_products}
+
+
+def ps_serve(ps: dict, progress=None) -> dict:
+    """개인 배식률"""
+    from .serving_agent import serving_agent
+    records = ps["records"]
+    if progress: progress("개인별 배식량 계산 0/%d끼" % len(records))
+    cb = (lambda i, n: progress(f"개인별 배식량 계산 {i}/{n}끼")) if progress else None
+    serving = serving_agent({**ps["state"], "personal_menus": ps["personal"], "sub_products": ps["sub_products"],
+                             "progress_cb": cb})["serving_map"]
+    return {**ps, "serving": serving}
+
+
+def personalize_and_serve(pool, records, profiles, meta, inv_model=None, product_scores=None, progress=None,
+                          inventory=None) -> dict:
+    """식사형태 → 대체찬 → 배식률 → 결과 정리 (시설 그래프 밖에서 쓸 때: 식단 수정 후 다시 계산 등)"""
+    ps = ps_begin(pool, records, profiles, inv_model, product_scores)
     try:
-        if progress: progress("식사형태(죽·백김치) 적용")
-        mf = build_meal_form(records, profiles, inv_model)
-        state = {"df_menu_records": records, "df_menu_columns": list(records[0].keys()), "pool": pool,
-                 "patients_key": f"patients_{key}", "constraint_key": f"constraint_{key}",
-                 "meal_form_overrides": mf["overrides"], "meal_form_items": mf["items"], "preference_weights": {}}
-        if progress: progress("대체찬 산출")
-        sub = SA.substitute_agent(state)
-        personal = {k: dict(v) for k, v in mf["overrides"].items()}
-        for k, ch in (sub.get("personal_menus") or {}).items():
-            personal.setdefault(k, {}).update(ch)
-        sub_products = {**(sub.get("sub_products") or {}), **mf["items"]}
-        if progress: progress("개인별 배식량 계산 0/%d끼" % len(records))
-        cb = (lambda i, n: progress(f"개인별 배식량 계산 {i}/{n}끼")) if progress else None
-        serving = serving_agent({**state, "personal_menus": personal, "sub_products": sub_products,
-                                 "progress_cb": cb})["serving_map"]
+        ps = ps_serve(ps_substitute(ps_meal_form(ps, progress), progress), progress)
     finally:
-        registry._STORE.pop(f"patients_{key}", None)
-        registry._STORE.pop(f"constraint_{key}", None)
+        ps_end(ps)
+    return ps_assemble(ps, meta, progress, inventory)
+
+
+def ps_assemble(ps: dict, meta: dict, progress=None, inventory=None) -> dict:
+    """배식표·충족 요약·대체찬 지침·발주·어르신별 요약으로 정리"""
+    pool, records, profiles = ps["pool"], ps["records"], ps["profiles"]
+    serving, personal, sub, mf = ps["serving"], ps["personal"], ps["sub"], ps["mf"]
 
     # ── 개인 배식표 (어르신별) ──
     by_res = defaultdict(list)
@@ -469,7 +524,8 @@ def personalize_and_serve(pool, records, profiles, meta, inv_model=None, product
         by_res[eid].append({"일차": day, "끼니": meal, "메뉴": menus,
                             "대체": [s for s in ch if s not in ("밥", "김치")] , "식사형태변경": [s for s in ch if s in ("밥", "김치")],
                             **{x: v.get(x) for x in ("밥", "국", "주찬", "부찬1", "부찬2", "김치", "ratio", "예상열량", "예상단백질",
-                                                    "예상나트륨", "예상탄수화물", "열량OK", "단백질OK", "나트륨OK", "칸별비율", "조정결과")}})
+                                                    "예상나트륨", "예상탄수화물", "예상지방", "예상당류", "예상식이섬유", "예상칼륨",
+                                                    "열량OK", "단백질OK", "나트륨OK", "식이섬유OK", "칼륨OK", "탄수화물OK", "칸별비율", "조정결과")}})
     for eid in by_res:
         by_res[eid].sort(key=lambda x: (int(re.sub(r"\D", "", x["일차"]) or 0), order.get(x["끼니"], 9)))
 
@@ -482,6 +538,8 @@ def personalize_and_serve(pool, records, profiles, meta, inv_model=None, product
             c["끼니"] += 1
             c["열량OK"] += x["열량OK"] == "✅"; c["단백질OK"] += x["단백질OK"] == "✅"; c["나트륨OK"] += x["나트륨OK"] == "✅"
             c["조정불가"] += str(x["조정결과"]).startswith("조정불가")
+            for k3 in ("식이섬유OK", "칼륨OK", "탄수화물OK"):          # [2026-11-10] 배식률 목표 영양소
+                c[k3] += x.get(k3) == "✅"
         per_res[eid] = dict(c)
         for k2, v2 in c.items():
             tot[k2] += v2
@@ -496,6 +554,8 @@ def personalize_and_serve(pool, records, profiles, meta, inv_model=None, product
         x = srv_idx.get((s["elderly_id"], s["day"], s["meal"]))
         if x and s.get("nut") is not None:
             s["nut"]["served"] = {"energy": x.get("예상열량"), "protein": x.get("예상단백질"), "sodium": x.get("예상나트륨"),
+                                  "fiber": x.get("예상식이섬유"), "potassium": x.get("예상칼륨"), "carb": x.get("예상탄수화물"),
+                                  "fat": x.get("예상지방"), "sugar": x.get("예상당류"),
                                   "result": x.get("조정결과"), "portions": x.get("칸별비율")}
     dn = lambda d: int(re.sub(r"\D", "", str(d)) or 0)
     subs.sort(key=lambda s: (dn(s["day"]), order.get(s["meal"], 9), s["display_name"]))
@@ -561,49 +621,20 @@ def run_design(residents, assessments, settings, inventory=None, preference=None
     reviewer = "llm" (AI 식단 검토자가 어색한 칸 교체 제안 → 코드 검증 후 반영) | off (검토 안 함)
     refiner  = "llm" (Stage 2 AI 임상 영양사 어르신별 종합 판단) | off (Stage 1 종합 규칙만)
     agent_mode = "llm" (Stage 1 영역 전문가가 근거 검색 후 판단·인용) | rule (규칙 선별만)"""
-    from .inventory import InventoryModel
+    # [2026-11-11] 전체 흐름 = LangGraph 시설 그래프 (diet/workflow.py) — 어르신 개인화는 Send 로 개인화 그래프(agents/graph.py)
+    #   langgraph 가 없거나 DIET_LANGGRAPH=0 이면 같은 노드 함수를 순서대로 (계산 결과는 같음)
+    from . import workflow as WF
+    inp = {"residents": residents, "assessments": assessments, "settings": settings, "inventory": inventory,
+           "preference": preference, "preset": preset, "seed": seed, "ehr": ehr, "selector": selector,
+           "reviewer": reviewer, "refiner": refiner, "agent_mode": agent_mode}
+    judge = None
+    if agent_mode == "llm":
+        from .agents.llm_agent import make_judge
+        judge = make_judge()
     with LOCK:
-        say = progress or (lambda *_: None)
-        say("어르신 프로파일 생성")
-        profiles, meta, skipped = build_profiles(residents, assessments, settings, ehr)
-        if not profiles:
-            raise ValueError("식단 설계에 쓸 어르신이 없습니다. 진단 화면에서 평가를 먼저 실행하세요.")
-        agent_json = apply_agents(profiles, say, refiner, agent_mode=agent_mode)
-        _sync_meta(profiles, meta)
-        pref = preference or {}
-        pool = load_pool(pref.get("pool_scores"))
-        inv = inventory_from_rows((inventory or {}).get("items"), (inventory or {}).get("start_date"))
-        inv_model = InventoryModel(pool, inv, len(profiles)) if inv else None
-        problem = MealPlanProblem(pool, BaseStandard(), BUDGET_PER_MEAL, inventory=inv_model, harmony=harmony_table(pool))
-        pop, gen = PRESETS.get(preset, PRESETS["standard"])
-        say(f"일반식 최적화 (개체 {pop} · 세대 {gen})")
-        t0 = dt.datetime.now()
-        Xf, Ff, Xa, Fa = nsga2.minimize(problem, pop_size=pop, n_gen=gen, seed=seed,
-                                        progress=lambda g, n, f1: say(f"일반식 최적화 {g}/{n}세대 · f1 {f1:.3f}"))
-        from .llm_select import choose, facility_context
-        ctx = facility_context(profiles, meta, agent_json, (inventory or {}).get("start_date"), BUDGET_PER_MEAL)
-        pick = choose(problem, Xf, Ff, problem.constraint, ctx, mode=selector, progress=say)
-        best_i, rule = pick["index"], pick["selection"].get("rule")
-        chrom = Xf[best_i]
-        say("반복 메뉴 보정")
-        before = problem.pattern_breakdown(chrom)
-        chrom, repairs = repair_repeats(problem, chrom)
-        review = None
-        if reviewer == "llm":
-            from .llm_review import review_menu
-            chrom, review = review_menu(problem, chrom, ctx, progress=say)
-        records = menu_records(problem, chrom)
-        metrics = plan_metrics(problem, chrom, Ff, Fa, inv_model)
-        metrics["review"] = review
-        metrics["selection_rule"] = rule
-        metrics["selection"] = pick["selection"]
-        metrics["repeat_repair"] = {"changes": repairs, "before": {k: v for k, v in before.items() if k.startswith("반복")}}
-        metrics["optimize_sec"] = round((dt.datetime.now() - t0).total_seconds(), 1)
-        metrics["preset"] = {"name": preset, "pop": pop, "gen": gen}
-        pers = personalize_and_serve(pool, records, profiles, meta, inv_model, pref.get("product_scores"), say, inv)
-        return {"menu": records, "metrics": metrics, "skipped": skipped, "n_residents": len(profiles),
-                "inventory_used": inv is not None, "preference_used": bool(pref.get("pool_scores")),
-                "assessments": agent_json, **pers}
+        if WF.available() and os.getenv("DIET_LANGGRAPH", "1") != "0":
+            return WF.run(inp, progress, judge=judge)
+        return WF.run_sequential(inp, progress, judge=judge)
 
 
 def redo_personalization(menu: list, residents, assessments, settings, inventory=None, preference=None, progress=None,

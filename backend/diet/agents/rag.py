@@ -35,9 +35,9 @@ SOURCES = BACKEND / "care" / "knowledge" / "sources.json"
 
 # 에이전트별로 볼 수 있는 문헌 (맥락 격리 — 당뇨 에이전트는 당뇨·약물 문헌만 검색)
 AGENT_SOURCES = {
-    "body":         ["ESPEN_GERIATRIC", "SARCOPENIA_KR", "KDRI2025", "LTC_MEAL_GUIDE"],
-    "diabetes":     ["KDA_DM_2025", "DRUG_FOOD", "KDRI2025"],
-    "hypertension": ["KSH_HTN_2026", "KDRI2025"],
+    "body":         ["ESPEN_GERIATRIC", "SARCOPENIA_KR", "KDRI2025", "MFDS_MEAL_STD", "LTC_MEAL_GUIDE"],
+    "diabetes":     ["KDA_DM_2025", "MFDS_MEAL_STD", "DRUG_FOOD", "KDRI2025"],
+    "hypertension": ["KSH_HTN_2026", "MFDS_MEAL_STD", "KDRI2025"],
     "cognition":    ["ESPEN_DEMENTIA", "BRAIN_DIET", "ESPEN_GERIATRIC"],
     "oral":         ["IDDSI", "ESPEN_GERIATRIC", "ESPEN_DEMENTIA"],
     "intake":       ["KDRI2025", "ESPEN_GERIATRIC", "LTC_MEAL_GUIDE"],
