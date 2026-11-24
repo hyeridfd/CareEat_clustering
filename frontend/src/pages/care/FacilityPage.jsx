@@ -355,7 +355,7 @@ export default function FacilityPage() {
           {tab === 'priority' && (
             <>
               <Section title="관리 우선순위"
-                sub="규모(해당 어르신 비율)와 심각도를 곱해 매긴 순서입니다. 위에서부터 손대는 것이 효율적입니다."
+                sub="심각도(시급 3 → 주의 2 → 관찰 1) 순으로, 같은 심각도 안에서는 점수(규모 × 심각도 ÷ 3) 순으로 보여줍니다."
                 right={areas.length > 1 && (
                   <div className="flex flex-wrap gap-1">
                     <button onClick={() => setArea('all')}

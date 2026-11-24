@@ -382,7 +382,7 @@ def analyze(profile: dict, min_nutrition_denom: int = 5) -> list:
             "detail": hit["detail"], "basis": hit.get("basis"),
             "action": hit.get("action"), "query": hit.get("query"),
         })
-    out.sort(key=lambda x: -x["score"])
+    out.sort(key=lambda x: (-x["severity"], -x["score"]))   # 심각도 3 → 2 → 1, 같은 심각도 안에서는 점수 순
     for i, x in enumerate(out, 1):
         x["rank"] = i
     return out
