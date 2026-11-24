@@ -38,14 +38,21 @@ function PriorityCard({ x }) {
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="badge bg-navy-50 text-navy-700">{x.area_label}</span>
-            <span className={`badge ${sev.chip}`}>{sev.label}</span>
+            <span className={`badge ${sev.chip}`}>{sev.label} · 심각도 {x.severity}</span>
             <span className="ml-auto text-[11px] text-muted tabular-nums">
-              규모 {x.impact}% × {sev.label} = <b className="text-navy-900">{x.score}점</b>
+              규모 {x.impact} × 심각도 {x.severity} ÷ 3 = <b className="text-navy-900">{x.score}점</b>
             </span>
           </div>
           <p className="mt-2 text-[15px] font-bold leading-6 text-navy-900">{x.title}</p>
           <p className="mt-1.5 text-sm leading-6 text-slate-700">{x.detail}</p>
           {x.basis && <p className="mt-0.5 text-xs text-muted">{x.basis}</p>}
+          {x.severity_reason && (
+            <p className="mt-1.5 text-xs leading-5 text-slate-600">
+              <b className={`mr-1 rounded px-1 py-0.5 text-[11px] ${sev.chip}`}>왜 심각도 {x.severity}?</b>
+              {x.severity_reason}
+              {x.severity_rule && <span className="text-muted"> (심각도 {x.severity} 기준: {x.severity_rule})</span>}
+            </p>
+          )}
           <div className="mt-2 h-1.5 rounded-full bg-navy-50">
             <div className={`h-1.5 rounded-full ${sev.bar}`} style={{ width: `${Math.max(3, Math.min(100, x.score))}%` }} />
           </div>
@@ -196,7 +203,7 @@ function ActionCard({ x, onOpen }) {
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="badge bg-navy-50 text-navy-700">{x.area_label}</span>
-            <span className="badge bg-slate-100 text-slate-600">{x.severity_label}</span>
+            <span className="badge bg-slate-100 text-slate-600" title={x.severity_reason || ''}>{x.severity_label} · 심각도 {x.severity}</span>
             <span className="ml-auto text-[11px] tabular-nums text-muted">{x.score}점</span>
           </div>
           <p className="mt-2 text-[15px] font-bold leading-6 text-navy-900">{x.title}</p>
@@ -370,7 +377,7 @@ export default function FacilityPage() {
                 )}
               </Section>
               <p className="text-[11px] text-muted px-1">
-                점수는 규모(해당 어르신 비율) × 심각도(시급 3 / 주의 2 / 관찰 1) ÷ 3 입니다.
+                점수는 규모(해당 어르신 비율) × 심각도(시급 3 / 주의 2 / 관찰 1) ÷ 3 입니다. 심각도 3은 건강 위해로 직접 이어지거나 진단 신뢰도를 흔드는 문제, 2는 장기적이거나 운영 조정으로 바로 개선할 수 있는 문제, 1은 섭취에 간접적으로 영향을 주거나 식단만으로 해결이 어려워 지켜보는 문제입니다.
                 다음 단계(Action)에서는 각 항목에 공식 지침 근거와 식품·메뉴 DB를 연결해 바꿀 메뉴까지 제시합니다.
               </p>
             </>
