@@ -42,13 +42,16 @@ WHITE = {"쌀밥", "배추김치", "백김치"}
 
 
 # ─────────────────────────── 1) 후보 추리기 ───────────────────────────
-def shortlist(F, k: int = MAX_CANDIDATES, pass_f1: float = BALANCE_PASS_F1) -> list[tuple[int, list[str]]]:
-    """→ [(파레토 해 번호, [뽑힌 이유…])]  첫 번째는 항상 규칙 선택(균형점)"""
+def shortlist(F, k: int = MAX_CANDIDATES, pass_f1: float = BALANCE_PASS_F1, f1_pass=None) -> list[tuple[int, list[str]]]:
+    """→ [(파레토 해 번호, [뽑힌 이유…])]  첫 번째는 항상 규칙 선택(균형점)
+    f1_pass: 통과 판정용 f1 (시설 개선안을 뺀 기본 기준). 뽑힌 이유는 반복 보정 뒤 choose() 가 다시 붙인다."""
     F = np.asarray(F, dtype=float)
-    rule_i, _ = select_balanced(F, pass_f1)
-    feas = np.where(F[:, 0] <= pass_f1)[0]
-    if len(feas) == 0:
-        feas = np.argsort(F[:, 0])[:max(1, int(len(F) * 0.1))]
+    f1p = np.asarray(f1_pass, dtype=float) if f1_pass is not None else F[:, 0]
+    rule_i, _ = select_balanced(F, pass_f1, f1p)
+    feas = np.where(f1p <= pass_f1)[0]
+    if len(feas) < min(3, len(F)):          # 통과 해가 0~2개면 영양 위반이 가장 적은 해를 더해 비교할 거리를 남긴다
+        extra = [int(x) for x in np.argsort(f1p)[:max(3, int(len(F) * 0.1))] if int(x) not in set(feas.tolist())]
+        feas = np.array(list(feas) + extra, dtype=int)
     # 목적값이 같은 해(중복)는 하나만
     uniq, seen = [], set()
     for i in [rule_i] + [int(x) for x in feas]:
@@ -72,6 +75,18 @@ def shortlist(F, k: int = MAX_CANDIDATES, pass_f1: float = BALANCE_PASS_F1) -> l
         picks[far] = ["다른 균형"]
     out = [(rule_i, picks.pop(rule_i))] + sorted(picks.items(), key=lambda t: F[t[0], 0])
     return out[:k]
+
+
+def retag(objs: list, rule_first: bool = True) -> list[list[str]]:
+    """반복 보정 뒤 목적값(후보별 [f1, f2, f3, f4])으로 '○○ 최우수'를 다시 붙인다 — 표 숫자와 표시가 항상 같게"""
+    O = np.asarray(objs, dtype=float)
+    tags = [[] for _ in range(len(O))]
+    if rule_first and len(O):
+        tags[0].append("규칙 선택(균형점)")
+    for j, name in enumerate(ORIGIN):
+        if len(O) and np.ptp(O[:, j]) >= 1e-9:
+            tags[int(np.argmin(O[:, j]))].append(name)
+    return [t or ["다른 균형"] for t in tags]
 
 
 # ─────────────────────────── 2) 후보 요약 ───────────────────────────
@@ -418,22 +433,34 @@ def choose(problem, Xf, Ff, standard, context: dict, mode: str = "llm", caller=N
     mode = "llm" (AI 영양사) | "rule" (균형점 규칙). caller 는 테스트용 (payload → (raw, model))"""
     from .pipeline import menu_records, repair_repeats
     say = progress or (lambda *_: None)
-    rule_i, rule_txt = select_balanced(Ff)
+    # [2026-11-24] 기본 영양 기준 통과(f1 ≤ 0.3)는 시설 개선안(가중치·목표 상향)을 뺀 f1 로,
+    #              화면에 보이는 식단과 같게 반복 보정 뒤 식단으로 판정 (37개 기준 0.4초)
+    fixed = [repair_repeats(problem, x)[0] for x in Xf]
+    f1b = (np.array([problem.f1_base(x) for x in fixed]) if hasattr(problem, "f1_base")
+           else np.array([problem._eval_one(x)[0] for x in fixed]))
+    n_pass = int((f1b <= BALANCE_PASS_F1).sum())
+    gate = {"pass_f1": BALANCE_PASS_F1, "n_pass": n_pass, "n_front": int(len(Xf)),
+            "basis": "기본 영양 기준(시설 개선안 제외)"}
+    rule_i, rule_txt = select_balanced(Ff, BALANCE_PASS_F1, f1b)
     if mode != "llm":
-        return {"index": rule_i, "selection": {"mode": "rule", "rule": rule_txt}}
+        return {"index": rule_i, "selection": {"mode": "rule", "rule": rule_txt, "f1_gate": gate}}
 
     say("AI 영양사: 후보 식단 비교 준비")
-    short = shortlist(Ff)
+    short = shortlist(Ff, f1_pass=f1b)
     ids = [chr(65 + k) for k in range(len(short))]
     cands, view = [], []
     for cid, (i, tags) in zip(ids, short):
-        chrom, _ = repair_repeats(problem, Xf[i])
+        chrom = fixed[i]
         s = summarize(problem, chrom, standard)
+        s["f1_기본기준"] = round(float(problem.f1_base(chrom)), 4) if hasattr(problem, "f1_base") else None
         cands.append({"id": cid, "뽑힌_이유": tags, **s})
         view.append({"id": cid, "index": int(i), "tags": tags, "summary": s,
                      "menu": compact_menu(menu_records(problem, chrom))})
+    # 뽑힌 이유를 반복 보정 뒤 숫자(표에 보이는 값)로 다시 붙인다
+    for c, v, t in zip(cands, view, retag([[c["목적함수"][k] for k in OBJ] for c in cands])):
+        c["뽑힌_이유"] = v["tags"] = t
     sel = {"mode": "llm", "rule": rule_txt, "rule_choice": "A", "prompt_version": PROMPT_VERSION,
-           "candidates": view, "context": context}
+           "candidates": view, "context": context, "f1_gate": gate}
     if len(short) < 2:
         sel.update(mode="rule", fallback="비교할 후보가 1개뿐 → 규칙 선택")
         return {"index": rule_i, "selection": sel}

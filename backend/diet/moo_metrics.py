@@ -142,7 +142,7 @@ def evaluate_front(F_raw: np.ndarray, ref_front_raw: np.ndarray = None) -> dict:
 BALANCE_PASS_F1 = 0.3   # 건강(f1) 기준 통과 해 중에서만 선택 (없으면 전체에서)
 
 
-def select_balanced(F, pass_f1: float = BALANCE_PASS_F1):
+def select_balanced(F, pass_f1: float = BALANCE_PASS_F1, f1_pass=None):
     """
     파레토 해 집합에서 '가장 균형 잡힌 해'의 인덱스를 반환합니다.
       ① f1(영양 위반) ≤ pass_f1 인 해만 후보 (없으면 f1 하위 10%)
@@ -150,11 +150,13 @@ def select_balanced(F, pass_f1: float = BALANCE_PASS_F1):
       ③ 이상점(모든 목적 0)까지 유클리드 거리가 가장 짧은 해
     """
     F = np.asarray(F, dtype=float)
-    cand = np.where(F[:, 0] <= pass_f1)[0]
+    # f1_pass: 통과 판정에 쓸 f1 (시설 개선안을 뺀 기본 기준 f1). 없으면 F 의 f1
+    f1p = np.asarray(f1_pass, dtype=float) if f1_pass is not None else F[:, 0]
+    cand = np.where(f1p <= pass_f1)[0]
     rule = f"f1 ≤ {pass_f1} 통과 해 {len(cand)}개 중 균형점"
     if len(cand) == 0:
         k = max(1, int(len(F) * 0.1))
-        cand = np.argsort(F[:, 0])[:k]
+        cand = np.argsort(f1p)[:k]
         rule = f"f1 통과 해 없음 → f1 하위 {k}개 중 균형점"
     sub = F[cand]
     lo, hi = sub.min(axis=0), sub.max(axis=0)

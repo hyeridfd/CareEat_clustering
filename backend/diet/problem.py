@@ -146,13 +146,14 @@ class MealPlanProblem(Problem):
         U = self.inventory.daily_usage_chrom(chrom, DAILY_SLOTS, N_SLOTS)
         return over + self.inv_weight * self.inventory.unused_score(U)
 
-    def _nutrition_core(self, menus, detail: dict | None = None) -> float:
+    def _nutrition_core(self, menus, detail: dict | None = None, base: bool = False) -> float:
         """[2026-11-24] f1 계산의 단일 원천 — 최적화 점수(f1)와 분해표(nutrition_breakdown)가 같은 식을 쓴다.
         영양소별 위반 = (기준 − 값) / 기준 × 개선안 가중치(기본 1)
         f1 = 0.6 × 끼니 위반 평균(84끼) + 0.4 × 일일 위반 평균(28일)
         detail 을 넘기면 '끼니 sodium 초과' 같은 항목별 기여도를 채운다 (합 = f1)."""
-        c  = self.constraint
-        W  = getattr(c, "nutrient_weight", None) or {}   # 시설 개선안: 영양소별 위반 가중치 (기본 1)
+        # base=True: 시설 개선안(가중치·목표 상향)을 뺀 기본 기준으로 계산 — '기본 영양 기준 통과(f1 ≤ 0.3)' 판정용
+        c  = (getattr(self, "base_constraint", None) or self.constraint) if base else self.constraint
+        W  = {} if base else (getattr(c, "nutrient_weight", None) or {})   # 시설 개선안: 영양소별 위반 가중치 (기본 1)
         km = 0.6 / (N_DAYS * 3)
         kd = 0.4 / N_DAYS
         total = 0.0
@@ -195,6 +196,10 @@ class MealPlanProblem(Problem):
 
     def _nutrition_violation(self, menus):
         return self._nutrition_core(menus)
+
+    def f1_base(self, chrom) -> float:
+        """[2026-11-24] 기본 영양 기준만으로 본 f1 (시설 개선안 가중치·목표 상향 제외)"""
+        return self._nutrition_core(self.effective_menus(chrom), base=True)
 
     def nutrition_breakdown(self, menus) -> dict:
         """[진단용] f1 을 항목별 기여도로 분해 — f1 과 같은 계산(개선안 가중치 포함)이라 합이 f1 과 같다"""

@@ -155,6 +155,10 @@ def apply_pool(pool: dict, plan: dict) -> tuple[dict, dict]:
 
 def configure(problem, plan: dict):
     """최적화 문제에 지시를 건다 — 기준값은 그대로, 가중치만"""
+    import copy
+    if getattr(problem, "base_constraint", None) is None:      # 기본 기준 보관 (f1 통과 판정은 이 기준으로)
+        problem.base_constraint = copy.deepcopy(problem.constraint)
+        problem.base_constraint.nutrient_weight = {}
     problem.constraint.nutrient_weight = dict(plan.get("nutrient_weight") or {})
     problem.pref_mult = float(plan.get("pref_mult") or 1.0)
     problem.texture_mult = float(plan.get("texture_mult") or 1.0)
