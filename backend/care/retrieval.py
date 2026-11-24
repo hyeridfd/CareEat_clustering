@@ -242,7 +242,8 @@ def pack(rows: list, start: int = 1):
         loc = _locator(row)
         text = re.sub(r"\s+", " ", re.sub(r"\*\*|__", "", row["text"])).strip()[:SNIPPET_CHARS]
         snippets.append({"id": tag, "출처": f"{label}{(' — ' + loc) if loc else ''}", "내용": text})
-        refs.append({"tag": tag, "source_id": row["source_id"], "title": src.get("title") or row["source_id"],
+        refs.append({"tag": tag, "source_id": row["source_id"], "section": row.get("section"),
+                     "title": src.get("title") or row["source_id"],
                      "short": src.get("short") or src.get("title") or row["source_id"],
                      "org": src.get("org"), "year": src.get("year"), "citation": label,
                      "locator": loc, "url": src.get("url"), "similarity": round(float(row["similarity"]), 3)})

@@ -123,6 +123,17 @@ def _menu_block(pr: dict, profile: dict, avoid: list[str]) -> dict | None:
     return None
 
 
+def _cite_steps(steps: list, refs: list) -> list:
+    """'해야 할 일' 각 단계에 근거 지침 번호를 단다 — 그 조항이 실제로 붙었을 때만"""
+    tag_of = {(r.get("source_id"), r.get("section")): r["tag"] for r in refs}
+    out = []
+    for x in steps:
+        ev = x.get("ev")
+        out.append({"kind": x.get("kind"), "text": x.get("text"), "foods": x.get("foods") or [],
+                    "cite": tag_of.get(tuple(ev)) if ev else None})
+    return out
+
+
 def build(profile: dict, top: int = 5, use_rag: bool = True) -> dict:
     """시설 프로파일 → 상위 우선순위별 개선안."""
     priorities = profile.get("priorities") or []
@@ -134,7 +145,7 @@ def build(profile: dict, top: int = 5, use_rag: bool = True) -> dict:
         snippets, refs = ([], [])
         if use_rag and (pr.get("query") or pr.get("evidence")):
             snippets, refs = rag.context_for_rule(pr.get("evidence"), [pr["query"]] if pr.get("query") else [],
-                                                  pr.get("evidence_must"))
+                                                  pr.get("evidence_must"), limit=max(3, len(pr.get("evidence") or [])))
             # 우선순위마다 새로 검색하므로 번호가 겹치지 않게 통째로 다시 매긴다
             fixed_s, fixed_r = [], []
             for s, r in zip(snippets, refs):
@@ -159,6 +170,7 @@ def build(profile: dict, top: int = 5, use_rag: bool = True) -> dict:
             "score": pr.get("score"), "impact": pr.get("impact"),
             "detail": pr.get("detail"), "basis": pr.get("basis"),
             "action": pr.get("action"),
+            "steps": _cite_steps(pr.get("steps") or [], refs),
             "guidelines": [{"tag": s["id"], "source": s["출처"], "text": s["내용"]} for s in snippets],
             "references": refs,
             "menus": menus,

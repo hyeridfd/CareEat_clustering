@@ -242,6 +242,46 @@ function MenuBlock({ m, onOpen }) {
   )
 }
 
+const STEP_KIND = {
+  배식: 'bg-sky-100 text-sky-800', 조리: 'bg-orange-100 text-orange-800', 메뉴: 'bg-emerald-100 text-emerald-800',
+  간식: 'bg-amber-100 text-amber-900', 운영: 'bg-violet-100 text-violet-800', 관찰: 'bg-slate-200 text-slate-700',
+  주의: 'bg-rose-100 text-rose-800',
+}
+
+/* 해야 할 일 — 근거 지침에서 뽑은 구체적인 실행 항목(배식·조리·메뉴·간식·운영·관찰)과 추천 식품 */
+function ActionSteps({ x }) {
+  const steps = x.steps || []
+  if (!steps.length && !x.action) return null
+  return (
+    <div className="mt-3 rounded-xl bg-navy-50/70 px-4 py-3">
+      <p className="text-xs font-bold text-navy-500">해야 할 일</p>
+      {x.action && <p className="mt-1 text-sm font-semibold leading-6 text-navy-900">{x.action}</p>}
+      {steps.length > 0 && (
+        <ol className="mt-2.5 space-y-2.5">
+          {steps.map((st, i) => (
+            <li key={i} className="flex items-start gap-2">
+              <span className={`mt-0.5 shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-bold ${STEP_KIND[st.kind] || 'bg-white text-navy-700'}`}>{st.kind}</span>
+              <div className="min-w-0 text-sm leading-6 text-navy-900">
+                <p>
+                  {st.text}
+                  {st.cite && <sup className="ml-0.5 font-bold text-navy-600" title="아래 근거 지침 번호">{st.cite.replace('G', '')}</sup>}
+                </p>
+                {st.foods?.length > 0 && (
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {st.foods.map((f) => (
+                      <span key={f} className="rounded-full bg-white px-2 py-0.5 text-[11px] text-slate-700 ring-1 ring-navy-100">{f}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  )
+}
+
 function ActionCard({ x, onOpen }) {
   return (
     <li className="rounded-2xl ring-1 ring-navy-100 bg-white p-5">
@@ -256,15 +296,11 @@ function ActionCard({ x, onOpen }) {
           <p className="mt-2 text-[15px] font-bold leading-6 text-navy-900">{x.title}</p>
           <p className="mt-1 text-xs text-muted">{x.detail}</p>
 
-          {x.action && (
-            <p className="mt-3 rounded-xl bg-navy-50/70 px-4 py-2.5 text-sm leading-6 text-navy-900">
-              <b className="text-navy-500 text-xs mr-1.5">해야 할 일</b>{x.action}
-            </p>
-          )}
+          <ActionSteps x={x} />
 
           {x.guidelines?.length > 0 && (
             <div className="mt-3 space-y-2">
-              <p className="text-xs font-bold text-navy-900">근거 지침</p>
+              <p className="text-xs font-bold text-navy-900">근거 지침 <span className="font-normal text-muted">· 번호는 위 '해야 할 일'의 번호와 같습니다</span></p>
               {x.guidelines.map((gl) => (
                 <blockquote key={gl.tag} className="rounded-xl border-l-2 border-navy-200 bg-white px-3.5 py-2">
                   <p className="text-[13px] leading-6 text-slate-700">
