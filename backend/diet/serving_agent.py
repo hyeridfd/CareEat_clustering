@@ -541,6 +541,7 @@ def serving_agent(state: MealPlanState) -> dict:
             # [2026-11-10] 배식률 목표 영양소 (벌점 대상) — 충족 여부 기록
             f_val, k_val, c_val = round(_sum("fiber"), 1), round(_sum("potassium"), 0), round(_sum("carb"), 1)
             fat_val, sug_val = round(_sum("fat"), 1), round(_sum("sugar"), 1)
+            sat_val = round(_sum("sat_fat"), 2)
             ok_f = f_val >= (c.fiber_min or 0) * 0.999
             ok_k = k_val >= (c.potassium_min or 0) * 0.999
             ok_c = (c.carb_min or 0) * 0.999 <= c_val <= (c.carb_max or 9999) * 1.001
@@ -556,6 +557,7 @@ def serving_agent(state: MealPlanState) -> dict:
                 "예상탄수화물":   c_val,
                 "예상지방":       fat_val,
                 "예상당류":       sug_val,
+                "예상포화지방":   sat_val,
                 "예상식이섬유":   f_val,
                 "예상칼륨":       k_val,
                 "식이섬유OK": "✅" if ok_f else "⚠️",

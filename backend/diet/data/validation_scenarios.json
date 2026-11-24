@@ -1,0 +1,2311 @@
+{
+ "_설명": "검증용 시나리오 정의 → diet/data/validation_scenarios.json\n\n  python -m scripts.make_scenarios\n\n· 합성 어르신 (식별정보 없음). 기본값에서 시나리오마다 바꾼 값만 적는다.\n· expected = 지침·규칙표에서 정한 '정답' (시스템 실행 결과를 보고 정한 값이 아님)\n    issues_present  반드시 나와야 할 문제 코드        issues_absent  나오면 안 되는 문제 코드 (오탐 점검)\n    avoid_kw        피할 식재료에 들어가야 할 키워드\n    menu_check      최종 식단(대체찬·식사형태 반영)에 남으면 안 되는 식재료 — group(규칙표 알레르기 묶음) 또는 rule(약물 규칙)\n    conflicts       탐지돼야 할 지침 충돌 (정확히 이 집합)\n    overrides       적용돼야 할 약물·질환 강제 제약       removed     최종 기준에서 빠져야 할 항목\n    porridge        모든 끼니 밥 칸이 죽이어야 함          cook        대체 제품 조리법 (다지기·갈기)",
+ "base": {
+  "age": 82,
+  "female": 1,
+  "height_cm": 155,
+  "weight_kg": 52,
+  "diseases": [],
+  "medications": [],
+  "mna_sf": 12,
+  "kmbi_score": 80,
+  "kmbi_max": 100,
+  "sbp": 122,
+  "dbp": 74,
+  "mmse": 26,
+  "gds": 3,
+  "chewing_difficulty": 0,
+  "swallowing_difficulty": 0,
+  "eating_dependence": 0,
+  "intake_rate": 85
+ },
+ "scenarios": [
+  {
+   "id": "A01",
+   "domain": "알레르기",
+   "title": "새우 알레르기",
+   "features": {
+    "age": 82,
+    "female": 1,
+    "height_cm": 155,
+    "weight_kg": 52,
+    "diseases": [],
+    "medications": [],
+    "mna_sf": 12,
+    "kmbi_score": 80,
+    "kmbi_max": 100,
+    "sbp": 122,
+    "dbp": 74,
+    "mmse": 26,
+    "gds": 3,
+    "chewing_difficulty": 0,
+    "swallowing_difficulty": 0,
+    "eating_dependence": 0,
+    "intake_rate": 85
+   },
+   "meal_form": "일반밥/일반찬",
+   "ehr": {
+    "medications": [],
+    "allergies": [
+     {
+      "allergen": "새우",
+      "severity": "severe",
+      "reaction": "두드러기"
+     }
+    ]
+   },
+   "expected": {
+    "issues_present": [
+     "allergy"
+    ],
+    "issues_absent": [],
+    "avoid_kw": [
+     "새우"
+    ],
+    "menu_check": [
+     {
+      "label": "알레르기 갑각류",
+      "group": "갑각류",
+      "extra": [
+       "새우",
+       "게",
+       "크랩",
+       "랍스터",
+       "새우젓"
+      ]
+     }
+    ],
+    "conflicts": [],
+    "overrides": [],
+    "removed": [],
+    "porridge": false,
+    "cook": null
+   }
+  },
+  {
+   "id": "A02",
+   "domain": "알레르기",
+   "title": "달걀 알레르기",
+   "features": {
+    "age": 82,
+    "female": 1,
+    "height_cm": 155,
+    "weight_kg": 52,
+    "diseases": [],
+    "medications": [],
+    "mna_sf": 12,
+    "kmbi_score": 80,
+    "kmbi_max": 100,
+    "sbp": 122,
+    "dbp": 74,
+    "mmse": 26,
+    "gds": 3,
+    "chewing_difficulty": 0,
+    "swallowing_difficulty": 0,
+    "eating_dependence": 0,
+    "intake_rate": 85
+   },
+   "meal_form": "일반밥/일반찬",
+   "ehr": {
+    "medications": [],
+    "allergies": [
+     {
+      "allergen": "달걀",
+      "severity": "severe",
+      "reaction": "두드러기"
+     }
+    ]
+   },
+   "expected": {
+    "issues_present": [
+     "allergy"
+    ],
+    "issues_absent": [],
+    "avoid_kw": [
+     "달걀"
+    ],
+    "menu_check": [
+     {
+      "label": "알레르기 달걀",
+      "group": "달걀",
+      "extra": [
+       "달걀",
+       "계란",
+       "난백",
+       "난황",
+       "메추리알",
+       "마요네즈",
+       "에그"
+      ]
+     }
+    ],
+    "conflicts": [],
+    "overrides": [],
+    "removed": [],
+    "porridge": false,
+    "cook": null
+   }
+  },
+  {
+   "id": "A03",
+   "domain": "알레르기",
+   "title": "우유 알레르기",
+   "features": {
+    "age": 82,
+    "female": 1,
+    "height_cm": 155,
+    "weight_kg": 52,
+    "diseases": [],
+    "medications": [],
+    "mna_sf": 12,
+    "kmbi_score": 80,
+    "kmbi_max": 100,
+    "sbp": 122,
+    "dbp": 74,
+    "mmse": 26,
+    "gds": 3,
+    "chewing_difficulty": 0,
+    "swallowing_difficulty": 0,
+    "eating_dependence": 0,
+    "intake_rate": 85
+   },
+   "meal_form": "일반밥/일반찬",
+   "ehr": {
+    "medications": [],
+    "allergies": [
+     {
+      "allergen": "우유",
+      "severity": "severe",
+      "reaction": "두드러기"
+     }
+    ]
+   },
+   "expected": {
+    "issues_present": [
+     "allergy"
+    ],
+    "issues_absent": [],
+    "avoid_kw": [
+     "우유"
+    ],
+    "menu_check": [
+     {
+      "label": "알레르기 우유",
+      "group": "우유",
+      "extra": [
+       "우유",
+       "분유",
+       "치즈",
+       "버터",
+       "크림",
+       "연유",
+       "요구르트",
+       "유청"
+      ]
+     }
+    ],
+    "conflicts": [],
+    "overrides": [],
+    "removed": [],
+    "porridge": false,
+    "cook": null
+   }
+  },
+  {
+   "id": "A04",
+   "domain": "알레르기",
+   "title": "대두 알레르기",
+   "features": {
+    "age": 82,
+    "female": 1,
+    "height_cm": 155,
+    "weight_kg": 52,
+    "diseases": [],
+    "medications": [],
+    "mna_sf": 12,
+    "kmbi_score": 80,
+    "kmbi_max": 100,
+    "sbp": 122,
+    "dbp": 74,
+    "mmse": 26,
+    "gds": 3,
+    "chewing_difficulty": 0,
+    "swallowing_difficulty": 0,
+    "eating_dependence": 0,
+    "intake_rate": 85
+   },
+   "meal_form": "일반밥/일반찬",
+   "ehr": {
+    "medications": [],
+    "allergies": [
+     {
+      "allergen": "대두",
+      "severity": "severe",
+      "reaction": "두드러기"
+     }
+    ]
+   },
+   "expected": {
+    "issues_present": [
+     "allergy"
+    ],
+    "issues_absent": [],
+    "avoid_kw": [
+     "두부"
+    ],
+    "menu_check": [
+     {
+      "label": "알레르기 대두",
+      "group": "대두",
+      "extra": [
+       "대두",
+       "두부",
+       "두유",
+       "유부",
+       "된장",
+       "청국장",
+       "간장",
+       "고추장",
+       "콩"
+      ]
+     }
+    ],
+    "conflicts": [],
+    "overrides": [],
+    "removed": [],
+    "porridge": false,
+    "cook": null
+   }
+  },
+  {
+   "id": "A05",
+   "domain": "알레르기",
+   "title": "밀 알레르기",
+   "features": {
+    "age": 82,
+    "female": 1,
+    "height_cm": 155,
+    "weight_kg": 52,
+    "diseases": [],
+    "medications": [],
+    "mna_sf": 12,
+    "kmbi_score": 80,
+    "kmbi_max": 100,
+    "sbp": 122,
+    "dbp": 74,
+    "mmse": 26,
+    "gds": 3,
+    "chewing_difficulty": 0,
+    "swallowing_difficulty": 0,
+    "eating_dependence": 0,
+    "intake_rate": 85
+   },
+   "meal_form": "일반밥/일반찬",
+   "ehr": {
+    "medications": [],
+    "allergies": [
+     {
+      "allergen": "밀",
+      "severity": "severe",
+      "reaction": "두드러기"
+     }
+    ]
+   },
+   "expected": {
+    "issues_present": [
+     "allergy"
+    ],
+    "issues_absent": [],
+    "avoid_kw": [
+     "밀가루"
+    ],
+    "menu_check": [
+     {
+      "label": "알레르기 밀",
+      "group": "밀",
+      "extra": [
+       "밀가루",
+       "소맥",
+       "부침가루",
+       "튀김가루",
+       "빵가루",
+       "국수",
+       "만두",
+       "라면",
+       "우동",
+       "수제비",
+       "간장",
+       "고추장"
+      ]
+     }
+    ],
+    "conflicts": [],
+    "overrides": [],
+    "removed": [],
+    "porridge": false,
+    "cook": null
+   }
+  },
+  {
+   "id": "A06",
+   "domain": "알레르기",
+   "title": "땅콩 알레르기",
+   "features": {
+    "age": 82,
+    "female": 1,
+    "height_cm": 155,
+    "weight_kg": 52,
+    "diseases": [],
+    "medications": [],
+    "mna_sf": 12,
+    "kmbi_score": 80,
+    "kmbi_max": 100,
+    "sbp": 122,
+    "dbp": 74,
+    "mmse": 26,
+    "gds": 3,
+    "chewing_difficulty": 0,
+    "swallowing_difficulty": 0,
+    "eating_dependence": 0,
+    "intake_rate": 85
+   },
+   "meal_form": "일반밥/일반찬",
+   "ehr": {
+    "medications": [],
+    "allergies": [
+     {
+      "allergen": "땅콩",
+      "severity": "severe",
+      "reaction": "두드러기"
+     }
+    ]
+   },
+   "expected": {
+    "issues_present": [
+     "allergy"
+    ],
+    "issues_absent": [],
+    "avoid_kw": [
+     "땅콩"
+    ],
+    "menu_check": [
+     {
+      "label": "알레르기 땅콩",
+      "group": "땅콩",
+      "extra": [
+       "땅콩",
+       "피넛"
+      ]
+     }
+    ],
+    "conflicts": [],
+    "overrides": [],
+    "removed": [],
+    "porridge": false,
+    "cook": null
+   }
+  },
+  {
+   "id": "A07",
+   "domain": "알레르기",
+   "title": "조개 알레르기",
+   "features": {
+    "age": 82,
+    "female": 1,
+    "height_cm": 155,
+    "weight_kg": 52,
+    "diseases": [],
+    "medications": [],
+    "mna_sf": 12,
+    "kmbi_score": 80,
+    "kmbi_max": 100,
+    "sbp": 122,
+    "dbp": 74,
+    "mmse": 26,
+    "gds": 3,
+    "chewing_difficulty": 0,
+    "swallowing_difficulty": 0,
+    "eating_dependence": 0,
+    "intake_rate": 85
+   },
+   "meal_form": "일반밥/일반찬",
+   "ehr": {
+    "medications": [],
+    "allergies": [
+     {
+      "allergen": "조개",
+      "severity": "severe",
+      "reaction": "두드러기"
+     }
+    ]
+   },
+   "expected": {
+    "issues_present": [
+     "allergy"
+    ],
+    "issues_absent": [],
+    "avoid_kw": [
+     "조개"
+    ],
+    "menu_check": [
+     {
+      "label": "알레르기 조개류",
+      "group": "조개류",
+      "extra": [
+       "조개",
+       "바지락",
+       "홍합",
+       "굴",
+       "전복",
+       "모시",
+       "꼬막",
+       "가리비",
+       "굴소스"
+      ]
+     }
+    ],
+    "conflicts": [],
+    "overrides": [],
+    "removed": [],
+    "porridge": false,
+    "cook": null
+   }
+  },
+  {
+   "id": "A08",
+   "domain": "알레르기",
+   "title": "고등어 알레르기",
+   "features": {
+    "age": 82,
+    "female": 1,
+    "height_cm": 155,
+    "weight_kg": 52,
+    "diseases": [],
+    "medications": [],
+    "mna_sf": 12,
+    "kmbi_score": 80,
+    "kmbi_max": 100,
+    "sbp": 122,
+    "dbp": 74,
+    "mmse": 26,
+    "gds": 3,
+    "chewing_difficulty": 0,
+    "swallowing_difficulty": 0,
+    "eating_dependence": 0,
+    "intake_rate": 85
+   },
+   "meal_form": "일반밥/일반찬",
+   "ehr": {
+    "medications": [],
+    "allergies": [
+     {
+      "allergen": "고등어",
+      "severity": "severe",
+      "reaction": "두드러기"
+     }
+    ]
+   },
+   "expected": {
+    "issues_present": [
+     "allergy"
+    ],
+    "issues_absent": [],
+    "avoid_kw": [
+     "고등어"
+    ],
+    "menu_check": [
+     {
+      "label": "알레르기 고등어·생선",
+      "group": "고등어·생선",
+      "extra": [
+       "고등어",
+       "생선",
+       "멸치",
+       "액젓",
+       "어묵",
+       "참치",
+       "명태",
+       "황태",
+       "북어",
+       "동태",
+       "가자미",
+       "삼치",
+       "꽁치",
+       "조기"
+      ]
+     }
+    ],
+    "conflicts": [],
+    "overrides": [],
+    "removed": [],
+    "porridge": false,
+    "cook": null
+   }
+  },
+  {
+   "id": "A09",
+   "domain": "알레르기",
+   "title": "돼지고기 알레르기",
+   "features": {
+    "age": 82,
+    "female": 1,
+    "height_cm": 155,
+    "weight_kg": 52,
+    "diseases": [],
+    "medications": [],
+    "mna_sf": 12,
+    "kmbi_score": 80,
+    "kmbi_max": 100,
+    "sbp": 122,
+    "dbp": 74,
+    "mmse": 26,
+    "gds": 3,
+    "chewing_difficulty": 0,
+    "swallowing_difficulty": 0,
+    "eating_dependence": 0,
+    "intake_rate": 85
+   },
+   "meal_form": "일반밥/일반찬",
+   "ehr": {
+    "medications": [],
+    "allergies": [
+     {
+      "allergen": "돼지고기",
+      "severity": "severe",
+      "reaction": "두드러기"
+     }
+    ]
+   },
+   "expected": {
+    "issues_present": [
+     "allergy"
+    ],
+    "issues_absent": [],
+    "avoid_kw": [
+     "돼지"
+    ],
+    "menu_check": [
+     {
+      "label": "알레르기 돼지고기",
+      "group": "돼지고기",
+      "extra": [
+       "돼지",
+       "돈육",
+       "햄",
+       "베이컨",
+       "소시지",
+       "삼겹",
+       "목살",
+       "앞다리",
+       "스팸",
+       "동그랑땡"
+      ]
+     }
+    ],
+    "conflicts": [],
+    "overrides": [],
+    "removed": [],
+    "porridge": false,
+    "cook": null
+   }
+  },
+  {
+   "id": "A10",
+   "domain": "알레르기",
+   "title": "메밀 알레르기",
+   "features": {
+    "age": 82,
+    "female": 1,
+    "height_cm": 155,
+    "weight_kg": 52,
+    "diseases": [],
+    "medications": [],
+    "mna_sf": 12,
+    "kmbi_score": 80,
+    "kmbi_max": 100,
+    "sbp": 122,
+    "dbp": 74,
+    "mmse": 26,
+    "gds": 3,
+    "chewing_difficulty": 0,
+    "swallowing_difficulty": 0,
+    "eating_dependence": 0,
+    "intake_rate": 85
+   },
+   "meal_form": "일반밥/일반찬",
+   "ehr": {
+    "medications": [],
+    "allergies": [
+     {
+      "allergen": "메밀",
+      "severity": "severe",
+      "reaction": "두드러기"
+     }
+    ]
+   },
+   "expected": {
+    "issues_present": [
+     "allergy"
+    ],
+    "issues_absent": [],
+    "avoid_kw": [
+     "메밀"
+    ],
+    "menu_check": [
+     {
+      "label": "알레르기 메밀",
+      "group": "메밀",
+      "extra": [
+       "메밀"
+      ]
+     }
+    ],
+    "conflicts": [],
+    "overrides": [],
+    "removed": [],
+    "porridge": false,
+    "cook": null
+   }
+  },
+  {
+   "id": "D01",
+   "domain": "약물-식품",
+   "title": "와파린 복용",
+   "features": {
+    "age": 82,
+    "female": 1,
+    "height_cm": 155,
+    "weight_kg": 52,
+    "diseases": [],
+    "medications": [],
+    "mna_sf": 12,
+    "kmbi_score": 80,
+    "kmbi_max": 100,
+    "sbp": 122,
+    "dbp": 74,
+    "mmse": 26,
+    "gds": 3,
+    "chewing_difficulty": 0,
+    "swallowing_difficulty": 0,
+    "eating_dependence": 0,
+    "intake_rate": 85
+   },
+   "meal_form": "일반밥/일반찬",
+   "ehr": {
+    "medications": [
+     {
+      "name": "와파린정 2mg",
+      "is_active": true
+     }
+    ],
+    "allergies": []
+   },
+   "expected": {
+    "issues_present": [
+     "warfarin_vitk"
+    ],
+    "issues_absent": [],
+    "avoid_kw": [
+     "시금치"
+    ],
+    "menu_check": [
+     {
+      "label": "와파린-비타민 K 잎채소",
+      "rule": "warfarin_vitk"
+     }
+    ],
+    "conflicts": [
+     "warfarin_vs_vegetables"
+    ],
+    "overrides": [],
+    "removed": [],
+    "porridge": false,
+    "cook": null
+   }
+  },
+  {
+   "id": "D02",
+   "domain": "약물-식품",
+   "title": "칼륨 보존 이뇨제(스피로노락톤) 복용",
+   "features": {
+    "age": 82,
+    "female": 1,
+    "height_cm": 155,
+    "weight_kg": 52,
+    "diseases": [],
+    "medications": [],
+    "mna_sf": 12,
+    "kmbi_score": 80,
+    "kmbi_max": 100,
+    "sbp": 122,
+    "dbp": 74,
+    "mmse": 26,
+    "gds": 3,
+    "chewing_difficulty": 0,
+    "swallowing_difficulty": 0,
+    "eating_dependence": 0,
+    "intake_rate": 85
+   },
+   "meal_form": "일반밥/일반찬",
+   "ehr": {
+    "medications": [
+     {
+      "name": "알닥톤정 25mg",
+      "is_active": true
+     }
+    ],
+    "allergies": []
+   },
+   "expected": {
+    "issues_present": [
+     "k_sparing"
+    ],
+    "issues_absent": [],
+    "avoid_kw": [
+     "바나나"
+    ],
+    "menu_check": [
+     {
+      "label": "칼륨 보존 이뇨제-고칼륨 식품",
+      "rule": "k_sparing"
+     }
+    ],
+    "conflicts": [],
+    "overrides": [
+     "k_sparing_potassium"
+    ],
+    "removed": [
+     "potassium_min"
+    ],
+    "porridge": false,
+    "cook": null
+   }
+  },
+  {
+   "id": "D03",
+   "domain": "약물-식품",
+   "title": "MAO-B 억제제(셀레길린) 복용",
+   "features": {
+    "age": 82,
+    "female": 1,
+    "height_cm": 155,
+    "weight_kg": 52,
+    "diseases": [],
+    "medications": [],
+    "mna_sf": 12,
+    "kmbi_score": 80,
+    "kmbi_max": 100,
+    "sbp": 122,
+    "dbp": 74,
+    "mmse": 26,
+    "gds": 3,
+    "chewing_difficulty": 0,
+    "swallowing_difficulty": 0,
+    "eating_dependence": 0,
+    "intake_rate": 85
+   },
+   "meal_form": "일반밥/일반찬",
+   "ehr": {
+    "medications": [
+     {
+      "name": "셀레길린정 5mg",
+      "is_active": true
+     }
+    ],
+    "allergies": []
+   },
+   "expected": {
+    "issues_present": [
+     "mao_b_tyramine"
+    ],
+    "issues_absent": [],
+    "avoid_kw": [
+     "청국장"
+    ],
+    "menu_check": [
+     {
+      "label": "MAO-B 억제제-티라민 식품",
+      "rule": "mao_b_tyramine"
+     }
+    ],
+    "conflicts": [],
+    "overrides": [],
+    "removed": [],
+    "porridge": false,
+    "cook": null
+   }
+  },
+  {
+   "id": "D04",
+   "domain": "약물-식품",
+   "title": "스타틴(심바스타틴) 복용",
+   "features": {
+    "age": 82,
+    "female": 1,
+    "height_cm": 155,
+    "weight_kg": 52,
+    "diseases": [],
+    "medications": [],
+    "mna_sf": 12,
+    "kmbi_score": 80,
+    "kmbi_max": 100,
+    "sbp": 122,
+    "dbp": 74,
+    "mmse": 26,
+    "gds": 3,
+    "chewing_difficulty": 0,
+    "swallowing_difficulty": 0,
+    "eating_dependence": 0,
+    "intake_rate": 85
+   },
+   "meal_form": "일반밥/일반찬",
+   "ehr": {
+    "medications": [
+     {
+      "name": "심바스타틴정 20mg",
+      "is_active": true
+     }
+    ],
+    "allergies": []
+   },
+   "expected": {
+    "issues_present": [
+     "grapefruit_statin_ccb"
+    ],
+    "issues_absent": [],
+    "avoid_kw": [
+     "자몽"
+    ],
+    "menu_check": [
+     {
+      "label": "스타틴-자몽",
+      "rule": "grapefruit_statin_ccb"
+     }
+    ],
+    "conflicts": [],
+    "overrides": [],
+    "removed": [],
+    "porridge": false,
+    "cook": null
+   }
+  },
+  {
+   "id": "D05",
+   "domain": "약물-식품",
+   "title": "디곡신 복용",
+   "features": {
+    "age": 82,
+    "female": 1,
+    "height_cm": 155,
+    "weight_kg": 52,
+    "diseases": [],
+    "medications": [],
+    "mna_sf": 12,
+    "kmbi_score": 80,
+    "kmbi_max": 100,
+    "sbp": 122,
+    "dbp": 74,
+    "mmse": 26,
+    "gds": 3,
+    "chewing_difficulty": 0,
+    "swallowing_difficulty": 0,
+    "eating_dependence": 0,
+    "intake_rate": 85
+   },
+   "meal_form": "일반밥/일반찬",
+   "ehr": {
+    "medications": [
+     {
+      "name": "디곡신정 0.25mg",
+      "is_active": true
+     }
+    ],
+    "allergies": []
+   },
+   "expected": {
+    "issues_present": [
+     "digoxin_fiber"
+    ],
+    "issues_absent": [],
+    "avoid_kw": [
+     "감초"
+    ],
+    "menu_check": [
+     {
+      "label": "디곡신-감초",
+      "rule": "digoxin_fiber"
+     }
+    ],
+    "conflicts": [],
+    "overrides": [],
+    "removed": [],
+    "porridge": false,
+    "cook": null
+   }
+  },
+  {
+   "id": "D06",
+   "domain": "약물-식품",
+   "title": "레보도파 복용 (복용 시점 안내만)",
+   "features": {
+    "age": 82,
+    "female": 1,
+    "height_cm": 155,
+    "weight_kg": 52,
+    "diseases": [],
+    "medications": [],
+    "mna_sf": 12,
+    "kmbi_score": 80,
+    "kmbi_max": 100,
+    "sbp": 122,
+    "dbp": 74,
+    "mmse": 26,
+    "gds": 3,
+    "chewing_difficulty": 0,
+    "swallowing_difficulty": 0,
+    "eating_dependence": 0,
+    "intake_rate": 85
+   },
+   "meal_form": "일반밥/일반찬",
+   "ehr": {
+    "medications": [
+     {
+      "name": "마도파정",
+      "is_active": true
+     }
+    ],
+    "allergies": []
+   },
+   "expected": {
+    "issues_present": [
+     "levodopa_protein"
+    ],
+    "issues_absent": [],
+    "avoid_kw": [],
+    "menu_check": [],
+    "conflicts": [],
+    "overrides": [],
+    "removed": [],
+    "porridge": false,
+    "cook": null
+   }
+  },
+  {
+   "id": "D07",
+   "domain": "약물-식품",
+   "title": "당뇨 + 인슐린 + 섭취율 45% (저혈당 위험)",
+   "features": {
+    "age": 82,
+    "female": 1,
+    "height_cm": 155,
+    "weight_kg": 52,
+    "diseases": [
+     "당뇨병"
+    ],
+    "medications": [
+     "당뇨병약"
+    ],
+    "mna_sf": 12,
+    "kmbi_score": 80,
+    "kmbi_max": 100,
+    "sbp": 122,
+    "dbp": 74,
+    "mmse": 26,
+    "gds": 3,
+    "chewing_difficulty": 0,
+    "swallowing_difficulty": 0,
+    "eating_dependence": 0,
+    "intake_rate": 45
+   },
+   "meal_form": "일반밥/일반찬",
+   "ehr": {
+    "medications": [
+     {
+      "name": "인슐린",
+      "is_active": true
+     }
+    ],
+    "allergies": []
+   },
+   "expected": {
+    "issues_present": [
+     "sugar_control",
+     "hypoglycemia_risk"
+    ],
+    "issues_absent": [],
+    "avoid_kw": [],
+    "menu_check": [],
+    "conflicts": [
+     "energy_vs_sugar"
+    ],
+    "overrides": [
+     "hypoglycemia_energy"
+    ],
+    "removed": [],
+    "porridge": false,
+    "cook": null
+   }
+  },
+  {
+   "id": "D08",
+   "domain": "약물-식품",
+   "title": "철분제 복용 (복용 간격 안내만)",
+   "features": {
+    "age": 82,
+    "female": 1,
+    "height_cm": 155,
+    "weight_kg": 52,
+    "diseases": [],
+    "medications": [],
+    "mna_sf": 12,
+    "kmbi_score": 80,
+    "kmbi_max": 100,
+    "sbp": 122,
+    "dbp": 74,
+    "mmse": 26,
+    "gds": 3,
+    "chewing_difficulty": 0,
+    "swallowing_difficulty": 0,
+    "eating_dependence": 0,
+    "intake_rate": 85
+   },
+   "meal_form": "일반밥/일반찬",
+   "ehr": {
+    "medications": [
+     {
+      "name": "훼로바유정",
+      "is_active": true
+     }
+    ],
+    "allergies": []
+   },
+   "expected": {
+    "issues_present": [
+     "iron_tea"
+    ],
+    "issues_absent": [],
+    "avoid_kw": [],
+    "menu_check": [],
+    "conflicts": [],
+    "overrides": [],
+    "removed": [],
+    "porridge": false,
+    "cook": null
+   }
+  },
+  {
+   "id": "T01",
+   "domain": "식사형태",
+   "title": "연하곤란인데 일반식",
+   "features": {
+    "age": 82,
+    "female": 1,
+    "height_cm": 155,
+    "weight_kg": 52,
+    "diseases": [],
+    "medications": [],
+    "mna_sf": 12,
+    "kmbi_score": 80,
+    "kmbi_max": 100,
+    "sbp": 122,
+    "dbp": 74,
+    "mmse": 26,
+    "gds": 3,
+    "chewing_difficulty": 0,
+    "swallowing_difficulty": 1,
+    "eating_dependence": 0,
+    "intake_rate": 85
+   },
+   "meal_form": "일반밥/일반찬",
+   "ehr": {
+    "medications": [],
+    "allergies": []
+   },
+   "expected": {
+    "issues_present": [
+     "aspiration_risk",
+     "texture_mismatch"
+    ],
+    "issues_absent": [],
+    "avoid_kw": [],
+    "menu_check": [],
+    "conflicts": [],
+    "overrides": [],
+    "removed": [],
+    "porridge": false,
+    "cook": null
+   }
+  },
+  {
+   "id": "T02",
+   "domain": "식사형태",
+   "title": "연하곤란 + 죽/갈찬",
+   "features": {
+    "age": 82,
+    "female": 1,
+    "height_cm": 155,
+    "weight_kg": 52,
+    "diseases": [],
+    "medications": [],
+    "mna_sf": 12,
+    "kmbi_score": 80,
+    "kmbi_max": 100,
+    "sbp": 122,
+    "dbp": 74,
+    "mmse": 26,
+    "gds": 3,
+    "chewing_difficulty": 0,
+    "swallowing_difficulty": 1,
+    "eating_dependence": 0,
+    "intake_rate": 85
+   },
+   "meal_form": "죽/갈찬",
+   "ehr": {
+    "medications": [],
+    "allergies": []
+   },
+   "expected": {
+    "issues_present": [
+     "aspiration_risk"
+    ],
+    "issues_absent": [
+     "texture_mismatch"
+    ],
+    "avoid_kw": [],
+    "menu_check": [],
+    "conflicts": [],
+    "overrides": [],
+    "removed": [],
+    "porridge": true,
+    "cook": "갈기"
+   }
+  },
+  {
+   "id": "T03",
+   "domain": "식사형태",
+   "title": "저작곤란인데 일반찬",
+   "features": {
+    "age": 82,
+    "female": 1,
+    "height_cm": 155,
+    "weight_kg": 52,
+    "diseases": [],
+    "medications": [],
+    "mna_sf": 12,
+    "kmbi_score": 80,
+    "kmbi_max": 100,
+    "sbp": 122,
+    "dbp": 74,
+    "mmse": 26,
+    "gds": 3,
+    "chewing_difficulty": 1,
+    "swallowing_difficulty": 0,
+    "eating_dependence": 0,
+    "intake_rate": 85
+   },
+   "meal_form": "일반밥/일반찬",
+   "ehr": {
+    "medications": [],
+    "allergies": []
+   },
+   "expected": {
+    "issues_present": [
+     "chewing"
+    ],
+    "issues_absent": [
+     "aspiration_risk",
+     "texture_mismatch"
+    ],
+    "avoid_kw": [],
+    "menu_check": [],
+    "conflicts": [],
+    "overrides": [],
+    "removed": [],
+    "porridge": false,
+    "cook": null
+   }
+  },
+  {
+   "id": "T04",
+   "domain": "식사형태",
+   "title": "저작곤란 + 밥/다진찬",
+   "features": {
+    "age": 82,
+    "female": 1,
+    "height_cm": 155,
+    "weight_kg": 52,
+    "diseases": [],
+    "medications": [],
+    "mna_sf": 12,
+    "kmbi_score": 80,
+    "kmbi_max": 100,
+    "sbp": 122,
+    "dbp": 74,
+    "mmse": 26,
+    "gds": 3,
+    "chewing_difficulty": 1,
+    "swallowing_difficulty": 0,
+    "eating_dependence": 0,
+    "intake_rate": 85
+   },
+   "meal_form": "일반밥/다진찬",
+   "ehr": {
+    "medications": [],
+    "allergies": []
+   },
+   "expected": {
+    "issues_present": [
+     "chewing"
+    ],
+    "issues_absent": [
+     "aspiration_risk",
+     "texture_mismatch"
+    ],
+    "avoid_kw": [],
+    "menu_check": [],
+    "conflicts": [],
+    "overrides": [],
+    "removed": [],
+    "porridge": false,
+    "cook": "다지기"
+   }
+  },
+  {
+   "id": "T05",
+   "domain": "식사형태",
+   "title": "죽식 (곤란 없음)",
+   "features": {
+    "age": 82,
+    "female": 1,
+    "height_cm": 155,
+    "weight_kg": 52,
+    "diseases": [],
+    "medications": [],
+    "mna_sf": 12,
+    "kmbi_score": 80,
+    "kmbi_max": 100,
+    "sbp": 122,
+    "dbp": 74,
+    "mmse": 26,
+    "gds": 3,
+    "chewing_difficulty": 0,
+    "swallowing_difficulty": 0,
+    "eating_dependence": 0,
+    "intake_rate": 85
+   },
+   "meal_form": "죽/일반찬",
+   "ehr": {
+    "medications": [],
+    "allergies": []
+   },
+   "expected": {
+    "issues_present": [],
+    "issues_absent": [
+     "aspiration_risk",
+     "texture_mismatch"
+    ],
+    "avoid_kw": [],
+    "menu_check": [],
+    "conflicts": [],
+    "overrides": [],
+    "removed": [],
+    "porridge": true,
+    "cook": null
+   }
+  },
+  {
+   "id": "T06",
+   "domain": "식사형태",
+   "title": "연하곤란인데 밥/다진찬",
+   "features": {
+    "age": 82,
+    "female": 1,
+    "height_cm": 155,
+    "weight_kg": 52,
+    "diseases": [],
+    "medications": [],
+    "mna_sf": 12,
+    "kmbi_score": 80,
+    "kmbi_max": 100,
+    "sbp": 122,
+    "dbp": 74,
+    "mmse": 26,
+    "gds": 3,
+    "chewing_difficulty": 0,
+    "swallowing_difficulty": 1,
+    "eating_dependence": 0,
+    "intake_rate": 85
+   },
+   "meal_form": "일반밥/다진찬",
+   "ehr": {
+    "medications": [],
+    "allergies": []
+   },
+   "expected": {
+    "issues_present": [
+     "aspiration_risk",
+     "texture_mismatch"
+    ],
+    "issues_absent": [],
+    "avoid_kw": [],
+    "menu_check": [],
+    "conflicts": [],
+    "overrides": [],
+    "removed": [],
+    "porridge": false,
+    "cook": null
+   }
+  },
+  {
+   "id": "T07",
+   "domain": "식사형태",
+   "title": "정상 일반식 (대조군)",
+   "features": {
+    "age": 82,
+    "female": 1,
+    "height_cm": 155,
+    "weight_kg": 52,
+    "diseases": [],
+    "medications": [],
+    "mna_sf": 12,
+    "kmbi_score": 80,
+    "kmbi_max": 100,
+    "sbp": 122,
+    "dbp": 74,
+    "mmse": 26,
+    "gds": 3,
+    "chewing_difficulty": 0,
+    "swallowing_difficulty": 0,
+    "eating_dependence": 0,
+    "intake_rate": 85
+   },
+   "meal_form": "일반밥/일반찬",
+   "ehr": {
+    "medications": [],
+    "allergies": []
+   },
+   "expected": {
+    "issues_present": [],
+    "issues_absent": [
+     "aspiration_risk",
+     "chewing",
+     "texture_mismatch",
+     "allergy",
+     "hypoglycemia_risk"
+    ],
+    "avoid_kw": [],
+    "menu_check": [],
+    "conflicts": [],
+    "overrides": [],
+    "removed": [],
+    "porridge": false,
+    "cook": null
+   }
+  },
+  {
+   "id": "T08",
+   "domain": "식사형태",
+   "title": "연하곤란 + 저작곤란 + 죽/갈찬",
+   "features": {
+    "age": 82,
+    "female": 1,
+    "height_cm": 155,
+    "weight_kg": 52,
+    "diseases": [],
+    "medications": [],
+    "mna_sf": 12,
+    "kmbi_score": 80,
+    "kmbi_max": 100,
+    "sbp": 122,
+    "dbp": 74,
+    "mmse": 26,
+    "gds": 3,
+    "chewing_difficulty": 1,
+    "swallowing_difficulty": 1,
+    "eating_dependence": 0,
+    "intake_rate": 85
+   },
+   "meal_form": "죽/갈찬",
+   "ehr": {
+    "medications": [],
+    "allergies": []
+   },
+   "expected": {
+    "issues_present": [
+     "aspiration_risk",
+     "chewing"
+    ],
+    "issues_absent": [
+     "texture_mismatch"
+    ],
+    "avoid_kw": [],
+    "menu_check": [],
+    "conflicts": [],
+    "overrides": [],
+    "removed": [],
+    "porridge": true,
+    "cook": "갈기"
+   }
+  },
+  {
+   "id": "K01",
+   "domain": "기준 충돌",
+   "title": "당뇨 + 저체중(BMI 17.5)",
+   "features": {
+    "age": 82,
+    "female": 1,
+    "height_cm": 155,
+    "weight_kg": 42,
+    "diseases": [
+     "당뇨병"
+    ],
+    "medications": [],
+    "mna_sf": 12,
+    "kmbi_score": 80,
+    "kmbi_max": 100,
+    "sbp": 122,
+    "dbp": 74,
+    "mmse": 26,
+    "gds": 3,
+    "chewing_difficulty": 0,
+    "swallowing_difficulty": 0,
+    "eating_dependence": 0,
+    "intake_rate": 85
+   },
+   "meal_form": "일반밥/일반찬",
+   "ehr": {
+    "medications": [],
+    "allergies": []
+   },
+   "expected": {
+    "issues_present": [
+     "sugar_control",
+     "underweight"
+    ],
+    "issues_absent": [],
+    "avoid_kw": [],
+    "menu_check": [],
+    "conflicts": [
+     "energy_vs_sugar"
+    ],
+    "overrides": [],
+    "removed": [],
+    "porridge": false,
+    "cook": null
+   }
+  },
+  {
+   "id": "K02",
+   "domain": "기준 충돌",
+   "title": "연하곤란(갈찬) + 영양불량(MNA-SF 6)",
+   "features": {
+    "age": 82,
+    "female": 1,
+    "height_cm": 155,
+    "weight_kg": 52,
+    "diseases": [],
+    "medications": [],
+    "mna_sf": 6,
+    "kmbi_score": 80,
+    "kmbi_max": 100,
+    "sbp": 122,
+    "dbp": 74,
+    "mmse": 26,
+    "gds": 3,
+    "chewing_difficulty": 0,
+    "swallowing_difficulty": 1,
+    "eating_dependence": 0,
+    "intake_rate": 85
+   },
+   "meal_form": "죽/갈찬",
+   "ehr": {
+    "medications": [],
+    "allergies": []
+   },
+   "expected": {
+    "issues_present": [
+     "aspiration_risk",
+     "malnutrition_risk"
+    ],
+    "issues_absent": [],
+    "avoid_kw": [],
+    "menu_check": [],
+    "conflicts": [
+     "dysphagia_vs_protein"
+    ],
+    "overrides": [],
+    "removed": [],
+    "porridge": true,
+    "cook": null
+   }
+  },
+  {
+   "id": "K03",
+   "domain": "기준 충돌",
+   "title": "고혈압 + 영양불량 위험(MNA-SF 9)",
+   "features": {
+    "age": 82,
+    "female": 1,
+    "height_cm": 155,
+    "weight_kg": 52,
+    "diseases": [
+     "고혈압"
+    ],
+    "medications": [],
+    "mna_sf": 9,
+    "kmbi_score": 80,
+    "kmbi_max": 100,
+    "sbp": 122,
+    "dbp": 74,
+    "mmse": 26,
+    "gds": 3,
+    "chewing_difficulty": 0,
+    "swallowing_difficulty": 0,
+    "eating_dependence": 0,
+    "intake_rate": 85
+   },
+   "meal_form": "일반밥/일반찬",
+   "ehr": {
+    "medications": [],
+    "allergies": []
+   },
+   "expected": {
+    "issues_present": [
+     "sodium_control",
+     "malnutrition_risk"
+    ],
+    "issues_absent": [],
+    "avoid_kw": [],
+    "menu_check": [],
+    "conflicts": [
+     "sodium_vs_low_intake"
+    ],
+    "overrides": [],
+    "removed": [],
+    "porridge": false,
+    "cook": null
+   }
+  },
+  {
+   "id": "K04",
+   "domain": "기준 충돌",
+   "title": "비만(BMI 30) + 일상생활 기능 저하(K-MBI 30%)",
+   "features": {
+    "age": 82,
+    "female": 1,
+    "height_cm": 155,
+    "weight_kg": 72,
+    "diseases": [],
+    "medications": [],
+    "mna_sf": 12,
+    "kmbi_score": 30,
+    "kmbi_max": 100,
+    "sbp": 122,
+    "dbp": 74,
+    "mmse": 26,
+    "gds": 3,
+    "chewing_difficulty": 0,
+    "swallowing_difficulty": 0,
+    "eating_dependence": 0,
+    "intake_rate": 85
+   },
+   "meal_form": "일반밥/일반찬",
+   "ehr": {
+    "medications": [],
+    "allergies": []
+   },
+   "expected": {
+    "issues_present": [
+     "obesity",
+     "sarcopenia_risk"
+    ],
+    "issues_absent": [],
+    "avoid_kw": [],
+    "menu_check": [],
+    "conflicts": [
+     "obesity_vs_muscle"
+    ],
+    "overrides": [],
+    "removed": [],
+    "porridge": false,
+    "cook": null
+   }
+  },
+  {
+   "id": "K05",
+   "domain": "기준 충돌",
+   "title": "와파린 + 고혈압",
+   "features": {
+    "age": 82,
+    "female": 1,
+    "height_cm": 155,
+    "weight_kg": 52,
+    "diseases": [
+     "고혈압"
+    ],
+    "medications": [],
+    "mna_sf": 12,
+    "kmbi_score": 80,
+    "kmbi_max": 100,
+    "sbp": 122,
+    "dbp": 74,
+    "mmse": 26,
+    "gds": 3,
+    "chewing_difficulty": 0,
+    "swallowing_difficulty": 0,
+    "eating_dependence": 0,
+    "intake_rate": 85
+   },
+   "meal_form": "일반밥/일반찬",
+   "ehr": {
+    "medications": [
+     {
+      "name": "와파린정 2mg",
+      "is_active": true
+     }
+    ],
+    "allergies": []
+   },
+   "expected": {
+    "issues_present": [
+     "warfarin_vitk",
+     "sodium_control"
+    ],
+    "issues_absent": [],
+    "avoid_kw": [],
+    "menu_check": [
+     {
+      "label": "와파린-비타민 K 잎채소",
+      "rule": "warfarin_vitk"
+     }
+    ],
+    "conflicts": [
+     "warfarin_vs_vegetables"
+    ],
+    "overrides": [],
+    "removed": [],
+    "porridge": false,
+    "cook": null
+   }
+  },
+  {
+   "id": "K06",
+   "domain": "기준 충돌",
+   "title": "칼륨 보존 이뇨제 + 고혈압",
+   "features": {
+    "age": 82,
+    "female": 1,
+    "height_cm": 155,
+    "weight_kg": 52,
+    "diseases": [
+     "고혈압"
+    ],
+    "medications": [],
+    "mna_sf": 12,
+    "kmbi_score": 80,
+    "kmbi_max": 100,
+    "sbp": 122,
+    "dbp": 74,
+    "mmse": 26,
+    "gds": 3,
+    "chewing_difficulty": 0,
+    "swallowing_difficulty": 0,
+    "eating_dependence": 0,
+    "intake_rate": 85
+   },
+   "meal_form": "일반밥/일반찬",
+   "ehr": {
+    "medications": [
+     {
+      "name": "알닥톤정 25mg",
+      "is_active": true
+     }
+    ],
+    "allergies": []
+   },
+   "expected": {
+    "issues_present": [
+     "k_sparing",
+     "sodium_control"
+    ],
+    "issues_absent": [],
+    "avoid_kw": [],
+    "menu_check": [
+     {
+      "label": "칼륨 보존 이뇨제-고칼륨 식품",
+      "rule": "k_sparing"
+     }
+    ],
+    "conflicts": [
+     "k_sparing_vs_potassium"
+    ],
+    "overrides": [
+     "k_sparing_potassium"
+    ],
+    "removed": [
+     "potassium_min"
+    ],
+    "porridge": false,
+    "cook": null
+   }
+  },
+  {
+   "id": "K07",
+   "domain": "기준 충돌",
+   "title": "신장질환 + 저체중",
+   "features": {
+    "age": 82,
+    "female": 1,
+    "height_cm": 155,
+    "weight_kg": 42,
+    "diseases": [
+     "신장질환"
+    ],
+    "medications": [],
+    "mna_sf": 12,
+    "kmbi_score": 80,
+    "kmbi_max": 100,
+    "sbp": 122,
+    "dbp": 74,
+    "mmse": 26,
+    "gds": 3,
+    "chewing_difficulty": 0,
+    "swallowing_difficulty": 0,
+    "eating_dependence": 0,
+    "intake_rate": 85
+   },
+   "meal_form": "일반밥/일반찬",
+   "ehr": {
+    "medications": [],
+    "allergies": []
+   },
+   "expected": {
+    "issues_present": [
+     "underweight"
+    ],
+    "issues_absent": [],
+    "avoid_kw": [],
+    "menu_check": [],
+    "conflicts": [
+     "protein_vs_kidney"
+    ],
+    "overrides": [
+     "kidney_potassium"
+    ],
+    "removed": [
+     "potassium_min"
+    ],
+    "porridge": false,
+    "cook": null
+   }
+  },
+  {
+   "id": "K08",
+   "domain": "기준 충돌",
+   "title": "당뇨만 (충돌 없음 대조군)",
+   "features": {
+    "age": 82,
+    "female": 1,
+    "height_cm": 155,
+    "weight_kg": 52,
+    "diseases": [
+     "당뇨병"
+    ],
+    "medications": [],
+    "mna_sf": 12,
+    "kmbi_score": 80,
+    "kmbi_max": 100,
+    "sbp": 122,
+    "dbp": 74,
+    "mmse": 26,
+    "gds": 3,
+    "chewing_difficulty": 0,
+    "swallowing_difficulty": 0,
+    "eating_dependence": 0,
+    "intake_rate": 85
+   },
+   "meal_form": "일반밥/일반찬",
+   "ehr": {
+    "medications": [],
+    "allergies": []
+   },
+   "expected": {
+    "issues_present": [
+     "sugar_control"
+    ],
+    "issues_absent": [],
+    "avoid_kw": [],
+    "menu_check": [],
+    "conflicts": [],
+    "overrides": [],
+    "removed": [],
+    "porridge": false,
+    "cook": null
+   }
+  },
+  {
+   "id": "K09",
+   "domain": "기준 충돌",
+   "title": "고혈압만 (충돌 없음 대조군)",
+   "features": {
+    "age": 82,
+    "female": 1,
+    "height_cm": 155,
+    "weight_kg": 52,
+    "diseases": [
+     "고혈압"
+    ],
+    "medications": [],
+    "mna_sf": 12,
+    "kmbi_score": 80,
+    "kmbi_max": 100,
+    "sbp": 122,
+    "dbp": 74,
+    "mmse": 26,
+    "gds": 3,
+    "chewing_difficulty": 0,
+    "swallowing_difficulty": 0,
+    "eating_dependence": 0,
+    "intake_rate": 85
+   },
+   "meal_form": "일반밥/일반찬",
+   "ehr": {
+    "medications": [],
+    "allergies": []
+   },
+   "expected": {
+    "issues_present": [
+     "sodium_control"
+    ],
+    "issues_absent": [],
+    "avoid_kw": [],
+    "menu_check": [],
+    "conflicts": [],
+    "overrides": [],
+    "removed": [],
+    "porridge": false,
+    "cook": null
+   }
+  },
+  {
+   "id": "K10",
+   "domain": "기준 충돌",
+   "title": "저체중만 (충돌 없음 대조군)",
+   "features": {
+    "age": 82,
+    "female": 1,
+    "height_cm": 155,
+    "weight_kg": 42,
+    "diseases": [],
+    "medications": [],
+    "mna_sf": 12,
+    "kmbi_score": 80,
+    "kmbi_max": 100,
+    "sbp": 122,
+    "dbp": 74,
+    "mmse": 26,
+    "gds": 3,
+    "chewing_difficulty": 0,
+    "swallowing_difficulty": 0,
+    "eating_dependence": 0,
+    "intake_rate": 85
+   },
+   "meal_form": "일반밥/일반찬",
+   "ehr": {
+    "medications": [],
+    "allergies": []
+   },
+   "expected": {
+    "issues_present": [
+     "underweight"
+    ],
+    "issues_absent": [],
+    "avoid_kw": [],
+    "menu_check": [],
+    "conflicts": [],
+    "overrides": [],
+    "removed": [],
+    "porridge": false,
+    "cook": null
+   }
+  },
+  {
+   "id": "X01",
+   "domain": "복합",
+   "title": "당뇨 + 고혈압 + 새우 알레르기 + 연하곤란(일반식) + 영양불량(MNA-SF 7)",
+   "features": {
+    "age": 82,
+    "female": 1,
+    "height_cm": 155,
+    "weight_kg": 52,
+    "diseases": [
+     "당뇨병",
+     "고혈압"
+    ],
+    "medications": [],
+    "mna_sf": 7,
+    "kmbi_score": 80,
+    "kmbi_max": 100,
+    "sbp": 122,
+    "dbp": 74,
+    "mmse": 26,
+    "gds": 3,
+    "chewing_difficulty": 0,
+    "swallowing_difficulty": 1,
+    "eating_dependence": 0,
+    "intake_rate": 85
+   },
+   "meal_form": "일반밥/일반찬",
+   "ehr": {
+    "medications": [],
+    "allergies": [
+     {
+      "allergen": "새우",
+      "severity": "severe",
+      "reaction": "두드러기"
+     }
+    ]
+   },
+   "expected": {
+    "issues_present": [
+     "allergy",
+     "aspiration_risk",
+     "texture_mismatch",
+     "sugar_control",
+     "sodium_control",
+     "malnutrition_risk"
+    ],
+    "issues_absent": [],
+    "avoid_kw": [
+     "새우"
+    ],
+    "menu_check": [
+     {
+      "label": "알레르기 갑각류",
+      "group": "갑각류",
+      "extra": [
+       "새우",
+       "게",
+       "크랩",
+       "랍스터",
+       "새우젓"
+      ]
+     }
+    ],
+    "conflicts": [
+     "energy_vs_sugar",
+     "dysphagia_vs_protein",
+     "sodium_vs_low_intake"
+    ],
+    "overrides": [],
+    "removed": [],
+    "porridge": false,
+    "cook": null
+   }
+  },
+  {
+   "id": "X02",
+   "domain": "복합",
+   "title": "와파린 + 고혈압 + 저체중(BMI 17.8)",
+   "features": {
+    "age": 82,
+    "female": 1,
+    "height_cm": 155,
+    "weight_kg": 42.8,
+    "diseases": [
+     "고혈압"
+    ],
+    "medications": [],
+    "mna_sf": 12,
+    "kmbi_score": 80,
+    "kmbi_max": 100,
+    "sbp": 122,
+    "dbp": 74,
+    "mmse": 26,
+    "gds": 3,
+    "chewing_difficulty": 0,
+    "swallowing_difficulty": 0,
+    "eating_dependence": 0,
+    "intake_rate": 85
+   },
+   "meal_form": "일반밥/일반찬",
+   "ehr": {
+    "medications": [
+     {
+      "name": "와파린정 2mg",
+      "is_active": true
+     }
+    ],
+    "allergies": []
+   },
+   "expected": {
+    "issues_present": [
+     "warfarin_vitk",
+     "sodium_control",
+     "underweight"
+    ],
+    "issues_absent": [],
+    "avoid_kw": [],
+    "menu_check": [
+     {
+      "label": "와파린-비타민 K 잎채소",
+      "rule": "warfarin_vitk"
+     }
+    ],
+    "conflicts": [
+     "warfarin_vs_vegetables",
+     "sodium_vs_low_intake"
+    ],
+    "overrides": [],
+    "removed": [],
+    "porridge": false,
+    "cook": null
+   }
+  },
+  {
+   "id": "X03",
+   "domain": "복합",
+   "title": "신장질환 + 칼륨 보존 이뇨제 + 고혈압",
+   "features": {
+    "age": 82,
+    "female": 1,
+    "height_cm": 155,
+    "weight_kg": 52,
+    "diseases": [
+     "신장질환",
+     "고혈압"
+    ],
+    "medications": [],
+    "mna_sf": 12,
+    "kmbi_score": 80,
+    "kmbi_max": 100,
+    "sbp": 122,
+    "dbp": 74,
+    "mmse": 26,
+    "gds": 3,
+    "chewing_difficulty": 0,
+    "swallowing_difficulty": 0,
+    "eating_dependence": 0,
+    "intake_rate": 85
+   },
+   "meal_form": "일반밥/일반찬",
+   "ehr": {
+    "medications": [
+     {
+      "name": "알닥톤정 25mg",
+      "is_active": true
+     }
+    ],
+    "allergies": []
+   },
+   "expected": {
+    "issues_present": [
+     "k_sparing",
+     "sodium_control"
+    ],
+    "issues_absent": [],
+    "avoid_kw": [],
+    "menu_check": [
+     {
+      "label": "칼륨 보존 이뇨제-고칼륨 식품",
+      "rule": "k_sparing"
+     }
+    ],
+    "conflicts": [
+     "k_sparing_vs_potassium",
+     "protein_vs_kidney"
+    ],
+    "overrides": [
+     "k_sparing_potassium",
+     "kidney_potassium"
+    ],
+    "removed": [
+     "potassium_min"
+    ],
+    "porridge": false,
+    "cook": null
+   }
+  },
+  {
+   "id": "X04",
+   "domain": "복합",
+   "title": "당뇨 + 고혈압 + 인슐린 + 섭취율 45%",
+   "features": {
+    "age": 82,
+    "female": 1,
+    "height_cm": 155,
+    "weight_kg": 52,
+    "diseases": [
+     "당뇨병",
+     "고혈압"
+    ],
+    "medications": [
+     "당뇨병약"
+    ],
+    "mna_sf": 12,
+    "kmbi_score": 80,
+    "kmbi_max": 100,
+    "sbp": 122,
+    "dbp": 74,
+    "mmse": 26,
+    "gds": 3,
+    "chewing_difficulty": 0,
+    "swallowing_difficulty": 0,
+    "eating_dependence": 0,
+    "intake_rate": 45
+   },
+   "meal_form": "일반밥/일반찬",
+   "ehr": {
+    "medications": [
+     {
+      "name": "인슐린",
+      "is_active": true
+     }
+    ],
+    "allergies": []
+   },
+   "expected": {
+    "issues_present": [
+     "sugar_control",
+     "hypoglycemia_risk",
+     "sodium_control",
+     "slot_low_intake"
+    ],
+    "issues_absent": [],
+    "avoid_kw": [],
+    "menu_check": [],
+    "conflicts": [
+     "energy_vs_sugar",
+     "sodium_vs_low_intake"
+    ],
+    "overrides": [
+     "hypoglycemia_energy"
+    ],
+    "removed": [],
+    "porridge": false,
+    "cook": null
+   }
+  },
+  {
+   "id": "X05",
+   "domain": "복합",
+   "title": "치매 + 저작곤란 + 우유 알레르기 + 식사 도움 필요",
+   "features": {
+    "age": 82,
+    "female": 1,
+    "height_cm": 155,
+    "weight_kg": 52,
+    "diseases": [
+     "치매"
+    ],
+    "medications": [],
+    "mna_sf": 12,
+    "kmbi_score": 80,
+    "kmbi_max": 100,
+    "sbp": 122,
+    "dbp": 74,
+    "mmse": 15,
+    "gds": 3,
+    "chewing_difficulty": 1,
+    "swallowing_difficulty": 0,
+    "eating_dependence": 1,
+    "intake_rate": 85
+   },
+   "meal_form": "일반밥/다진찬",
+   "ehr": {
+    "medications": [],
+    "allergies": [
+     {
+      "allergen": "우유",
+      "severity": "severe",
+      "reaction": "두드러기"
+     }
+    ]
+   },
+   "expected": {
+    "issues_present": [
+     "brain_food",
+     "chewing",
+     "allergy",
+     "eating_assist"
+    ],
+    "issues_absent": [
+     "aspiration_risk",
+     "texture_mismatch"
+    ],
+    "avoid_kw": [
+     "우유"
+    ],
+    "menu_check": [
+     {
+      "label": "알레르기 우유",
+      "group": "우유",
+      "extra": [
+       "우유",
+       "분유",
+       "치즈",
+       "버터",
+       "크림",
+       "연유",
+       "요구르트",
+       "유청"
+      ]
+     }
+    ],
+    "conflicts": [],
+    "overrides": [],
+    "removed": [],
+    "porridge": false,
+    "cook": "다지기"
+   }
+  },
+  {
+   "id": "X06",
+   "domain": "복합",
+   "title": "당뇨 + 비만(BMI 30) + 일상생활 기능 저하(K-MBI 30%)",
+   "features": {
+    "age": 82,
+    "female": 1,
+    "height_cm": 155,
+    "weight_kg": 72,
+    "diseases": [
+     "당뇨병"
+    ],
+    "medications": [],
+    "mna_sf": 12,
+    "kmbi_score": 30,
+    "kmbi_max": 100,
+    "sbp": 122,
+    "dbp": 74,
+    "mmse": 26,
+    "gds": 3,
+    "chewing_difficulty": 0,
+    "swallowing_difficulty": 0,
+    "eating_dependence": 0,
+    "intake_rate": 85
+   },
+   "meal_form": "일반밥/일반찬",
+   "ehr": {
+    "medications": [],
+    "allergies": []
+   },
+   "expected": {
+    "issues_present": [
+     "sugar_control",
+     "obesity",
+     "sarcopenia_risk"
+    ],
+    "issues_absent": [],
+    "avoid_kw": [],
+    "menu_check": [],
+    "conflicts": [
+     "obesity_vs_muscle"
+    ],
+    "overrides": [],
+    "removed": [],
+    "porridge": false,
+    "cook": null
+   }
+  }
+ ]
+}

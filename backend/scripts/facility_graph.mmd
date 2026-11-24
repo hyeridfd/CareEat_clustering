@@ -1,0 +1,37 @@
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	build_profiles(build_profiles)
+	personalize_resident(personalize_resident)
+	apply_profiles(apply_profiles)
+	optimize(optimize)
+	select_menu(select_menu)
+	repair_repeats(repair_repeats)
+	review_menu(review_menu)
+	build_menu(build_menu)
+	meal_form(meal_form)
+	substitute(substitute)
+	serve(serve)
+	assemble(assemble)
+	__end__([<p>__end__</p>]):::last
+	__start__ --> build_profiles;
+	apply_profiles --> optimize;
+	build_menu --> meal_form;
+	build_profiles -.-> personalize_resident;
+	meal_form --> substitute;
+	optimize --> select_menu;
+	personalize_resident --> apply_profiles;
+	repair_repeats -.-> build_menu;
+	repair_repeats -.-> review_menu;
+	review_menu --> build_menu;
+	select_menu --> repair_repeats;
+	serve --> assemble;
+	substitute --> serve;
+	assemble --> __end__;
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc

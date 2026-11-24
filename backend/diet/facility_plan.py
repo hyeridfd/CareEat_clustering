@@ -12,6 +12,11 @@
     pref_mult        f4 의 시설 선호(실제 섭취율) 항 가중치 배수                  예: 섭취율이 낮을 때 ×1.5
     texture_mult     f4 의 다진찬 부적합 규칙 가중치 배수                         예: 형태 조정 수요가 많을 때 ×2
     avoid_menus      잔반이 특히 많은 메뉴를 후보에서 뺀다 (자리별 후보가 10% 넘게 줄면 빼지 않음)
+    targets          영양 목표치를 '더 엄격하게만' 올린다 (예: 단백질 끼니 16.7 → 23 g, 하루 50 → 69 g)
+                     — 이미 대부분 충족한 기준에 가중치만 곱하면 위반이 0이라 효과가 없어서 (2026-11-24)
+
+  선택 보호장치(guard_candidates): 파레토 후보 중 개선안이 겨냥한 영양소가 '비교 기준(무작위 식단)'보다
+  나빠지는 후보는 고르지 않는다. 모든 후보가 걸리면 가장 덜 나빠지는 후보들로 좁힌다.
 
   식사 도움·우울·끼니 운영처럼 식단 밖의 조치는 반영하지 않고 '식단 외 조치'로 따로 돌려준다.
   어르신별 맞춤(대체찬·배식량)은 기존 개인 기준을 그대로 따른다.
@@ -32,6 +37,11 @@ CALCIUM_SRC = ["우유", "요구르트", "요거트", "치즈", "멸치", "뱅�
                "꽁치", "들깨"]
 VITD_SRC = ["표고", "고등어", "연어", "꽁치", "삼치", "달걀", "계란", "메추리알"]
 FIBER_SRC = ["나물", "시래기", "우거지", "버섯", "미역", "다시마", "톳", "잡곡", "보리", "현미", "고구마", "브로콜리", "배추", "양배추"]
+# 저체중·영양위험·단백질 부족 개선안: 단백질 목표 상향
+#   끼니 23 g · 하루 69 g ≈ 영양불량 노인 권고 1.2~1.5 g/kg (저체중군 체중 45~55 kg)
+#   20 g(하루 60 g)으로는 무작위 식단 평균(끼니 약 26.7 g)보다 낮게 나와 개선이 안 됐음 (2026-11-24 시험)
+PROTEIN_BOOST = {"protein_min": 23.0, "daily_protein_min": 69.0}
+PROTEIN_W = 3.0
 PROTEIN_SRC = ["두부", "달걀", "계란", "생선", "고등어", "조기", "가자미", "동태", "닭", "돼지", "소고기", "쇠고기", "불고기", "연두부"]
 
 # 관리 우선순위 id → 식단 반영 지시
@@ -41,14 +51,19 @@ MENU_DIRECTIVES = {
                               "장아찌·젓갈·가공육·어묵 메뉴를 덜 고르도록 제한",
                               "칼륨이 많은 국·부찬을 더 고르도록 선호 (신장질환·칼륨 보존 이뇨제 어르신은 개인 맞춤에서 제외)"]),
     "F_NUT_ENERGY": dict(weight={"energy": 1.5}, how=["영양 위반(f1)에서 열량 부족 가중치 ×1.5"]),
-    "F_NUT_PROTEIN": dict(weight={"protein": 1.5}, prefer=PROTEIN_SRC,
-                          how=["영양 위반(f1)에서 단백질 부족 가중치 ×1.5", "단백질 급원 메뉴 선호"]),
+    "F_NUT_PROTEIN": dict(weight={"protein": PROTEIN_W}, prefer=PROTEIN_SRC, targets=PROTEIN_BOOST,
+                          how=["단백질 목표 상향: 끼니 16.7 → 23 g, 하루 50 → 69 g",
+                               "영양 위반(f1)에서 단백질 부족 가중치 ×3", "단백질 급원 메뉴 선호"]),
     "F_NUT_CALCIUM": dict(prefer=CALCIUM_SRC, how=["우유·멸치·두부·무청 등 칼슘 급원 메뉴 선호"]),
     "F_NUT_FIBER": dict(weight={"fiber": 1.5}, prefer=FIBER_SRC,
                         how=["영양 위반(f1)에서 식이섬유 부족 가중치 ×1.5", "나물·버섯·해조류·잡곡 메뉴 선호"]),
     "F_NUT_VITD": dict(prefer=VITD_SRC, how=["표고버섯·등푸른생선·달걀 메뉴 선호"]),
-    "F_MALNUT": dict(weight={"energy": 1.5, "protein": 1.5}, how=["영양 위반(f1)에서 열량·단백질 부족 가중치 ×1.5"]),
-    "F_UNDERWEIGHT": dict(weight={"energy": 1.5, "protein": 1.5}, how=["영양 위반(f1)에서 열량·단백질 부족 가중치 ×1.5"]),
+    "F_MALNUT": dict(weight={"energy": 1.5, "protein": PROTEIN_W}, prefer=PROTEIN_SRC, targets=PROTEIN_BOOST,
+                     how=["단백질 목표 상향: 끼니 16.7 → 23 g, 하루 50 → 69 g",
+                          "영양 위반(f1)에서 열량 부족 가중치 ×1.5 · 단백질 부족 가중치 ×3", "단백질 급원 메뉴 선호"]),
+    "F_UNDERWEIGHT": dict(weight={"energy": 1.5, "protein": PROTEIN_W}, prefer=PROTEIN_SRC, targets=PROTEIN_BOOST,
+                          how=["단백질 목표 상향: 끼니 16.7 → 23 g, 하루 50 → 69 g",
+                               "영양 위반(f1)에서 열량 부족 가중치 ×1.5 · 단백질 부족 가중치 ×3", "단백질 급원 메뉴 선호"]),
     "F_TEXTURE_NEED": dict(texture=2.0, how=["다진찬으로 만들기 어려운 메뉴 제한 규칙 가중치 ×2"]),
     "F_TEXTURE_GAP": dict(texture=2.0, how=["다진찬으로 만들기 어려운 메뉴 제한 규칙 가중치 ×2"]),
     "F_LOW_INTAKE": dict(pref=1.5, how=["실제 섭취율이 높은 메뉴(시설 선호) 가중치 ×1.5"]),
@@ -65,7 +80,7 @@ def _norm(s: str) -> str:
 def from_priorities(priorities: list, profile: dict | None = None) -> dict:
     """시설 관리 우선순위 → 식단 반영 지시 (같은 영양소 가중치는 큰 값)"""
     plan = {"items": [], "outside": [], "nutrient_weight": {}, "prefer": [], "limit": [], "potassium": False,
-            "pref_mult": 1.0, "texture_mult": 1.0, "avoid_menus": []}
+            "pref_mult": 1.0, "texture_mult": 1.0, "avoid_menus": [], "targets": {}}
     worst = [m.get("menu") for m in ((profile or {}).get("menus") or {}).get("worst") or []
              if m.get("menu") and (m.get("rate") or 100) < 60]
     for pr in priorities or []:
@@ -77,6 +92,8 @@ def from_priorities(priorities: list, profile: dict | None = None) -> dict:
             continue
         for k, w in (d.get("weight") or {}).items():
             plan["nutrient_weight"][k] = max(plan["nutrient_weight"].get(k, 1.0), w)
+        for k, v in (d.get("targets") or {}).items():
+            plan["targets"][k] = max(plan["targets"].get(k, 0.0), v)
         for kw in d.get("prefer") or []:
             if kw not in plan["prefer"]:
                 plan["prefer"].append(kw)
@@ -142,6 +159,14 @@ def configure(problem, plan: dict):
     problem.pref_mult = float(plan.get("pref_mult") or 1.0)
     problem.texture_mult = float(plan.get("texture_mult") or 1.0)
     problem.plan_w = PLAN_W if (plan.get("prefer") or plan.get("limit") or plan.get("potassium")) else 0.0
+    # 목표치 상향 — 하한(_min)은 올리기만, 상한(_max)은 내리기만 (기준을 느슨하게 만들지 않음)
+    c = problem.constraint
+    for k, v in (plan.get("targets") or {}).items():
+        cur = getattr(c, k, None)
+        if k.endswith("_min"):
+            setattr(c, k, max(cur or 0, v))
+        elif k.endswith("_max"):
+            setattr(c, k, min(cur, v) if cur else v)
     return problem
 
 
@@ -183,6 +208,99 @@ def _meal_stats(meals, recipes, plan, c):
     return st
 
 
+def _better(k, lo, hi):
+    if lo and hi:
+        return "range"
+    return "down" if (hi and not lo) or k == "sodium" else "up"
+
+
+def _range_gap(v, lo, hi):
+    return max(0.0, (lo or v) - v) + max(0.0, v - (hi or v))
+
+
+def _fmt(x):
+    return f"{x:g}" if isinstance(x, (int, float)) else str(x)
+
+
+def _ok_label(k, lo, hi):
+    ko, u = NUT_KO.get(k, k), NUT_UNIT.get(k, "")
+    if lo and hi:
+        return f"{ko} 기준 범위({_fmt(lo)}~{_fmt(hi)} {u}) 안 끼니"
+    if lo:
+        return f"{ko} 기준({_fmt(lo)} {u}) 이상 끼니"
+    return f"{ko} 기준({_fmt(hi)} {u}) 이내 끼니"
+
+
+def _baseline_meals(problem, n=N_BASE, seed=0):
+    import random
+    from .problem import MEAL_SETS, DAILY_SLOTS
+    rng = random.Random(seed)
+    cats = [cat for _, cat in DAILY_SLOTS[:len(MEAL_SETS["아침"])]]
+    return [[rng.choice(problem.pool[cat]) for cat in cats] for _ in range(n)]
+
+
+def _plan_meals(problem, chrom):
+    from .problem import MEAL_SETS, N_DAYS, N_SLOTS
+    menus = problem.effective_menus(chrom)
+    out = []
+    for day in range(N_DAYS):
+        dm = menus[day * N_SLOTS:(day + 1) * N_SLOTS]
+        for _, slots in MEAL_SETS.items():
+            out.append([dm[s] for s in slots])
+    return out
+
+
+def _nut_checks(meals, c, keys):
+    """영양소별 (끼니 평균, 기준 충족 끼니 비율 %)"""
+    out = {}
+    n = len(meals) or 1
+    for k in keys:
+        vals = [sum(float(m.get(k) or 0) for m in mm) for mm in meals]
+        lo, hi = getattr(c, f"{k}_min", None), getattr(c, f"{k}_max", None)
+        ok = sum(1 for v in vals if (not lo or v >= lo) and (not hi or v <= hi)) if (lo or hi) else None
+        out[k] = (sum(vals) / n, None if ok is None else 100 * ok / n, lo, hi)
+    return out
+
+
+def guard_candidates(problem, Xf, plan: dict) -> dict:
+    """[B] 파레토 후보 중 개선안이 겨냥한 영양소가 비교 기준(같은 후보 무작위 식단)보다 나빠지지 않는 후보 번호.
+    검사: 기준 충족 끼니 비율이 1끼(≈1.2%p) 넘게 줄지 않고, 평균이 나쁜 쪽으로 가지 않을 것
+          (하한만 있으면 평균 ≥ 기준, 상한만 있으면 ≤, 범위면 범위까지 거리 ≤).
+    → {"keep": [후보 번호], "checked": [...], "fallback": bool, "detail": {후보: 실패 항목}}"""
+    keys = [k for k in (plan.get("nutrient_weight") or {})]
+    if not keys:
+        return {"keep": list(range(len(Xf))), "checked": [], "fallback": False, "detail": {}}
+    c = problem.constraint
+    base = _nut_checks(_baseline_meals(problem), c, keys)
+    tol = 100 / 84 + 1e-6
+    fails = {}
+    for i, x in enumerate(Xf):
+        cur = _nut_checks(_plan_meals(problem, x), c, keys)
+        bad = []
+        for k in keys:
+            (ma, pa, lo, hi), (mb, pb, _, _) = cur[k], base[k]
+            b = _better(k, lo, hi)
+            if b == "range":
+                worse_mean = _range_gap(ma, lo, hi) > _range_gap(mb, lo, hi) + 1e-9
+            elif b == "up":
+                worse_mean = ma < mb
+            else:
+                worse_mean = ma > mb
+            if worse_mean:
+                bad.append(f"{NUT_KO.get(k, k)} 평균")
+            if pa is not None and pb is not None and pa < pb - tol:
+                bad.append(f"{NUT_KO.get(k, k)} 기준 충족")
+        fails[i] = bad
+    keep = [i for i, b in fails.items() if not b]
+    fallback = False
+    if not keep:                      # 모두 걸리면 실패 항목이 가장 적은 후보들
+        m = min(len(b) for b in fails.values())
+        keep = [i for i, b in fails.items() if len(b) == m]
+        fallback = True
+    return {"keep": keep, "checked": keys, "fallback": fallback,
+            "detail": {int(i): b for i, b in fails.items() if b}}
+
+
 def evaluate(problem, chrom, plan: dict, pool_log: dict | None = None) -> dict:
     """설계된 28일 식단이 개선안을 얼마나 반영했는지 — 개선안 항목마다 '이 식단' vs '같은 후보에서 무작위로 고른 식단(기대값)'"""
     import random
@@ -214,10 +332,12 @@ def evaluate(problem, chrom, plan: dict, pool_log: dict | None = None) -> dict:
         iid, d = it.get("id"), MENU_DIRECTIVES.get(it.get("id"), {})
         rows = []
         for k in (d.get("weight") or {}):
-            up = k != "sodium"
-            rows.append({"label": f"{NUT_KO.get(k, k)} 끼니 평균", "value": avg(A, k), "base": avg(B, k), "unit": NUT_UNIT.get(k, ""), "better": "up" if up else "down"})
+            lo, hi = getattr(c, f"{k}_min", None), getattr(c, f"{k}_max", None)
+            better = _better(k, lo, hi)
+            rows.append({"label": f"{NUT_KO.get(k, k)} 끼니 평균", "value": avg(A, k), "base": avg(B, k),
+                         "unit": NUT_UNIT.get(k, ""), "better": better, "range": [lo, hi] if better == "range" else None})
             if okp(A, k) is not None:
-                rows.append({"label": f"{NUT_KO.get(k, k)} 기준 {'이상' if up else '이내'} 끼니", "value": okp(A, k), "base": okp(B, k), "unit": "%", "better": "up"})
+                rows.append({"label": _ok_label(k, lo, hi), "value": okp(A, k), "base": okp(B, k), "unit": "%", "better": "up"})
         if d.get("limit"):
             a, b = cnt(A["limit"], B["limit"])
             rows.append({"label": "장아찌·젓갈·가공육·어묵 메뉴 (28일)", "value": a, "base": b, "unit": "회", "better": "down"})
@@ -240,7 +360,12 @@ def evaluate(problem, chrom, plan: dict, pool_log: dict | None = None) -> dict:
             if r["base"] is not None and r["value"] is not None:
                 diff = r["value"] - r["base"]
                 r["diff"] = round(diff, 1)
-                r["good"] = (diff > 0) if r["better"] == "up" else (diff < 0)
+                if r["better"] == "range":   # 범위 기준: 범위까지의 거리가 줄었으면 좋음 (평균이 낮아져도 상한 안으로 들어오면 개선)
+                    lo, hi = r["range"]
+                    r["good"] = _range_gap(r["value"], lo, hi) < _range_gap(r["base"], lo, hi) or \
+                        (_range_gap(r["value"], lo, hi) == 0 and _range_gap(r["base"], lo, hi) == 0 and diff == 0)
+                else:
+                    r["good"] = (diff > 0) if r["better"] == "up" else (diff < 0)
         effects.append({**it, "rows": rows})
 
     # 식단표 표시용: 이 식단에 쓰인 메뉴 중 개선안으로 선호·제한된 메뉴 → 어떤 개선안 때문인지
@@ -288,6 +413,7 @@ def evaluate(problem, chrom, plan: dict, pool_log: dict | None = None) -> dict:
         "개선안_부합도_평균": round(sum(m.get("plan_score", 0.5) for m in menus) / len(menus), 3) if menus else None,
     }
     return {"items": plan.get("items") or [], "outside": plan.get("outside") or [],
-            "weights": plan.get("nutrient_weight") or {}, "pref_mult": plan.get("pref_mult"),
+            "weights": plan.get("nutrient_weight") or {}, "targets": plan.get("targets") or {},
+            "pref_mult": plan.get("pref_mult"),
             "texture_mult": plan.get("texture_mult"), "pool": pool_log or {}, "result": out,
             "effects": effects, "menu_tags": tags, "baseline": f"같은 후보 메뉴에서 칸마다 무작위로 고른 {N_BASE}끼(28일로 환산)"}

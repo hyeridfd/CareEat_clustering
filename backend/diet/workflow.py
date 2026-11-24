@@ -142,7 +142,17 @@ def select_menu(state: FacilityState, config: RunnableConfig) -> dict:
     if i.get("facility_plan"):
         fctx["시설_개선안"] = [f"{x.get('title')} — {' / '.join(x.get('how') or [])}"
                             for x in (i["facility_plan"].get("items") or [])]
+    guard = None
+    if i.get("facility_plan"):                 # [2026-11-24] 개선안 영양소가 비교 기준보다 나빠지는 후보 제외
+        from . import facility_plan as FPL
+        guard = FPL.guard_candidates(problem, Xf, i["facility_plan"])
+        keep = guard["keep"]
+        _say(config)(f"개선안 보호장치: 후보 {len(Xf)}개 중 {len(keep)}개 통과" + (" (모두 미달 → 가장 덜 나빠지는 후보)" if guard["fallback"] else ""))
+        Xf, Ff = Xf[keep], Ff[keep]
     pick = choose(problem, Xf, Ff, problem.constraint, fctx, mode=i.get("selector", "llm"), progress=_say(config))
+    if guard is not None:
+        pick["selection"]["facility_guard"] = {"candidates": len(state["nsga"][0]), "passed": len(guard["keep"]),
+                                               "fallback": guard["fallback"], "checked": guard["checked"]}
     return {"fctx": fctx, "pick": pick, "chrom": Xf[pick["index"]]}
 
 

@@ -1,0 +1,86 @@
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	body(body)
+	body_rag(body_rag)
+	body_expert(body_expert)
+	diabetes(diabetes)
+	diabetes_rag(diabetes_rag)
+	diabetes_expert(diabetes_expert)
+	hypertension(hypertension)
+	hypertension_rag(hypertension_rag)
+	hypertension_expert(hypertension_expert)
+	cognition(cognition)
+	cognition_rag(cognition_rag)
+	cognition_expert(cognition_expert)
+	oral(oral)
+	oral_rag(oral_rag)
+	oral_expert(oral_expert)
+	intake(intake)
+	intake_rag(intake_rag)
+	intake_expert(intake_expert)
+	medication(medication)
+	medication_rag(medication_rag)
+	medication_expert(medication_expert)
+	synthesize(synthesize)
+	refine(refine)
+	safety_check(safety_check)
+	rank_priorities(rank_priorities)
+	detect_conflicts(detect_conflicts)
+	conflict_specialist(conflict_specialist)
+	apply_locks(apply_locks)
+	hard_constraints(hard_constraints)
+	__end__([<p>__end__</p>]):::last
+	__start__ --> body;
+	__start__ --> cognition;
+	__start__ --> diabetes;
+	__start__ --> hypertension;
+	__start__ --> intake;
+	__start__ --> medication;
+	__start__ --> oral;
+	apply_locks --> hard_constraints;
+	body -. &nbsp;expert&nbsp; .-> body_expert;
+	body -. &nbsp;rag&nbsp; .-> body_rag;
+	body_expert --> synthesize;
+	body_rag --> body_expert;
+	cognition -. &nbsp;expert&nbsp; .-> cognition_expert;
+	cognition -. &nbsp;rag&nbsp; .-> cognition_rag;
+	cognition_expert --> synthesize;
+	cognition_rag --> cognition_expert;
+	conflict_specialist --> apply_locks;
+	detect_conflicts -.-> apply_locks;
+	detect_conflicts -.-> conflict_specialist;
+	diabetes -. &nbsp;expert&nbsp; .-> diabetes_expert;
+	diabetes -. &nbsp;rag&nbsp; .-> diabetes_rag;
+	diabetes_expert --> synthesize;
+	diabetes_rag --> diabetes_expert;
+	hypertension -. &nbsp;expert&nbsp; .-> hypertension_expert;
+	hypertension -. &nbsp;rag&nbsp; .-> hypertension_rag;
+	hypertension_expert --> synthesize;
+	hypertension_rag --> hypertension_expert;
+	intake -. &nbsp;expert&nbsp; .-> intake_expert;
+	intake -. &nbsp;rag&nbsp; .-> intake_rag;
+	intake_expert --> synthesize;
+	intake_rag --> intake_expert;
+	medication -. &nbsp;expert&nbsp; .-> medication_expert;
+	medication -. &nbsp;rag&nbsp; .-> medication_rag;
+	medication_expert --> synthesize;
+	medication_rag --> medication_expert;
+	oral -. &nbsp;expert&nbsp; .-> oral_expert;
+	oral -. &nbsp;rag&nbsp; .-> oral_rag;
+	oral_expert --> synthesize;
+	oral_rag --> oral_expert;
+	rank_priorities --> detect_conflicts;
+	refine --> safety_check;
+	safety_check --> rank_priorities;
+	synthesize -. &nbsp;end&nbsp; .-> __end__;
+	synthesize -.-> refine;
+	synthesize -.-> safety_check;
+	hard_constraints --> __end__;
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc

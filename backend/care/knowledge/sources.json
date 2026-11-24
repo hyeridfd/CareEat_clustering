@@ -1,144 +1,156 @@
 {
-  "_설명": [
-    "여기에 근거 문헌의 서지사항을 적고, 같은 id 로 docs/<id>.md(또는 .txt/.pdf) 파일을 둔다.",
-    "python scripts/ingest_guidelines.py 를 실행하면 문단으로 쪼개 임베딩해 Supabase 에 올린다.",
-    "citation 은 리포트 각주에 그대로 찍히는 문구다.",
-    "license: 시중 서적 전문을 그대로 넣지 말 것. 공공누리·오픈액세스 자료이거나,",
-    "        유료 자료는 '권고 요지를 자체 문장으로 재작성(내부요약)' 한 문서만 넣는다.",
-    "short: 리포트 근거 목록에 찍히는 짧은 이름. 없으면 citation 이 쓰인다."
-  ],
-  "sources": [
-    {
-      "id": "KDRI2025",
-      "title": "2025 한국인 영양소 섭취기준",
-      "org": "보건복지부·한국영양학회",
-      "year": 2025,
-      "doc_type": "guideline",
-      "license": "공공누리",
-      "url": "https://www.kns.or.kr/fileroom/fileroom_view.asp?idx=167&BoardID=Kdr",
-      "citation": "2025 한국인 영양소 섭취기준 (보건복지부·한국영양학회, 2025)",
-      "note": "nutrition_targets.json 의 근거. 65~74세 / 75세 이상 구간 분리. 정오표 적용본 요약표 사용.",
-      "short": "2025 영양소 섭취기준"
-    },
-    {
-      "id": "ESPEN_GERIATRIC",
-      "title": "ESPEN practical guideline: Clinical nutrition and hydration in geriatrics",
-      "org": "ESPEN",
-      "year": 2022,
-      "doc_type": "guideline",
-      "license": "오픈액세스",
-      "url": "https://www.espen.org/files/ESPEN-Guidelines/ESPEN_practical_guideline_Clinical_nutrition_and_hydration_in_geriatrics.pdf",
-      "citation": "ESPEN practical guideline: Clinical nutrition and hydration in geriatrics (2022)",
-      "note": "저영양·저체중·식사 돕기·경구영양보충. 권고 번호(R1, R26 …)를 section 으로 쓴다.",
-      "short": "ESPEN 노인영양 2022"
-    },
-    {
-      "id": "ESPEN_DEMENTIA",
-      "title": "ESPEN guideline on nutrition and hydration in dementia — Update 2024",
-      "org": "ESPEN",
-      "year": 2024,
-      "doc_type": "guideline",
-      "license": "오픈액세스",
-      "url": "https://www.espen.org/files/ESPEN-Guidelines/ESPEN-guideline-on-nutrition-and-hydration-in-dementia-update-2024.pdf",
-      "citation": "ESPEN guideline on nutrition and hydration in dementia, Update 2024",
-      "note": "치매 어르신 식사 거부·식사 환경·수분. dx_dementia / K-MMSE-2 저하와 연결.",
-      "short": "ESPEN 치매영양 2024"
-    },
-    {
-      "id": "IDDSI",
-      "title": "IDDSI 국제 연하조정식 표준 프레임워크",
-      "org": "International Dysphagia Diet Standardisation Initiative",
-      "year": 2019,
-      "doc_type": "guideline",
-      "license": "비영리 이용 허용(출처 표기 조건)",
-      "url": "https://www.iddsi.org/resources/framework-documents",
-      "citation": "IDDSI Framework (IDDSI)",
-      "note": "식사 형태 0–7단계·점도. texture_level 과 연결. 한국어판 있음.",
-      "short": "IDDSI 프레임워크"
-    },
-    {
-      "id": "LTC_MEAL_GUIDE",
-      "title": "어르신을 위한 함께하는 건강식사 길라잡이 — 노인복지시설 급식관리 매뉴얼",
-      "short": "복지부 급식관리 매뉴얼",
-      "org": "보건복지부",
-      "year": 2015,
-      "doc_type": "manual",
-      "license": "공공누리",
-      "url": "https://www.mohw.go.kr",
-      "citation": "어르신을 위한 함께하는 건강식사 길라잡이 (보건복지부, 발간등록번호 11-1471000-000117-01)",
-      "note": "국내 노인복지·요양시설 급식 현장 기준. 영양강화·삼삼한·먹기 쉬운 조리 전략이 핵심."
-    },
-    {
-      "id": "KSH_HTN_2026",
-      "title": "2026년 고혈압 진료지침 (제6판)",
-      "short": "고혈압학회 2026",
-      "org": "대한고혈압학회",
-      "year": 2026,
-      "doc_type": "guideline",
-      "license": "학회 공개 배포",
-      "url": "https://www.koreanhypertension.org",
-      "citation": "2026년 고혈압 진료지침 제6판 (대한고혈압학회)",
-      "note": "제3장 11. 비약물치료 및 생활요법만 적재. 염분감수성이 고령자에서 높다는 근거 포함."
-    },
-    {
-      "id": "KDA_DM_2025",
-      "title": "2025 당뇨병 진료지침",
-      "short": "당뇨병학회 2025",
-      "org": "대한당뇨병학회",
-      "year": 2025,
-      "doc_type": "guideline",
-      "license": "학회 공개 배포",
-      "url": "https://www.diabetes.or.kr",
-      "citation": "2025 당뇨병 진료지침 (대한당뇨병학회)",
-      "note": "5-3 의학영양요법·5-4 운동요법만 적재. 단백질 제한 금지, 나트륨 1,500mg 미만 제한 비권장 근거 포함."
-    },
-    {
-      "id": "SARCOPENIA_KR",
-      "title": "근감소증의 진단과 관리",
-      "short": "근감소증 종설 2024",
-      "org": "최정연·김광일, 대한의사협회지",
-      "year": 2024,
-      "doc_type": "paper",
-      "license": "CC BY-NC 4.0 오픈액세스",
-      "url": "https://doi.org/10.5124/jkma.2024.67.7.461",
-      "citation": "최정연, 김광일. 근감소증의 진단과 관리. J Korean Med Assoc 2024;67(7):461-466",
-      "note": "AWGS 2019 기준과 국내 학회 단백질 권고(1.2 g/kg 이상, 세 끼 분배) 정리."
-    },
-    {
-      "id": "DRUG_FOOD",
-      "title": "약물-식품 상호작용 규칙 (식단 설계용 내부 정리)",
-      "org": "Care-Eat (공개 약품설명서·식약처 의약품안전나라 기반)",
-      "year": 2026,
-      "doc_type": "manual",
-      "license": "내부요약",
-      "url": "https://nedrug.mfds.go.kr",
-      "citation": "약물-식품 상호작용 규칙 — 의약품 허가사항·의약품안전나라 복약정보 기반 내부 정리 (2026)",
-      "note": "diet/data/drug_food_rules.json 과 같은 내용. 약사·의사 확인 전제. 허가사항 원문 쪽번호 대조 예정.",
-      "short": "약물-식품 규칙"
-    },
-    {
-      "id": "BRAIN_DIET",
-      "title": "뇌건강 식사 근거 정리 — MIND 식사 관찰연구·무작위배정 시험, WHO 인지저하·치매 위험 감소 지침",
-      "org": "Morris 2015 · Barnes 2023 · WHO 2019 (내부 요약)",
-      "year": 2026,
-      "doc_type": "paper",
-      "license": "내부요약",
-      "url": "https://www.who.int/publications/i/item/9789241550543",
-      "citation": "Morris MC et al. Alzheimers Dement 2015;11:1007-14 · Barnes LL et al. N Engl J Med 2023;389:602-11 · WHO. Risk reduction of cognitive decline and dementia, 2019",
-      "note": "치매 '뇌건강 식재료' 문제의 근거. 관찰연구 지지, RCT 무효 — 식사 패턴 목표로만 사용.",
-      "short": "뇌건강 식사 근거"
-    },
-    {
-      "id": "MFDS_EASY",
-      "title": "의약품개요정보(e약은요) — 상호작용(문항5) 중 음식·음료 관련 문장",
-      "org": "식품의약품안전처",
-      "year": 2026,
-      "doc_type": "guideline",
-      "license": "공공누리(공공데이터포털)",
-      "url": "https://www.data.go.kr/data/15075057/openapi.do",
-      "citation": "식품의약품안전처 의약품개요정보(e약은요) Open API (2026-11 수집)",
-      "note": "일반의약품 3,278종 중 식단 관련 음식 문장이 있는 707종. scripts/build_mfds_drug_db.py 로 생성. 처방약은 포함되지 않음.",
-      "short": "식약처 e약은요"
-    }
-  ]
+ "_설명": [
+  "여기에 근거 문헌의 서지사항을 적고, 같은 id 로 docs/<id>.md(또는 .txt/.pdf) 파일을 둔다.",
+  "python scripts/ingest_guidelines.py 를 실행하면 문단으로 쪼개 임베딩해 Supabase 에 올린다.",
+  "citation 은 리포트 각주에 그대로 찍히는 문구다.",
+  "license: 시중 서적 전문을 그대로 넣지 말 것. 공공누리·오픈액세스 자료이거나,",
+  "        유료 자료는 '권고 요지를 자체 문장으로 재작성(내부요약)' 한 문서만 넣는다.",
+  "short: 리포트 근거 목록에 찍히는 짧은 이름. 없으면 citation 이 쓰인다."
+ ],
+ "sources": [
+  {
+   "id": "KDRI2025",
+   "title": "2025 한국인 영양소 섭취기준",
+   "org": "보건복지부·한국영양학회",
+   "year": 2025,
+   "doc_type": "guideline",
+   "license": "공공누리",
+   "url": "https://www.kns.or.kr/fileroom/fileroom_view.asp?idx=167&BoardID=Kdr",
+   "citation": "2025 한국인 영양소 섭취기준 (보건복지부·한국영양학회, 2025)",
+   "note": "nutrition_targets.json 의 근거. 65~74세 / 75세 이상 구간 분리. 정오표 적용본 요약표 사용.",
+   "short": "2025 영양소 섭취기준"
+  },
+  {
+   "id": "ESPEN_GERIATRIC",
+   "title": "ESPEN practical guideline: Clinical nutrition and hydration in geriatrics",
+   "org": "ESPEN",
+   "year": 2022,
+   "doc_type": "guideline",
+   "license": "오픈액세스",
+   "url": "https://www.espen.org/files/ESPEN-Guidelines/ESPEN_practical_guideline_Clinical_nutrition_and_hydration_in_geriatrics.pdf",
+   "citation": "ESPEN practical guideline: Clinical nutrition and hydration in geriatrics (2022)",
+   "note": "저영양·저체중·식사 돕기·경구영양보충. 권고 번호(R1, R26 …)를 section 으로 쓴다.",
+   "short": "ESPEN 노인영양 2022"
+  },
+  {
+   "id": "ESPEN_DEMENTIA",
+   "title": "ESPEN guideline on nutrition and hydration in dementia — Update 2024",
+   "org": "ESPEN",
+   "year": 2024,
+   "doc_type": "guideline",
+   "license": "오픈액세스",
+   "url": "https://www.espen.org/files/ESPEN-Guidelines/ESPEN-guideline-on-nutrition-and-hydration-in-dementia-update-2024.pdf",
+   "citation": "ESPEN guideline on nutrition and hydration in dementia, Update 2024",
+   "note": "치매 어르신 식사 거부·식사 환경·수분. dx_dementia / K-MMSE-2 저하와 연결.",
+   "short": "ESPEN 치매영양 2024"
+  },
+  {
+   "id": "IDDSI",
+   "title": "IDDSI 국제 연하조정식 표준 프레임워크",
+   "org": "International Dysphagia Diet Standardisation Initiative",
+   "year": 2019,
+   "doc_type": "guideline",
+   "license": "비영리 이용 허용(출처 표기 조건)",
+   "url": "https://www.iddsi.org/resources/framework-documents",
+   "citation": "IDDSI Framework (IDDSI)",
+   "note": "식사 형태 0–7단계·점도. texture_level 과 연결. 한국어판 있음.",
+   "short": "IDDSI 프레임워크"
+  },
+  {
+   "id": "LTC_MEAL_GUIDE",
+   "title": "어르신을 위한 함께하는 건강식사 길라잡이 — 노인복지시설 급식관리 매뉴얼",
+   "short": "복지부 급식관리 매뉴얼",
+   "org": "보건복지부",
+   "year": 2015,
+   "doc_type": "manual",
+   "license": "공공누리",
+   "url": "https://www.mohw.go.kr",
+   "citation": "어르신을 위한 함께하는 건강식사 길라잡이 (보건복지부, 발간등록번호 11-1471000-000117-01)",
+   "note": "국내 노인복지·요양시설 급식 현장 기준. 영양강화·삼삼한·먹기 쉬운 조리 전략이 핵심."
+  },
+  {
+   "id": "KSH_HTN_2026",
+   "title": "2026년 고혈압 진료지침 (제6판)",
+   "short": "고혈압학회 2026",
+   "org": "대한고혈압학회",
+   "year": 2026,
+   "doc_type": "guideline",
+   "license": "학회 공개 배포",
+   "url": "https://www.koreanhypertension.org",
+   "citation": "2026년 고혈압 진료지침 제6판 (대한고혈압학회)",
+   "note": "제3장 11. 비약물치료 및 생활요법만 적재. 염분감수성이 고령자에서 높다는 근거 포함."
+  },
+  {
+   "id": "KDA_DM_2025",
+   "title": "2025 당뇨병 진료지침",
+   "short": "당뇨병학회 2025",
+   "org": "대한당뇨병학회",
+   "year": 2025,
+   "doc_type": "guideline",
+   "license": "학회 공개 배포",
+   "url": "https://www.diabetes.or.kr",
+   "citation": "2025 당뇨병 진료지침 (대한당뇨병학회)",
+   "note": "5-3 의학영양요법·5-4 운동요법만 적재. 단백질 제한 금지, 나트륨 1,500mg 미만 제한 비권장 근거 포함."
+  },
+  {
+   "id": "SARCOPENIA_KR",
+   "title": "근감소증의 진단과 관리",
+   "short": "근감소증 종설 2024",
+   "org": "최정연·김광일, 대한의사협회지",
+   "year": 2024,
+   "doc_type": "paper",
+   "license": "CC BY-NC 4.0 오픈액세스",
+   "url": "https://doi.org/10.5124/jkma.2024.67.7.461",
+   "citation": "최정연, 김광일. 근감소증의 진단과 관리. J Korean Med Assoc 2024;67(7):461-466",
+   "note": "AWGS 2019 기준과 국내 학회 단백질 권고(1.2 g/kg 이상, 세 끼 분배) 정리."
+  },
+  {
+   "id": "DRUG_FOOD",
+   "title": "약물-식품 상호작용 규칙 (식단 설계용 내부 정리)",
+   "org": "Care-Eat (공개 약품설명서·식약처 의약품안전나라 기반)",
+   "year": 2026,
+   "doc_type": "manual",
+   "license": "내부요약",
+   "url": "https://nedrug.mfds.go.kr",
+   "citation": "약물-식품 상호작용 규칙 — 의약품 허가사항·의약품안전나라 복약정보 기반 내부 정리 (2026)",
+   "note": "diet/data/drug_food_rules.json 과 같은 내용. 약사·의사 확인 전제. 허가사항 원문 쪽번호 대조 예정.",
+   "short": "약물-식품 규칙"
+  },
+  {
+   "id": "BRAIN_DIET",
+   "title": "뇌건강 식사 근거 정리 — MIND 식사 관찰연구·무작위배정 시험, WHO 인지저하·치매 위험 감소 지침",
+   "org": "Morris 2015 · Barnes 2023 · WHO 2019 (내부 요약)",
+   "year": 2026,
+   "doc_type": "paper",
+   "license": "내부요약",
+   "url": "https://www.who.int/publications/i/item/9789241550543",
+   "citation": "Morris MC et al. Alzheimers Dement 2015;11:1007-14 · Barnes LL et al. N Engl J Med 2023;389:602-11 · WHO. Risk reduction of cognitive decline and dementia, 2019",
+   "note": "치매 '뇌건강 식재료' 문제의 근거. 관찰연구 지지, RCT 무효 — 식사 패턴 목표로만 사용.",
+   "short": "뇌건강 식사 근거"
+  },
+  {
+   "id": "MFDS_EASY",
+   "title": "의약품개요정보(e약은요) — 상호작용(문항5) 중 음식·음료 관련 문장",
+   "org": "식품의약품안전처",
+   "year": 2026,
+   "doc_type": "guideline",
+   "license": "공공누리(공공데이터포털)",
+   "url": "https://www.data.go.kr/data/15075057/openapi.do",
+   "citation": "식품의약품안전처 의약품개요정보(e약은요) Open API (2026-11 수집)",
+   "note": "일반의약품 3,278종 중 식단 관련 음식 문장이 있는 707종. scripts/build_mfds_drug_db.py 로 생성. 처방약은 포함되지 않음.",
+   "short": "식약처 e약은요"
+  },
+  {
+   "id": "MFDS_MEAL_STD",
+   "title": "식품의 기준 및 규격 — 11. 특수의료용도식품 (표준형 영양조제식품 · 식단형 식사관리식품)",
+   "org": "식품의약품안전처",
+   "year": 2025,
+   "doc_type": "regulation",
+   "license": "공공누리",
+   "url": "https://www.foodsafetykorea.go.kr/foodcode/01_01.jsp",
+   "citation": "식품의약품안전처 고시 「식품의 기준 및 규격」 제5. 11. 특수의료용도식품 (11-1 질환별 영양조제식품, 11-3 식단형 식사관리식품)",
+   "note": "한 끼 열량 500~800 kcal, 당뇨용 단당류·이당류 10%E 미만·단백질 18 g 이상, 고혈압용 지방 15~30%E·포화지방 7%E 이하. 제품 규격이므로 개인 기준은 임상 지침과 함께 적용.",
+   "short": "식약처 식단형 식사관리식품 규격"
+  }
+ ]
 }
