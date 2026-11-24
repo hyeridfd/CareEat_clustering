@@ -353,6 +353,17 @@ def build_report(sb, home: str, eid: str, audience: str = "guardian",
         "status": sol.get("status"),
         "updated_at": sol.get("updated_at") or sol.get("created_at"),
     }
+    v = content.get("verification") or {}
+    if v.get("decision") in ("pass", "pass_staff_only") and not v.get("edited_after"):
+        solution_out["verified"] = {"by": ["AI 영양사", "AI 간호사"], "guardian_ok": v["decision"] == "pass"}
+    if staff and v:
+        last = (v.get("attempts") or [{}])[-1]
+        agents = ((last.get("agent") or {}).get("agents")) or {}
+        solution_out["verification"] = {
+            "decision": v.get("decision"), "reason": v.get("reason"), "rewrites": v.get("rewrites"),
+            "staff_score": ((v.get("final") or {}).get("staff") or {}).get("score"),
+            "guardian_score": ((v.get("final") or {}).get("guardian") or {}).get("score"),
+            "comments": {k: a.get("comment") for k, a in agents.items()}, "edited_after": v.get("edited_after", False)}
     if staff:
         solution_out["summary"] = content.get("summary")
         solution_out["cautions"] = content.get("cautions") or []

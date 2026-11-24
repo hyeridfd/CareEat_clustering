@@ -6,7 +6,8 @@
       수정 가능        : 고칠 점을 생성 모델에 돌려줘 재작성 → 재검증 (최대 MAX_REWRITE 회)
       근거 부족        : 보류 (담당자 검토) — 재작성으로 풀리지 않는 경우 (입력 자료 부족·검증 불가)
 
-  검증 = ① 결정적 검사(질환별 지침 규칙 표·우선순위 대응·형식) + ② 검증 에이전트(다른 LLM이 의미를 항목별로 판정)
+  검증 = ① 결정적 검사(질환별 지침 규칙 표·우선순위 대응·구체성·형식)
+       + ② 검증 에이전트 2명 — AI 영양사(식사·영양 항목) · AI 간호사(안전·관찰·주의·보호자용), 생성과 다른 LLM으로 교차 검증
   ※ 검증 에이전트에도 이름·ID 등 식별정보를 보내지 않는다.
 """
 from __future__ import annotations
@@ -24,7 +25,7 @@ from . import solution as sol
 
 log = logging.getLogger("uvicorn.error")
 
-VERIFY_VERSION = "2026-11-24-v1"
+VERIFY_VERSION = "2026-11-24-v2"
 STAFF_PASS = 80          # 관리자용 통과 점수
 GUARDIAN_PASS = 85       # 보호자용 통과 점수
 MAX_REWRITE = 2          # 재작성 최대 횟수 (첫 초안 + 2회)
@@ -86,16 +87,12 @@ NUTRIENT_MUST = {   # 기준 대비 80% 미만 영양소 → 무엇을 늘릴지
 }
 COMPONENT_MUST = {"밥·죽": r"밥|죽|주식", "국·탕": r"국|탕", "주찬": r"주찬|단백질 반찬|고기|생선|두부",
                   "부찬": r"부찬|반찬|나물|채소", "김치": r"김치"}
-# 우선순위 요인 → 그 요인을 다루는 규칙 (후보에 있는데 조치에 빠지면 감점)
-FACTOR_RULES = {
-    "mna_malnourished": ["R_MALNUT"], "mna_at_risk": ["R_MALNUT_RISK"], "low_bmi": ["R_LOW_BMI"],
-    "intake_very_low": ["R_LOW_INTAKE"], "intake_low": ["R_LOW_INTAKE"], "protein_dish_low": ["R_LOW_PROTEIN", "R_NUT_PROTEIN"],
-    "swallowing": ["R_SWALLOW"], "chewing": ["R_CHEW"], "eating_full_help": ["R_DEPEND"], "eating_partial_help": ["R_DEPEND"],
-    "depressive": ["R_MOOD"], "depressive_mild": ["R_MOOD"], "weight_loss": ["R_WEIGHT_LOSS"], "intake_drop": ["R_INTAKE_DROP"],
-}
 FEAR = re.compile(r"위험합니다|심각합니다|심각한 상태|위독|큰일|매우 걱정|악화될 수|사망|생명")
 DECIMAL = re.compile(r"\d+\.\d{3,}")
-SPECIFIC = re.compile(r"\d|매\s?끼|하루|주\s?\d|끼니|조리|국물|간식|부드럽|다져|데쳐|구워|저염|양을|횟수|시간")
+AMOUNT = re.compile(r"\d|반\s?(그릇|공기|컵|개)|한\s?(번|그릇|컵|공기|숟가락|개|조각|팩|가지)|두\s?(번|가지|개|숟가락)|세\s?(번|가지)|하루\s?\S*\s?(번|회)|회\b|컵|그릇|공기|숟가락|팩|조각|kg|g\b|ml|mL|절반|소량|조금씩")
+WHEN = re.compile(r"아침|점심|저녁|끼니마다|매\s?끼|식사\s?(전|후|중|때)|식전|식후|간식\s?시간|오전|오후|취침|자기 전|매일|매주|격주|주\s?\d|한 달|월\s?\d|요일|\d\s?시|\d\s?주|\d\s?일마다|정해진 시간")
+WHAT = re.compile(r"두부|달걀|계란|우유|두유|요구르트|요거트|치즈|생선|고등어|조기|고기|닭|소고기|돼지|멸치|콩|나물|채소|과일|바나나|사과|고구마|감자|죽|미음|누룽지|국물|김치|젓갈|장아찌|밥|간식|떡|빵|견과|다져|다진|갈아|간\s|으깨|데쳐|삶|찜|구이|볶|저염|싱겁|걸쭉|점도|자세|턱|숟가락|빨대|컵|체중|섭취율|혈당|기록|사레|기침|식판|손잡이|보조")
+SPEC_MIN = 0.8           # 조치 중 '무엇·얼마나·언제' 2가지 이상을 갖춘 비율이 이보다 낮으면 재작성
 
 
 def _sentences(t: str):
@@ -154,19 +151,27 @@ def rule_checks(content: dict, conds: list, priority: dict, candidates: list, fl
     if not acts or len(content.get("meal_guidance") or []) < 2 or len(content.get("monitoring") or []) < 2:
         gates.append({"code": "H5", "label": "필수 항목 누락", "detail": ["조치 1개 이상, 식사 지침·관찰 각 2개 이상 필요"]})
     replaced = [f for f in flags if f.get("type") in ("unsupported_action", "banned_expression")]
-    # 우선순위 대응
-    cand = {c["id"] for c in candidates}
+    # 우선순위 대응: 돌봄 우선순위 요인마다 그 규칙이 조치에 있어야 한다 (모두 들어가야 통과)
     used = {a.get("rule_id") for a in acts}
-    need = []
-    for fx in priority.get("factors") or []:
-        rs = [r for r in FACTOR_RULES.get(fx.get("code"), []) if r in cand]
-        if rs and (fx.get("points") or 0) >= 5:
-            need.append({"factor": fx["label"], "rules": rs, "ok": any(r in used for r in rs)})
-    # 구체성: 규칙 원문을 그대로 옮기지 않았는가 + 식사 지침의 구체 표현
-    own = [difflib.SequenceMatcher(None, a.get("action", ""), CR.RULE_BY_ID.get(a.get("rule_id"), {}).get("staff", "")).ratio() < 0.85
-           for a in acts]
+    need = [{"factor": r["factor"], "rules": r["rules"], "ok": any(x in used for x in r["rules"])}
+            for r in CR.required_rules(priority, candidates)]
+    miss = [n for n in need if not n["ok"]]
+    if miss:
+        gates.append({"code": "H6", "label": "돌봄 우선순위 요인 누락", "detail": [f"{n['factor']} ({'/'.join(n['rules'])})" for n in miss]})
+    # 구체성: 조치마다 무엇(음식·방법)·얼마나(양·횟수)·언제(끼니·주기) 중 2가지 이상, 식사 지침은 무엇 + (얼마나 또는 언제)
+    spec_items = []
+    for i, a in enumerate(acts, 1):
+        t = a.get("action", "")
+        has = {"무엇": bool(WHAT.search(t)), "얼마나": bool(AMOUNT.search(t)), "언제": bool(WHEN.search(t))}
+        spec_items.append({"index": i, "rule_id": a.get("rule_id"), "text": t[:60], "has": has, "ok": sum(has.values()) >= 2})
     mg = content.get("meal_guidance") or []
-    spec = 0.5 * (sum(own) / len(own) if own else 0) + 0.5 * (sum(bool(SPECIFIC.search(x)) for x in mg) / len(mg) if mg else 0)
+    mg_ok = [bool(WHAT.search(x)) and (bool(AMOUNT.search(x)) or bool(WHEN.search(x))) for x in mg]
+    act_ratio = sum(x["ok"] for x in spec_items) / len(spec_items) if spec_items else 0
+    mg_ratio = sum(mg_ok) / len(mg_ok) if mg_ok else 0
+    spec = 0.6 * act_ratio + 0.4 * mg_ratio
+    if spec_items and act_ratio < SPEC_MIN:
+        gates.append({"code": "H7", "label": "조치가 구체적이지 않음",
+                      "detail": [f"조치 {x['index']}: {', '.join(k for k, v in x['has'].items() if not v)} 빠짐" for x in spec_items if not x["ok"]]})
     # 형식
     fmt_issues = []
     for key, lo, hi in (("staff_actions", 3, 6), ("meal_guidance", 3, 5), ("monitoring", 3, 5), ("cautions", 2, 4)):
@@ -179,7 +184,8 @@ def rule_checks(content: dict, conds: list, priority: dict, candidates: list, fl
     if replaced:
         fmt_issues.append(f"가드레일이 고친 항목 {len(replaced)}건")
     return {"gates": gates, "must": must_res, "forbid": forbid_hits, "coverage": need,
-            "specificity": round(spec, 3), "format_issues": fmt_issues, "decimals": dec}
+            "specificity": round(spec, 3), "spec_actions": spec_items, "spec_meal": round(mg_ratio, 3),
+            "format_issues": fmt_issues, "decimals": dec}
 
 
 def guardian_checks(g: str, flags: list) -> dict:
@@ -195,42 +201,60 @@ def guardian_checks(g: str, flags: list) -> dict:
     polite = sum(bool(re.search(r"(니다|세요|어요|아요|해요|습니다|드립니다)[.!]?$", s)) for s in ss) / len(ss) if ss else 0
     fear = [m.group(0) for m in FEAR.finditer(g)]
     tone = (5 if polite >= 0.8 else 2) + (5 if not fear else 0)
-    guide = 15 if re.search(r"문의|연락|상담|말씀|함께|가정에서|면회|알려", g) else 5
     return {"gates": gates, "sentences": len(ss), "chars": len(g), "avg_len": round(avg), "readability": read,
-            "tone_rule": tone, "fear": fear, "action_guide": guide}
+            "tone_rule": tone, "fear": fear}
 
 
 # ─────────────────────────── ② 검증 에이전트 ───────────────────────────
 
-VERIFY_PROMPT = """당신은 요양원 돌봄 리포트를 검수하는 임상 영양사입니다. 다른 AI가 쓴 초안을 입력 자료와 대조해 항목별로 판정합니다.
-글을 고쳐 쓰지 말고 판정만 합니다. 입력에 없는 사실을 근거로 판정하지 않습니다.
-
-판정 기준
-- summary: 입력 지표·우선순위 요인과 맞는가, 과장·누락이 없는가.
-- staff_actions (번호마다): 이유(why)가 입력 지표와 맞는가, 무엇을·언제·얼마나가 드러나 실행할 수 있는가, 질환 지침과 충돌이 없는가.
-- meal_guidance: 진단 질환에 맞는 식사 조정과 잔반이 많은 음식군 대응이 각각 있는가, 기준 80% 미만 영양소·나트륨 초과가 반영됐는가.
-- monitoring: 관찰할 지표와 주기가 있는가.
-- cautions: 이 어르신에게 해당하는 위험인가, 질환 간 충돌(예: 당뇨인데 영양불량)을 짚는가.
-- disease_alignment: '지침 점검 조건'마다 초안이 지침 방향을 충족(met)·누락(missing)·반대(conflict)하는지.
-- citations: 근거 번호마다 그 발췌가 해당 문장을 뒷받침하는가 (support / partial / unrelated).
-- guardian: consistency(관리자용과 같은 내용인가, 없는 약속·수치를 만들지 않았는가), readability(쉬운 말), tone(불안을 주지 않고 사실대로), action_guide(보호자가 할 일·문의 안내).
-
+_COMMON = """다른 AI가 쓴 요양원 돌봄 리포트 초안을 입력 자료와 대조해, 아래 '맡은 항목'만 판정합니다. 글을 고쳐 쓰지 말고 판정만 합니다.
+입력에 없는 사실을 근거로 판정하지 않습니다. 맡지 않은 항목은 출력하지 않습니다.
 점수: 2 = 그대로 승인 가능, 1 = 고치면 좋음, 0 = 고쳐야 함.
 verdict: ok | fix | contradiction(입력 자료나 지침과 모순) | unsupported(입력 자료로 확인할 수 없는 주장).
-evidence_sufficient: 입력 자료 자체가 부족해서 어떤 문장으로도 판단할 수 없으면 false (글을 고쳐도 해결되지 않는 경우만). 그 이유를 evidence_gap 에 씁니다.
-fix_instructions: 재작성할 때 생성 AI에게 줄 구체적인 지시 (최대 6개, 한 문장씩).
+citations: 맡은 문장에 붙은 근거 번호마다 그 발췌가 문장을 뒷받침하는지 (support / partial / unrelated).
+evidence_sufficient: 입력 자료 자체가 부족해 어떤 글로도 판단할 수 없을 때만 false, 이유는 evidence_gap 에.
+fix_instructions: 재작성할 때 생성 AI에게 줄 구체적인 지시 (최대 4개, 한 문장씩, 맡은 항목에 대해서만).
+comment: 맡은 항목 전체에 대한 한 줄 총평 (담당자에게 보여 줍니다)."""
 
-아래 JSON 하나만 출력합니다.
-{"staff": {"summary": {"score": 2, "verdict": "ok", "reason": ""},
-           "actions": [{"index": 1, "score": 2, "verdict": "ok", "reason": ""}],
-           "meal_guidance": {"score": 2, "verdict": "ok", "reason": ""},
-           "monitoring": {"score": 2, "verdict": "ok", "reason": ""},
-           "cautions": {"score": 2, "verdict": "ok", "reason": ""},
-           "disease_alignment": [{"condition": "고혈압·나트륨 과다", "verdict": "met", "reason": ""}],
-           "citations": [{"tag": "1", "verdict": "support", "reason": ""}]},
- "guardian": {"consistency": {"score": 2, "verdict": "ok", "reason": ""}, "readability": {"score": 2, "reason": ""},
-              "tone": {"score": 2, "reason": ""}, "action_guide": {"score": 2, "reason": ""}},
- "evidence_sufficient": true, "evidence_gap": "", "fix_instructions": []}"""
+NUTRITIONIST_PROMPT = """당신은 요양원 급식을 20년 담당한 임상 영양사(AI 영양사)입니다.
+""" + _COMMON + """
+
+맡은 항목과 기준
+- actions (입력의 '맡은 조치' 번호만): 이유(why)가 입력 지표와 맞는가, 구체적인 음식·양·시점이 있어 조리실과 배식 담당자가 그대로 따라 할 수 있는가, 영양·질환 식사 지침과 충돌이 없는가.
+- meal_guidance: 진단 질환에 맞는 식사 조정과 잔반이 많은 음식군 대응이 각각 있는가, 기준 80% 미만 영양소와 나트륨 초과가 반영됐는가, 음식과 양·시점이 구체적인가.
+- disease_alignment: '지침 점검 조건' 중 맡은 조건마다 met / missing / conflict.
+
+JSON 하나만 출력합니다.
+{"actions": [{"index": 1, "score": 2, "verdict": "ok", "reason": ""}],
+ "meal_guidance": {"score": 2, "verdict": "ok", "reason": ""},
+ "disease_alignment": [{"condition": "", "verdict": "met", "reason": ""}],
+ "citations": [{"tag": "1", "verdict": "support", "reason": ""}],
+ "evidence_sufficient": true, "evidence_gap": "", "fix_instructions": [], "comment": ""}"""
+
+NURSE_PROMPT = """당신은 요양원에서 15년 일한 간호사(AI 간호사)입니다. 식사 안전, 관찰, 질환 관리, 보호자 소통을 봅니다.
+""" + _COMMON + """
+
+맡은 항목과 기준
+- summary: 입력 지표와 우선순위 요인을 맞게 요약했는가, 과장·누락이 없는가.
+- actions (입력의 '맡은 조치' 번호만): 식사 안전·도움·정서·질환 관리 조치가 입력과 맞는가, 누가·언제·무엇을 확인하는지 구체적인가, 의료 판단이 필요한 부분을 의료진 상의로 넘겼는가.
+- monitoring: 관찰할 지표, 주기, 기준(얼마나 바뀌면 알릴지)이 있는가.
+- cautions: 이 어르신에게 해당하는 위험인가, 질환 간 충돌(예: 당뇨인데 영양불량)을 짚는가.
+- disease_alignment: '지침 점검 조건' 중 맡은 조건마다 met / missing / conflict.
+- guardian: consistency(관리자용과 같은 내용인가, 없는 약속·수치를 만들지 않았는가), readability(보호자가 쉽게 읽는가), tone(불안을 주지 않고 사실대로).
+
+JSON 하나만 출력합니다.
+{"summary": {"score": 2, "verdict": "ok", "reason": ""},
+ "actions": [{"index": 1, "score": 2, "verdict": "ok", "reason": ""}],
+ "monitoring": {"score": 2, "verdict": "ok", "reason": ""},
+ "cautions": {"score": 2, "verdict": "ok", "reason": ""},
+ "disease_alignment": [{"condition": "", "verdict": "met", "reason": ""}],
+ "citations": [{"tag": "1", "verdict": "support", "reason": ""}],
+ "guardian": {"consistency": {"score": 2, "verdict": "ok", "reason": ""}, "readability": {"score": 2, "reason": ""}, "tone": {"score": 2, "reason": ""}},
+ "evidence_sufficient": true, "evidence_gap": "", "fix_instructions": [], "comment": ""}"""
+
+NURSE_CATEGORIES = {"식사 형태·안전", "식사 도움", "식사 환경", "정서", "변화 대응", "재평가", "질환 관리", "유지"}
+NURSE_CONDITIONS = {"SWALLOW", "CHEW", "KIDNEY", "DEMENTIA", "MOOD"}
+AGENTS = {"nutritionist": ("AI 영양사", NUTRITIONIST_PROMPT), "nurse": ("AI 간호사", NURSE_PROMPT)}
 
 
 def _verify_provider(gen_provider: str) -> str:
@@ -269,19 +293,75 @@ def _call(provider: str, system: str, payload: dict) -> tuple[dict, str]:
     return sol._extract_json(text), f"anthropic:{model}"
 
 
+def _owner(cat: str) -> str:
+    return "nurse" if cat in NURSE_CATEGORIES else "nutritionist"
+
+
 def agent_verify(content: dict, ctx_payload: dict, conds: list, snippets: list, provider: str) -> tuple[dict, str]:
+    """AI 영양사 · AI 간호사가 맡은 항목을 따로 판정 → 하나로 합친다 (두 호출은 동시에)"""
+    from concurrent.futures import ThreadPoolExecutor
     by_orig = {s["id"]: s for s in snippets or []}
     refs = [{"tag": r["tag"], "출처": by_orig.get(r.get("orig_tag"), {}).get("출처"), "내용": by_orig.get(r.get("orig_tag"), {}).get("내용")}
             for r in content.get("references") or []]
-    payload = {
-        "어르신 자료": ctx_payload,
-        "지침 점검 조건": [{"condition": c["label"], "지침": c["source"], "충족해야 할 방향": [m[0] for m in c["must"]],
-                       "하면 안 되는 권장": [x[0] for x in c["forbid"]]} for c in conds],
-        "근거 발췌": refs,
-        "초안_관리자용": {k: content.get(k) for k in ("summary", "staff_actions", "meal_guidance", "monitoring", "cautions")},
-        "초안_보호자용": content.get("guardian_message"),
+    acts = content.get("staff_actions") or []
+    own = {k: [i for i, a in enumerate(acts, 1) if _owner(a.get("category", "")) == k] for k in AGENTS}
+    cond_own = {k: [c for c in conds if (c["id"] in NURSE_CONDITIONS) == (k == "nurse")] for k in AGENTS}
+    draft = {"summary": content.get("summary"),
+             "staff_actions": [{"번호": i, **a} for i, a in enumerate(acts, 1)],
+             "meal_guidance": content.get("meal_guidance"), "monitoring": content.get("monitoring"),
+             "cautions": content.get("cautions")}
+
+    def one(key):
+        name, prompt = AGENTS[key]
+        payload = {"어르신 자료": ctx_payload, "맡은 조치 번호": own[key],
+                   "지침 점검 조건(맡은 것)": [{"condition": c["label"], "지침": c["source"], "충족해야 할 방향": [m[0] for m in c["must"]],
+                                          "하면 안 되는 권장": [x[0] for x in c["forbid"]]} for c in cond_own[key]],
+                   "근거 발췌": refs, "초안_관리자용": draft}
+        if key == "nurse":
+            payload["초안_보호자용"] = content.get("guardian_message")
+        out, model = _call(provider, prompt, payload)
+        return key, out, model
+
+    res, errs = {}, []
+    with ThreadPoolExecutor(max_workers=2) as ex:
+        for f in [ex.submit(one, k) for k in AGENTS]:
+            try:
+                k, out, model = f.result()
+                res[k] = (out, model)
+            except Exception as e:
+                errs.append(str(e))
+    if errs:
+        raise RuntimeError("; ".join(errs))
+    nu, nr = res["nutritionist"][0], res["nurse"][0]
+    actions = []
+    for key, (out, _) in res.items():
+        for x in out.get("actions") or []:
+            if x.get("index") in own[key]:
+                actions.append({**x, "agent": key})
+    actions.sort(key=lambda x: x.get("index") or 0)
+    cits = {}
+    for key, (out, _) in res.items():          # 같은 근거를 둘 다 보면 더 나쁜 판정을 따른다
+        for c in out.get("citations") or []:
+            rank = {"support": 2, "partial": 1, "unrelated": 0}.get(c.get("verdict"), 1)
+            prev = cits.get(str(c.get("tag")))
+            if prev is None or rank < prev[0]:
+                cits[str(c.get("tag"))] = (rank, {**c, "agent": key})
+    merged = {
+        "staff": {"summary": nr.get("summary"), "actions": actions, "meal_guidance": nu.get("meal_guidance"),
+                  "monitoring": nr.get("monitoring"), "cautions": nr.get("cautions"),
+                  "disease_alignment": [{**d, "agent": "nutritionist"} for d in nu.get("disease_alignment") or []]
+                                       + [{**d, "agent": "nurse"} for d in nr.get("disease_alignment") or []],
+                  "citations": [v for _, v in cits.values()]},
+        "guardian": nr.get("guardian") or {},
+        "evidence_sufficient": nu.get("evidence_sufficient", True) is not False and nr.get("evidence_sufficient", True) is not False,
+        "evidence_gap": " / ".join(x for x in (nu.get("evidence_gap"), nr.get("evidence_gap")) if x),
+        "fix_instructions": [f"(AI 영양사) {x}" for x in nu.get("fix_instructions") or []] + [f"(AI 간호사) {x}" for x in nr.get("fix_instructions") or []],
+        "agents": {k: {"name": AGENTS[k][0], "model": res[k][1], "comment": res[k][0].get("comment", ""),
+                       "actions": own[k], "conditions": [c["label"] for c in cond_own[k]],
+                       "items": ["조치(식사·영양)", "식사 지침", "영양·질환 식사 지침"] if k == "nutritionist"
+                       else ["요약", "조치(안전·도움·질환)", "관찰", "주의사항", "보호자용"]} for k in res},
     }
-    return _call(provider, VERIFY_PROMPT, payload)
+    return merged, f"{res['nutritionist'][1]} ×2"
 
 
 # ─────────────────────────── 채점 · 판정 ───────────────────────────
@@ -317,12 +397,12 @@ def score(content: dict, rc: dict, gc: dict, ag: dict | None, has_refs: bool) ->
     fmt = max(0.0, 1 - 0.25 * len(rc["format_issues"]))
     staff_parts = {"질환 지침 일치": round(30 * align, 1), "우선순위 요인 대응": round(25 * cover, 1),
                    "근거 인용 정확도": round(20 * cite, 1), "구체성": round(15 * spec, 1), "형식": round(10 * fmt, 1)}
-    # 보호자용
+    # 보호자용 (보호자 행동 안내 항목은 뺐다)
     cons = _s(gd.get("consistency")) / 2 if gd.get("consistency") else 0.75
-    tone = gc["tone_rule"] + (5 * _s(gd.get("tone")) / 2 if gd.get("tone") else 3)
-    read = gc["readability"] * (0.6 + 0.2 * _s(gd.get("readability"))) if gd.get("readability") else gc["readability"]
-    guard_parts = {"관리자용과 내용 일치": round(40 * cons, 1), "읽기 쉬움": round(min(25, read), 1),
-                   "어조": round(min(20, tone), 1), "보호자 행동 안내": round(gc["action_guide"], 1)}
+    tone = gc["tone_rule"] + (5 * _s(gd.get("tone")) / 2 if gd.get("tone") else 3)          # 0~20
+    read = gc["readability"] * (0.6 + 0.2 * _s(gd.get("readability"))) if gd.get("readability") else gc["readability"]  # 0~25
+    guard_parts = {"관리자용과 내용 일치": round(45 * cons, 1), "읽기 쉬움": round(30 * min(25, read) / 25, 1),
+                   "어조": round(25 * min(20, tone) / 20, 1)}
     # 에이전트 판정에서 나온 관문 실패 (모순·반대)
     agate_s, agate_g = [], []
     bad = [("요약", st.get("summary"))] + [(f"조치 {a.get('index')}", a) for a in acts] + \
@@ -372,6 +452,12 @@ def feedback(content: dict, rc: dict, gc: dict, sc: dict, ag: dict | None) -> li
     for c in rc["coverage"]:
         if not c["ok"]:
             fb.append(f"우선순위 요인 '{c['factor']}'에 대한 조치({'/'.join(c['rules'])})를 포함하세요.")
+    for x in rc.get("spec_actions") or []:
+        if not x["ok"]:
+            miss = [k for k, v in x["has"].items() if not v]
+            fb.append(f"조치 {x['index']}({x['rule_id']}) “{x['text']}…”에 '{'·'.join(miss)}' 내용을 구체적으로 쓰세요 (예: 어떤 음식을, 몇 번·얼마나, 어느 끼니·요일에).")
+    if rc.get("spec_meal", 1) < 0.8:
+        fb.append("식사 지침마다 구체적인 음식과 양 또는 시점을 함께 쓰세요.")
     for x in rc["format_issues"]:
         fb.append(f"형식: {x}" + (" — 소수점 첫째 자리까지만 쓰세요." if "소수점" in x else ""))
     st = (ag or {}).get("staff") or {}
@@ -387,8 +473,6 @@ def feedback(content: dict, rc: dict, gc: dict, sc: dict, ag: dict | None) -> li
             fb.append(f"보호자용: 불안을 주는 표현({', '.join(gc['fear'])})을 사실대로 차분하게 바꾸세요.")
         if not 3 <= gc["sentences"] <= 5:
             fb.append("보호자용: 3~5문장으로 쓰세요.")
-        if gc["action_guide"] < 15:
-            fb.append("보호자용: 보호자가 도와주실 일이나 문의 방법을 한 문장 넣으세요.")
     seen, out = set(), []
     for x in fb:
         if x not in seen:

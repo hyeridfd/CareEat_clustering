@@ -1,3 +1,4 @@
+import { PixelSprite } from './PixelCrew'
 import { useState } from 'react'
 // 돌봄 관리 공통 UI
 export const TYPE_STYLES = [
@@ -255,13 +256,15 @@ export function Gauge({ g, emoji = '🧓', compact = false }) {
   )
 }
 
-/* [2026-11-24] 돌봄 리포트 자동 검증 결과 — 초안 → 관리자용·보호자용 검증 → 자동 승인·발송 / 재작성 / 보류 */
+/* [2026-11-24] 돌봄 리포트 자동 검증 결과 — 초안 → AI 영양사·AI 간호사 검증 → 자동 승인·발송 / 재작성 / 보류
+   관리자용 탭과 보호자용 탭에 각각 해당 점수와 검증 내용을 보여 준다 */
 export const VERIFY_DECISION = {
   pass: { label: '검증 통과 · 자동 승인', cls: 'bg-emerald-600 text-white', box: 'bg-emerald-50/70 ring-emerald-200' },
   pass_staff_only: { label: '관리자용만 자동 승인', cls: 'bg-blue-600 text-white', box: 'bg-blue-50/60 ring-blue-200' },
   hold: { label: '보류 · 담당자 검토', cls: 'bg-amber-500 text-white', box: 'bg-amber-50/70 ring-amber-200' },
 }
 const AG_VERDICT = { ok: '적합', fix: '보완 필요', contradiction: '모순', unsupported: '근거 없음', met: '충족', missing: '누락', conflict: '반대', support: '뒷받침', partial: '일부', unrelated: '무관' }
+const PART_MAX = { '질환 지침 일치': 30, '우선순위 요인 대응': 25, '근거 인용 정확도': 20, '구체성': 15, '형식': 10, '관리자용과 내용 일치': 45, '읽기 쉬움': 30, '어조': 25 }
 
 function ScoreBlock({ title, s, pass }) {
   if (!s) return null
@@ -275,7 +278,7 @@ function ScoreBlock({ title, s, pass }) {
       </div>
       <div className="mt-2 space-y-1">
         {Object.entries(s.parts || {}).map(([k, v]) => {
-          const max = { '질환 지침 일치': 30, '우선순위 요인 대응': 25, '근거 인용 정확도': 20, '구체성': 15, '형식': 10, '관리자용과 내용 일치': 40, '읽기 쉬움': 25, '어조': 20, '보호자 행동 안내': 15 }[k] || 100
+          const max = PART_MAX[k] || 100
           return (
             <div key={k} className="flex items-center gap-2 text-[11px]">
               <span className="w-28 shrink-0 text-gray-600">{k}</span>
@@ -294,16 +297,39 @@ function ScoreBlock({ title, s, pass }) {
   )
 }
 
-export function VerifyPanel({ v }) {
+function AgentCard({ kind, info, issues }) {
+  return (
+    <div className="rounded-xl bg-white ring-1 ring-gray-200 p-3 flex gap-3">
+      <span className="shrink-0 self-start rounded-lg bg-sky-50 ring-1 ring-sky-100 p-1"><PixelSprite kind={kind} scale={2} /></span>
+      <div className="min-w-0 flex-1">
+        <p className="text-xs font-bold text-gray-800">{info?.name || (kind === 'nurse' ? 'AI 간호사' : 'AI 영양사')}
+          <span className="ml-1.5 font-normal text-[10px] text-gray-400">{info?.items?.join(' · ')}</span></p>
+        {info?.comment && <p className="mt-1 text-[12px] text-gray-700 leading-5">“{info.comment}”</p>}
+        {!info && <p className="mt-1 text-[11px] text-gray-400">검증 결과 없음 (이전 버전 또는 실행 실패)</p>}
+        {issues.length > 0 ? (
+          <ul className="mt-1.5 space-y-0.5">{issues.map((x, i) => <li key={i} className="text-[11px] text-amber-800">· {x}</li>)}</ul>
+        ) : info && <p className="mt-1 text-[11px] text-emerald-700">지적 사항 없음</p>}
+      </div>
+    </div>
+  )
+}
+
+export function VerifyPanel({ v, tab = 'staff' }) {
   if (!v) return null
   const d = VERIFY_DECISION[v.decision] || VERIFY_DECISION.hold
   const last = v.attempts?.[v.attempts.length - 1] || {}
   const ag = last.agent || {}
-  const notOk = [
-    ['요약', ag.staff?.summary], ...(ag.staff?.actions || []).map((x) => [`조치 ${x.index}`, x]),
-    ['식사 지침', ag.staff?.meal_guidance], ['관찰', ag.staff?.monitoring], ['주의사항', ag.staff?.cautions],
-    ['보호자용 일치', ag.guardian?.consistency],
-  ].filter(([, x]) => x && x.verdict && x.verdict !== 'ok')
+  const st = ag.staff || {}
+  const say = (n, x) => `${n}: ${AG_VERDICT[x.verdict] || x.verdict || `${x.score}점`}${x.reason ? ` — ${x.reason}` : ''}`
+  const bad = (x) => x && ((x.verdict && x.verdict !== 'ok') || (x.verdict == null && x.score != null && x.score < 2))
+  const issuesOf = (k) => [
+    ...(k === 'nurse' ? [['요약', st.summary], ['관찰', st.monitoring], ['주의사항', st.cautions]] : [['식사 지침', st.meal_guidance]]),
+    ...(st.actions || []).filter((a) => a.agent === k).map((a) => [`조치 ${a.index}`, a]),
+  ].filter(([, x]) => bad(x)).map(([n, x]) => say(n, x))
+    .concat((st.disease_alignment || []).filter((x) => x.agent === k && x.verdict !== 'met').map((x) => say(x.condition, x)))
+    .concat((st.citations || []).filter((c) => c.agent === k && c.verdict !== 'support').map((c) => say(`근거 [${c.tag}]`, c)))
+  const gIssues = Object.entries(ag.guardian || {}).filter(([, x]) => bad(x))
+    .map(([k, x]) => say({ consistency: '관리자용과 일치', readability: '읽기 쉬움', tone: '어조' }[k] || k, x))
   const send = v.send
   return (
     <div className={`mb-4 rounded-xl ring-1 p-4 ${d.box}`}>
@@ -315,60 +341,70 @@ export function VerifyPanel({ v }) {
       </div>
       {send && (
         <p className={`mt-1.5 text-[11px] ${send.ok ? 'text-emerald-800' : 'text-gray-600'}`}>
-          {send.ok ? `보호자 ${send.results?.length || 0}명에게 자동 ${send.mode === 'dry_run' ? '테스트 발송(미리보기)' : '발송'}`
-            : `자동 발송 안 함 — ${send.reason}`}
+          {send.ok ? `보호자 ${send.results?.length || 0}명에게 자동 ${send.mode === 'dry_run' ? '테스트 발송(미리보기)' : '발송'}` : `자동 발송 안 함 — ${send.reason}`}
         </p>
       )}
       {v.edited_after && <p className="mt-1.5 text-[11px] text-amber-800">검증 이후 담당자가 내용을 고쳤습니다. 아래 점수는 수정 전 기준입니다.</p>}
-      <div className="mt-3 grid md:grid-cols-2 gap-3">
-        <ScoreBlock title="관리자용" s={v.final?.staff} pass={v.thresholds?.staff} />
-        <ScoreBlock title="보호자용" s={v.final?.guardian} pass={v.thresholds?.guardian} />
-      </div>
-      <details className="mt-3">
-        <summary className="cursor-pointer text-xs font-semibold text-gray-700">항목별 검증 내용</summary>
-        <div className="mt-2 grid md:grid-cols-2 gap-3 text-[11px]">
-          <div>
-            <p className="font-bold text-gray-700 mb-1">질환별 지침 점검</p>
-            <ul className="space-y-0.5">
-              {(last.rule?.must || []).map((m, i) => (
-                <li key={i} className={m.ok ? 'text-gray-600' : 'text-amber-800'}>{m.ok ? '✓' : '✗'} {m.condition} — {m.item} <span className="text-gray-400">({m.source})</span></li>
-              ))}
-              {!last.rule?.must?.length && <li className="text-gray-400">해당 조건 없음</li>}
-              {(ag.staff?.disease_alignment || []).filter((x) => x.verdict !== 'met').map((x, i) => (
-                <li key={`a${i}`} className="text-amber-800">에이전트: {x.condition} {AG_VERDICT[x.verdict] || x.verdict}{x.reason ? ` — ${x.reason}` : ''}</li>
-              ))}
-            </ul>
-            {last.rule?.coverage?.length > 0 && <>
-              <p className="font-bold text-gray-700 mt-2 mb-1">우선순위 요인 대응</p>
-              <ul className="space-y-0.5">{last.rule.coverage.map((c, i) => <li key={i} className={c.ok ? 'text-gray-600' : 'text-amber-800'}>{c.ok ? '✓' : '✗'} {c.factor} ({c.rules.join('/')})</li>)}</ul>
-            </>}
-          </div>
-          <div>
-            <p className="font-bold text-gray-700 mb-1">검증 에이전트 지적</p>
-            <ul className="space-y-0.5">
-              {notOk.map(([n, x]) => <li key={n} className="text-amber-800">{n}: {AG_VERDICT[x.verdict] || x.verdict}{x.reason ? ` — ${x.reason}` : ''}</li>)}
-              {(ag.staff?.citations || []).filter((c) => c.verdict !== 'support').map((c) => <li key={c.tag} className="text-amber-800">근거 [{c.tag}]: {AG_VERDICT[c.verdict] || c.verdict}{c.reason ? ` — ${c.reason}` : ''}</li>)}
-              {!notOk.length && !(ag.staff?.citations || []).some((c) => c.verdict !== 'support') && <li className="text-gray-400">{last.agent ? '지적 사항 없음' : '에이전트 결과 없음'}</li>}
-            </ul>
-            {last.rule?.format_issues?.length > 0 && <p className="mt-2 text-gray-600">형식: {last.rule.format_issues.join(' · ')}</p>}
+
+      {tab === 'staff' ? (<>
+        <div className="mt-3 grid md:grid-cols-2 gap-3">
+          <ScoreBlock title="관리자용 점수" s={v.final?.staff} pass={v.thresholds?.staff} />
+          <div className="space-y-2">
+            <AgentCard kind="nutritionist" info={ag.agents?.nutritionist} issues={issuesOf('nutritionist')} />
+            <AgentCard kind="nurse" info={ag.agents?.nurse} issues={issuesOf('nurse')} />
           </div>
         </div>
-        {v.attempts?.length > 1 && (
-          <div className="mt-3">
-            <p className="text-[11px] font-bold text-gray-700 mb-1">재작성 이력</p>
-            <ol className="space-y-1.5">
-              {v.attempts.map((t) => (
-                <li key={t.attempt} className="text-[11px] text-gray-600">
-                  <span className="font-semibold">{t.attempt}차</span> 관리자용 {Math.round(t.scores?.staff?.score)} · 보호자용 {Math.round(t.scores?.guardian?.score)} → {({ rewrite: '재작성', pass: '통과', pass_staff_only: '관리자용만 통과', hold: '보류' })[t.decision]}
-                  {t.decision === 'rewrite' && t.feedback_out?.length > 0 && (
-                    <ul className="ml-4 list-disc pl-3 text-gray-500">{t.feedback_out.map((x, i) => <li key={i}>{x}</li>)}</ul>
-                  )}
-                </li>
-              ))}
-            </ol>
+        <details className="mt-3">
+          <summary className="cursor-pointer text-xs font-semibold text-gray-700">항목별 검증 내용</summary>
+          <div className="mt-2 grid md:grid-cols-2 gap-3 text-[11px]">
+            <div>
+              <p className="font-bold text-gray-700 mb-1">질환별 지침 점검</p>
+              <ul className="space-y-0.5">
+                {(last.rule?.must || []).map((m, i) => (
+                  <li key={i} className={m.ok ? 'text-gray-600' : 'text-amber-800'}>{m.ok ? '✓' : '✗'} {m.condition} — {m.item} <span className="text-gray-400">({m.source})</span></li>
+                ))}
+                {!last.rule?.must?.length && <li className="text-gray-400">해당 조건 없음</li>}
+              </ul>
+              <p className="font-bold text-gray-700 mt-2 mb-1">돌봄 우선순위 요인 (모두 포함해야 통과)</p>
+              <ul className="space-y-0.5">
+                {(last.rule?.coverage || []).map((c, i) => <li key={i} className={c.ok ? 'text-gray-600' : 'text-rose-700'}>{c.ok ? '✓' : '✗'} {c.factor} ({c.rules.join('/')})</li>)}
+                {!last.rule?.coverage?.length && <li className="text-gray-400">해당 요인 없음</li>}
+              </ul>
+            </div>
+            <div>
+              <p className="font-bold text-gray-700 mb-1">구체성 (조치마다 무엇·얼마나·언제 중 2가지 이상)</p>
+              <ul className="space-y-0.5">
+                {(last.rule?.spec_actions || []).map((x) => (
+                  <li key={x.index} className={x.ok ? 'text-gray-600' : 'text-amber-800'}>
+                    {x.ok ? '✓' : '✗'} 조치 {x.index} — {Object.entries(x.has).map(([k, on]) => `${k}${on ? '○' : '×'}`).join(' ')}
+                  </li>
+                ))}
+              </ul>
+              {last.rule?.format_issues?.length > 0 && <p className="mt-2 text-gray-600">형식: {last.rule.format_issues.join(' · ')}</p>}
+            </div>
           </div>
-        )}
-      </details>
+          {v.attempts?.length > 1 && (
+            <div className="mt-3">
+              <p className="text-[11px] font-bold text-gray-700 mb-1">재작성 이력</p>
+              <ol className="space-y-1.5">
+                {v.attempts.map((t) => (
+                  <li key={t.attempt} className="text-[11px] text-gray-600">
+                    <span className="font-semibold">{t.attempt}차</span> 관리자용 {Math.round(t.scores?.staff?.score)} · 보호자용 {Math.round(t.scores?.guardian?.score)} → {({ rewrite: '재작성', pass: '통과', pass_staff_only: '관리자용만 통과', hold: '보류' })[t.decision]}
+                    {t.decision === 'rewrite' && t.feedback_out?.length > 0 && (
+                      <ul className="ml-4 list-disc pl-3 text-gray-500">{t.feedback_out.map((x, i) => <li key={i}>{x}</li>)}</ul>
+                    )}
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+        </details>
+      </>) : (
+        <div className="mt-3 grid md:grid-cols-2 gap-3">
+          <ScoreBlock title="보호자용 점수" s={v.final?.guardian} pass={v.thresholds?.guardian} />
+          <AgentCard kind="nurse" info={ag.agents?.nurse && { ...ag.agents.nurse, items: ['보호자 안내문'], comment: '' }} issues={gIssues} />
+        </div>
+      )}
     </div>
   )
 }

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { PfmlLogo } from '../brand/Brand'
 import { Gauge } from './CareUI'
+import { PixelSprite } from './PixelCrew'
 
 // 유형 색 (대비 검증 통과 팔레트)
 const TYPE_COLORS = ['#1151b8', '#d97706', '#e11d48', '#6d28d9', '#0f9d76', '#475569']
@@ -651,6 +652,27 @@ export default function ReportView({ r }) {
 
       {/* 돌봄 제안 */}
       <Section flow title="돌봄 제안" sub={staff ? '규칙 근거를 바탕으로 만든 제안이며, 담당자 승인 후 적용됩니다.' : '시설에서 이렇게 돌봐 드리고 있습니다.'}>
+        {(sol.verified || (staff && sol.verification)) && (
+          <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl bg-sky-50/70 ring-1 ring-sky-100 px-3 py-2">
+            <span className="flex items-end gap-1">
+              <PixelSprite kind="nutritionist" scale={2} /><PixelSprite kind="nurse" scale={2} />
+            </span>
+            <div className="min-w-0 flex-1 text-xs leading-5">
+              {staff && sol.verification ? (<>
+                <p className="font-bold text-navy-900">
+                  AI 영양사·AI 간호사 검증 — {({ pass: '통과 · 자동 승인', pass_staff_only: '관리자용만 통과', hold: '보류' })[sol.verification.decision]}
+                  <span className="ml-2 font-normal text-muted tabular-nums">관리자용 {Math.round(sol.verification.staff_score ?? 0)} · 보호자용 {Math.round(sol.verification.guardian_score ?? 0)}{sol.verification.rewrites ? ` · 재작성 ${sol.verification.rewrites}회` : ''}</span>
+                </p>
+                {Object.entries(sol.verification.comments || {}).filter(([, c]) => c).map(([k, c]) => (
+                  <p key={k} className="text-slate-600">{k === 'nurse' ? 'AI 간호사' : 'AI 영양사'}: “{c}”</p>
+                ))}
+                {sol.verification.edited_after && <p className="text-amber-700">검증 이후 담당자가 내용을 고쳤습니다.</p>}
+              </>) : (
+                <p className="text-navy-900">이 돌봄 계획은 <b>AI 영양사</b>와 <b>AI 간호사</b>가 식사·영양과 안전 기준에 맞는지 검토했습니다.</p>
+              )}
+            </div>
+          </div>
+        )}
         {!staff && sol.guardian_message && (
           <p className="rounded-2xl bg-navy-50/70 px-5 py-4 text-[15px] leading-7 text-navy-900 whitespace-pre-line">{sol.guardian_message}</p>
         )}

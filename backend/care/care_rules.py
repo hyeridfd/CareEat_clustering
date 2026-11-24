@@ -291,3 +291,24 @@ def select(features: dict, ctx: dict):
         except Exception:
             continue
     return out
+
+
+# [2026-11-24] 돌봄 우선순위 요인 → 그 요인을 다루는 규칙
+#   솔루션에는 이 규칙이 후보에 있으면 반드시 들어가야 한다 (solution.validate 가 빠진 것을 채우고, verify 가 확인)
+FACTOR_RULES = {
+    "mna_malnourished": ["R_MALNUT"], "mna_at_risk": ["R_MALNUT_RISK"], "low_bmi": ["R_LOW_BMI"],
+    "intake_very_low": ["R_LOW_INTAKE"], "intake_low": ["R_LOW_INTAKE"], "protein_dish_low": ["R_LOW_PROTEIN", "R_NUT_PROTEIN"],
+    "swallowing": ["R_SWALLOW"], "chewing": ["R_CHEW"], "eating_full_help": ["R_DEPEND"], "eating_partial_help": ["R_DEPEND"],
+    "depressive": ["R_MOOD"], "depressive_mild": ["R_MOOD"], "weight_loss": ["R_WEIGHT_LOSS"], "intake_drop": ["R_INTAKE_DROP"],
+}
+
+
+def required_rules(priority: dict, candidates: list) -> list[dict]:
+    """우선순위 요인마다 솔루션에 꼭 들어갈 규칙 (후보에 있는 것만) → [{factor, rules}]"""
+    cand = [c["id"] for c in candidates]
+    out = []
+    for fx in (priority or {}).get("factors") or []:
+        rs = [r for r in FACTOR_RULES.get(fx.get("code"), []) if r in cand]
+        if rs and (fx.get("points") or 0) > 0:
+            out.append({"factor": fx.get("label"), "code": fx.get("code"), "points": fx.get("points"), "rules": rs})
+    return out

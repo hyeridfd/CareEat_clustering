@@ -22,7 +22,7 @@ from . import nutrition as nutri
 from . import retrieval
 from .priority import LEVEL_LABEL
 
-PROMPT_VERSION = "2026-11-24-verify1"   # 프롬프트를 고칠 때마다 올린다 (배포 확인용)
+PROMPT_VERSION = "2026-11-24-verify2"   # 프롬프트를 고칠 때마다 올린다 (배포 확인용)
 
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-5")
@@ -89,6 +89,10 @@ SYSTEM_PROMPT = """당신은 요양원 식사·영양 돌봄 코디네이터를 
 4. guardian_message 는 보호자가 읽는 3~5문장의 쉬운 존댓말입니다. 점수·척도명(MNA, GDS 등)·유형 코드와 [G1] 같은 인용 표기를 쓰지 않고, 불안을 주지 않되 사실대로 씁니다. 350자 이내.
 5. '참고 지침'이 주어지면 **발췌를 하나씩 모두 검토**합니다. 이 어르신의 조치·지침·주의사항과 **내용이 실제로 맞는 발췌는 빠짐없이** 해당 문장에 [G#] 로 답니다. 쓸 수 있는 발췌가 여러 개면 여러 문장에 나누어 답니다. 다만 내용이 맞지 않으면 쓰지 않습니다 — 개수를 채우려고 관련 없는 번호를 붙이거나, 인력 배치·시설 운영에 관한 발췌를 개별 식사 조치의 근거로 달면 안 됩니다.
 5-1. 발췌에 규칙 문장보다 **더 구체적인 내용(수치, 조리 방법, 빈도, 주의점)**이 있으면 그것을 문장에 반영하고 근거를 답니다. 후보 조치를 그대로 옮겨 쓰기만 하면 지침을 전달한 의미가 없습니다. 예: '간식을 추가합니다' 대신 '끼니 사이와 취침 전에 간식을 두어 언제든 드실 수 있게 합니다 [G3]'.
+3-4. 돌봄 조치(action)마다 ① 무엇을(구체적인 음식·조리법·방법) ② 얼마나(양·횟수) ③ 언제(끼니·시간·주기)를 모두 씁니다. 식사 지침도 구체적인 음식과 양 또는 시점을 함께 씁니다.
+     나쁜 예: '간식을 추가합니다'  좋은 예: '오전 10시와 오후 3시에 두유 1팩과 삶은 달걀 1개를 간식으로 드립니다'
+     나쁜 예: '체중을 관찰합니다'  좋은 예: '매주 월요일 아침 식사 전에 같은 체중계로 재어 기록하고, 한 달에 2kg 이상 줄면 간호사에게 알립니다'
+3-5. 입력의 '반드시 포함할 조치'에 있는 rule_id 는 이 어르신의 돌봄 우선순위 요인이므로 빠짐없이 staff_actions 에 넣고, 앞쪽에 둡니다.
 5-2. 입력에 '검증 피드백'이 있으면 이전 초안을 검수에서 지적한 내용입니다. 지적한 항목을 모두 고쳐 처음부터 다시 작성합니다. 다른 규칙(후보 안에서만 조치, 약·용량 금지, 근거 번호 규칙)은 그대로 지킵니다.
 6. 반드시 아래 JSON 한 개만 출력합니다.
 
@@ -182,7 +186,9 @@ def build_context(features: dict, type_info: dict, priority: dict, candidates: l
 
 # ─────────────────────────── 규칙 기반 ───────────────────────────
 
-def rules_solution(type_info, priority, candidates):
+def rules_solution(type_info, priority, candidates, required=None):
+    need = {r["rules"][0] for r in required or []}
+    candidates = [c for c in candidates if c["id"] in need] + [c for c in candidates if c["id"] not in need]
     top = [x["label"] for x in priority["factors"] if x["points"] > 0][:3]
     summary = (f"{type_info.get('name')} 유형, 우선순위 {LEVEL_LABEL[priority['level']]}({priority['score']:.0f}점)."
                + (f" 주요 요인: {', '.join(top)}." if top else " 뚜렷한 위험 요인은 없습니다."))
@@ -310,7 +316,7 @@ def _renumber(clean: dict, refs: list) -> list:
     return [{**by_tag[tag], "tag": str(n), "orig_tag": tag} for tag, n in remap.items()]
 
 
-def validate(out: dict, candidates: list, fallback: dict, refs: list | None = None):
+def validate(out: dict, candidates: list, fallback: dict, refs: list | None = None, required: list | None = None):
     flags = []
     allowed = {c["id"] for c in candidates}
     valid_tags = {r["tag"] for r in (refs or [])}
@@ -344,7 +350,18 @@ def validate(out: dict, candidates: list, fallback: dict, refs: list | None = No
     if not acts:
         flags.append({"type": "empty_actions", "detail": "유효한 조치가 없어 규칙 기반 조치 사용"})
         acts = fallback["staff_actions"]
-    clean["staff_actions"] = acts[:6]
+    # [2026-11-24] 우선순위 요인 규칙이 빠졌으면 규칙 원문으로 채우고, 6개로 자를 때 먼저 남긴다
+    used = {a["rule_id"] for a in acts}
+    must = []
+    for r in required or []:
+        if not any(x in used for x in r["rules"]):
+            rid = r["rules"][0]
+            rule = care_rules.RULE_BY_ID[rid]
+            acts.append({"rule_id": rid, "category": rule["category"], "action": rule["staff"], "why": f"돌봄 우선순위 요인: {r['factor']}"})
+            flags.append({"type": "required_added", "detail": f"우선순위 요인 '{r['factor']}' 조치({rid})가 빠져 규칙 문장으로 추가"})
+        must += r["rules"]
+    acts = [a for a in acts if a["rule_id"] in must] + [a for a in acts if a["rule_id"] not in must]
+    clean["staff_actions"] = acts[:max(6, sum(a["rule_id"] in must for a in acts))]
 
     for key in ("meal_guidance", "monitoring", "cautions"):
         items = [str(x) for x in (out.get(key) or []) if str(x).strip()]
@@ -380,10 +397,11 @@ def generate(features, type_info, priority, transition, is_borderline, provider:
                  "priority_level": priority["level"], "nutrition_pct": npct, "low_meal": low_meal,
                  "low_components": low_components(features)}
     candidates = care_rules.select(features, ctx_rules)
-    fallback = rules_solution(type_info, priority, candidates)
+    required = care_rules.required_rules(priority, candidates)
+    fallback = rules_solution(type_info, priority, candidates, required)
     provider = (provider or os.getenv("LLM_PROVIDER", "none")).lower()
     if detail is not None:
-        detail.update(ctx_rules=ctx_rules, snippets=[], refs=[],
+        detail.update(ctx_rules=ctx_rules, snippets=[], refs=[], required=required,
                       ctx_payload=build_context(features, type_info, priority, candidates, transition))
     if provider in ("", "none", "rules"):
         return fallback, "rules", [], candidates
@@ -391,11 +409,13 @@ def generate(features, type_info, priority, transition, is_borderline, provider:
     ctx = build_context(features, type_info, priority, candidates, transition, snippets)
     if detail is not None:
         detail.update(snippets=snippets, refs=refs)
+    if required:
+        ctx["반드시 포함할 조치"] = [{"우선순위 요인": r["factor"], "rule_id": r["rules"][0]} for r in required]
     if feedback:
         ctx["검증 피드백"] = {"설명": "이전 초안을 검수한 결과입니다. 아래를 모두 고쳐 다시 작성하세요.", "고칠 점": feedback}
     try:
         raw, gen = call_openai(ctx) if provider == "openai" else call_anthropic(ctx)
-        clean, flags = validate(raw, candidates, fallback, refs)
+        clean, flags = validate(raw, candidates, fallback, refs, required)
         if refs and not clean.get("references"):
             flags.append({"type": "no_citation",
                           "detail": f"지침 {len(refs)}개를 전달했으나 인용되지 않음 "

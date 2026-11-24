@@ -4,6 +4,7 @@ import api from '../../lib/api'
 import CareLayout from '../../components/care/CareLayout'
 import { Card, LevelPill, ScoreBar, ScoreHelp, SOLUTION_STATUS, TRANSITION, TypeBadge, VerifyPanel, errMsg, fmtDate } from '../../components/care/CareUI'
 import Avatar from '../../components/care/Avatar'
+import { CrewWalk, PixelSprite } from '../../components/care/PixelCrew'
 import ResidentProfileTab from './ResidentProfileTab'
 import ResidentHistoryTab from './ResidentHistoryTab'
 
@@ -226,6 +227,7 @@ export default function ResidentCarePage() {
   const [tab, setTab] = useState('profile')
   const [provider, setProvider] = useState('')
   const [draft, setDraft] = useState(null)
+  const [solTab, setSolTab] = useState('staff')   // 돌봄 솔루션: 관리자용 | 보호자용
   const [msg, setMsg] = useState(null)
   const [sendResult, setSendResult] = useState(null)
   const [gForm, setGForm] = useState({ name: '', relation: '', phone: '', consent_health_info: false })
@@ -440,10 +442,25 @@ export default function ResidentCarePage() {
               {sol && <span className="text-xs text-gray-400">{sol.generator} · {fmtDate(sol.created_at)}</span>}
             </div>
 
-            {sol?.content?.verification && <VerifyPanel v={sol.content.verification} />}
-            {busy === 'gen' && <p className="mb-3 text-xs text-gray-500">초안 생성 → 관리자용·보호자용 검증 중입니다. 기준에 못 미치면 다시 써서 재검증하므로 1~3분 걸릴 수 있습니다.</p>}
+            {busy === 'gen' && <CrewWalk note="초안 작성 → 관리자용·보호자용 검증. 기준에 못 미치면 다시 써서 재검증하므로 1~3분 걸릴 수 있어요." />}
+            {draft && busy !== 'gen' && (
+              <div className="mb-4 flex items-center gap-1 rounded-xl bg-gray-100 p-1 w-fit">
+                {[['staff', '관리자용', 'nutritionist'], ['guardian', '보호자용', 'nurse']].map(([k, l, sp]) => (
+                  <button key={k} onClick={() => setSolTab(k)}
+                    className={`flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-sm font-semibold ${solTab === k ? 'bg-white text-navy-900 shadow-sm' : 'text-gray-500'}`}>
+                    <PixelSprite kind={sp} scale={1} /> {l}
+                    {sol?.content?.verification?.final?.[k] && (
+                      <span className={`text-[11px] tabular-nums ${sol.content.verification.final[k].pass ? 'text-emerald-600' : 'text-amber-600'}`}>
+                        {Math.round(sol.content.verification.final[k].score)}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+            {busy !== 'gen' && sol?.content?.verification && <VerifyPanel v={sol.content.verification} tab={solTab} />}
 
-            {sol?.guardrail_flags?.length > 0 && (
+            {solTab === 'staff' && sol?.guardrail_flags?.length > 0 && (
               <div className="mb-4 rounded-xl bg-amber-50 border border-amber-200 px-4 py-3">
                 <p className="text-xs font-semibold text-amber-800 mb-1">자동 검증에서 수정된 부분</p>
                 <ul className="list-disc pl-4 text-xs text-amber-800 space-y-0.5">{sol.guardrail_flags.map((x, i) => <li key={i}>{x.detail}</li>)}</ul>
@@ -452,6 +469,7 @@ export default function ResidentCarePage() {
 
             {draft && (
               <div className="space-y-5">
+                {solTab === 'staff' && (<>
                 <div>
                   <label className="form-label">담당자용 요약</label>
                   <textarea rows={2} className="form-input" value={splitCites(draft.summary).body} disabled={!editable}
@@ -493,6 +511,8 @@ export default function ResidentCarePage() {
                       : <ul className="list-disc pl-4 text-sm text-gray-700 space-y-1">{draft.cautions.map((x, i) => <li key={i}>{splitCites(x).body}</li>)}</ul>}
                   </div>
                 )}
+                </>)}
+                {solTab === 'guardian' && (
                 <div>
                   <div className="flex items-end justify-between">
                     <label className="form-label">보호자 안내 문장</label>
@@ -502,7 +522,8 @@ export default function ResidentCarePage() {
                     onChange={(e) => setDraft({ ...draft, guardian_message: e.target.value })} />
                   <p className="mt-1 text-xs text-gray-400">점수·척도명·약 이름은 쓰지 마세요. 보호자 리포트 화면에 그대로 보입니다.</p>
                 </div>
-                {draft.references?.length > 0 && (
+                )}
+                {solTab === 'staff' && draft.references?.length > 0 && (
                   <div className="rounded-xl bg-navy-50/60 px-4 py-3">
                     <p className="text-xs font-bold text-navy-900 mb-1.5">근거 문헌</p>
                     <ol className="space-y-1">
