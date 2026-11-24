@@ -524,7 +524,7 @@ def ps_assemble(ps: dict, meta: dict, progress=None, inventory=None) -> dict:
         by_res[eid].append({"일차": day, "끼니": meal, "메뉴": menus,
                             "대체": [s for s in ch if s not in ("밥", "김치")] , "식사형태변경": [s for s in ch if s in ("밥", "김치")],
                             **{x: v.get(x) for x in ("밥", "국", "주찬", "부찬1", "부찬2", "김치", "ratio", "예상열량", "예상단백질",
-                                                    "예상나트륨", "예상탄수화물", "예상지방", "예상당류", "예상식이섬유", "예상칼륨",
+                                                    "예상나트륨", "예상탄수화물", "예상지방", "예상당류", "예상포화지방", "예상식이섬유", "예상칼륨",
                                                     "열량OK", "단백질OK", "나트륨OK", "식이섬유OK", "칼륨OK", "탄수화물OK", "칸별비율", "조정결과")}})
     for eid in by_res:
         by_res[eid].sort(key=lambda x: (int(re.sub(r"\D", "", x["일차"]) or 0), order.get(x["끼니"], 9)))
@@ -615,8 +615,9 @@ def ps_assemble(ps: dict, meta: dict, progress=None, inventory=None) -> dict:
 # ══════════════════════════════════════════════════════════════
 def run_design(residents, assessments, settings, inventory=None, preference=None,
                preset="standard", seed=42, progress=None, ehr=None, selector="llm", reviewer="llm",
-               refiner="llm", agent_mode="rule") -> dict:
+               refiner="llm", agent_mode="rule", facility_plan: dict | None = None) -> dict:
     """→ 결과 dict (menu, metrics, personalization…)
+    facility_plan = 시설 개선안 반영 지시 (diet/facility_plan.from_priorities) — 공통 식단 최적화에 가중치·선호로 반영
     selector = "llm" (파레토 후보 중 AI 영양사가 선택, 실패·미설정 시 규칙) | "rule" (균형점 규칙)
     reviewer = "llm" (AI 식단 검토자가 어색한 칸 교체 제안 → 코드 검증 후 반영) | off (검토 안 함)
     refiner  = "llm" (Stage 2 AI 임상 영양사 어르신별 종합 판단) | off (Stage 1 종합 규칙만)
@@ -626,7 +627,7 @@ def run_design(residents, assessments, settings, inventory=None, preference=None
     from . import workflow as WF
     inp = {"residents": residents, "assessments": assessments, "settings": settings, "inventory": inventory,
            "preference": preference, "preset": preset, "seed": seed, "ehr": ehr, "selector": selector,
-           "reviewer": reviewer, "refiner": refiner, "agent_mode": agent_mode}
+           "reviewer": reviewer, "refiner": refiner, "agent_mode": agent_mode, "facility_plan": facility_plan}
     judge = None
     if agent_mode == "llm":
         from .agents.llm_agent import make_judge

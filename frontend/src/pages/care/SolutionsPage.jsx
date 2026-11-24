@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import api from '../../lib/api'
 import CareLayout, { Empty, SoonCard } from '../../components/care/CareLayout'
 import DietDesign from '../../components/care/DietDesign'
@@ -14,7 +14,8 @@ const FILTERS = [['all', '전체'], ['draft', '검토 필요'], ['approved', '�
 
 export default function SolutionsPage() {
   const navigate = useNavigate()
-  const [tab, setTab] = useState('care')
+  const [params] = useSearchParams()
+  const [tab, setTab] = useState(params.get('tab') || 'care')
   const [data, setData] = useState(null)
   const [filter, setFilter] = useState('all')
   const [err, setErr] = useState('')
@@ -87,7 +88,7 @@ export default function SolutionsPage() {
         </>
       )}
 
-      {tab === 'diet' && <DietDesign />}
+      {tab === 'diet' && <DietDesign facilityPlan={params.get('plan') === 'facility'} />}
 
       {tab === 'program' && (
         <SoonCard title="맞춤 어르신 프로그램 추천"

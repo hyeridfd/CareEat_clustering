@@ -114,7 +114,16 @@ def optimize(state: FacilityState, config: RunnableConfig) -> dict:
     pool = load_pool(pref.get("pool_scores"))
     inv = inventory_from_rows(inventory.get("items"), inventory.get("start_date"))
     inv_model = InventoryModel(pool, inv, len(state["profiles"])) if inv else None
+    plan, plan_log = i.get("facility_plan"), None
+    if plan:                                    # [2026-11-24] 시설 개선안 반영 (diet/facility_plan.py)
+        from . import facility_plan as FPL
+        pool, plan_log = FPL.apply_pool(pool, plan)
+        say(f"시설 개선안 {len(plan.get('items') or [])}건 반영 — 선호 메뉴 {plan_log['preferred']} · 제한 메뉴 {plan_log['limited']}"
+            f" · 제외 메뉴 {len(plan_log['removed'])}")
     problem = MealPlanProblem(pool, BaseStandard(), BUDGET_PER_MEAL, inventory=inv_model, harmony=harmony_table(pool))
+    if plan:
+        FPL.configure(problem, plan)
+        problem.plan_log = plan_log
     pop, gen = PRESETS.get(i.get("preset"), PRESETS["standard"])
     say(f"일반식 최적화 (개체 {pop} · 세대 {gen})")
     t0 = dt.datetime.now()
@@ -130,6 +139,9 @@ def select_menu(state: FacilityState, config: RunnableConfig) -> dict:
     Xf, Ff, _, _ = state["nsga"]
     fctx = facility_context(state["profiles"], state["meta"], state["agent_json"],
                             (i.get("inventory") or {}).get("start_date"), BUDGET_PER_MEAL)
+    if i.get("facility_plan"):
+        fctx["시설_개선안"] = [f"{x.get('title')} — {' / '.join(x.get('how') or [])}"
+                            for x in (i["facility_plan"].get("items") or [])]
     pick = choose(problem, Xf, Ff, problem.constraint, fctx, mode=i.get("selector", "llm"), progress=_say(config))
     return {"fctx": fctx, "pick": pick, "chrom": Xf[pick["index"]]}
 
@@ -167,6 +179,9 @@ def build_menu(state: FacilityState) -> dict:
                                 "before": {k: v for k, v in state["before"].items() if k.startswith("반복")}}
     metrics["optimize_sec"] = round((dt.datetime.now() - state["t0"]).total_seconds(), 1)
     metrics["preset"] = {"name": i.get("preset"), "pop": pop, "gen": gen}
+    if i.get("facility_plan"):
+        from . import facility_plan as FPL
+        metrics["facility_plan"] = FPL.evaluate(problem, chrom, i["facility_plan"], getattr(problem, "plan_log", None))
     return {"records": records, "metrics": metrics}
 
 

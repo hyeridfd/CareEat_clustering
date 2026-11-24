@@ -207,7 +207,71 @@ const OK = ({ v }) => <span className={v === '✅' ? 'text-emerald-600' : 'text-
 
 /* ─────────────────────────── 메인 ─────────────────────────── */
 
-export default function DietDesign() {
+/* [2026-11-24] 시설 개선안 반영 — 시설 진단 > 개선안에서 넘어오면 켜진 상태로 시작 */
+function FacilityPlanBox({ on, setOn, plan, err }) {
+  return (
+    <div className={`mt-4 rounded-2xl p-4 ring-1 ${on ? 'bg-emerald-50/60 ring-emerald-200' : 'bg-white ring-navy-100'}`}>
+      <label className="flex items-center gap-2 text-sm font-bold text-navy-900">
+        <input type="checkbox" checked={on} onChange={(e) => setOn(e.target.checked)} />
+        시설 개선안 반영
+        <span className="font-normal text-xs text-muted">시설 진단의 관리 우선순위를 공통 식단 최적화에 더합니다. 기존 기준(KDRI·개인 맞춤 기준·식단 규칙)은 그대로 지킵니다.</span>
+      </label>
+      {on && err && <p className="mt-2 text-xs text-rose-700">{err}</p>}
+      {on && plan && (
+        <div className="mt-3 grid md:grid-cols-2 gap-3">
+          <div>
+            <p className="text-xs font-bold text-emerald-800 mb-1.5">식단에 반영 ({plan.items.length}건)</p>
+            {plan.items.length ? (
+              <ul className="space-y-1.5">
+                {plan.items.map((x) => (
+                  <li key={x.id} className="text-xs leading-5 text-slate-700">
+                    <span className="font-semibold text-navy-900">{x.title}</span>
+                    <span className="ml-1 text-muted">{x.severity_label}</span>
+                    <ul className="ml-3 list-disc pl-3 text-[11px] text-slate-600">{x.how.map((h) => <li key={h}>{h}</li>)}</ul>
+                  </li>
+                ))}
+              </ul>
+            ) : <p className="text-xs text-muted">식단으로 반영할 개선안이 없습니다.</p>}
+          </div>
+          <div>
+            <p className="text-xs font-bold text-slate-600 mb-1.5">식단 외 조치 ({plan.outside.length}건) — 시설 진단 화면에서 운영으로 대응</p>
+            <ul className="space-y-1">
+              {plan.outside.map((x) => <li key={x.id} className="text-[11px] text-muted">· {x.title}</li>)}
+            </ul>
+            {plan.avoid_menus?.length > 0 && <p className="mt-2 text-[11px] text-slate-600">후보에서 제외할 잔반 많은 메뉴: {plan.avoid_menus.join(', ')}</p>}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* 설계 결과에 개선안이 얼마나 반영됐는지 */
+function FacilityPlanResult({ fp }) {
+  if (!fp) return null
+  const r = fp.result || {}
+  const w = Object.entries(fp.weights || {}).map(([k, v]) => `${NUT_KO[k] || k} ×${v}`).join(' · ')
+  return (
+    <div className="surface p-5 ring-1 ring-emerald-200">
+      <p className="text-sm font-extrabold text-navy-900">시설 개선안 반영 결과 <span className="ml-1 badge bg-emerald-50 text-emerald-700">{fp.items?.length || 0}건 반영</span></p>
+      <p className="mt-1 text-xs text-muted">{fp.items?.map((x) => x.title).join(' · ')}{w && ` — 영양 위반 가중치 ${w}`}</p>
+      <div className="mt-3 grid grid-cols-2 md:grid-cols-5 gap-3">
+        <Stat label="나트륨 끼니 평균" value={r['나트륨_끼니평균_mg']} unit="mg" sub={`기준 이내 끼니 ${r['나트륨_기준이내_끼니_%'] ?? '–'}%`} />
+        <Stat label="칼륨 끼니 평균" value={r['칼륨_끼니평균_mg']} unit="mg" />
+        <Stat label="선호 메뉴 사용" value={r['선호_메뉴_횟수']} unit="회" sub="칼슘·단백질·식이섬유 급원 등" />
+        <Stat label="제한 메뉴 사용" value={r['제한_메뉴_횟수']} unit="회" sub="장아찌·젓갈·가공육 등" />
+        <Stat label="제외 메뉴 사용" value={r['제외_메뉴_사용']} unit="회" sub={`후보에서 뺀 메뉴 ${fp.pool?.removed?.length ?? 0}개`} />
+      </div>
+      {fp.outside?.length > 0 && <p className="mt-3 text-[11px] text-muted">식단 외 조치(운영): {fp.outside.map((x) => x.title).join(' · ')}</p>}
+    </div>
+  )
+}
+const NUT_KO = { sodium: '나트륨', energy: '열량', protein: '단백질', fiber: '식이섬유', potassium: '칼륨' }
+
+export default function DietDesign({ facilityPlan = false }) {
+  const [usePlan, setUsePlan] = useState(!!facilityPlan)
+  const [plan, setPlan] = useState(null)
+  const [planErr, setPlanErr] = useState('')
   const [status, setStatus] = useState(null)
   const [runId, setRunId] = useState(null)
   const [run, setRun] = useState(null)
@@ -235,6 +299,11 @@ export default function DietDesign() {
     api.get('/care/diet/llm-status').then((r) => setAiStatus(r.data)).catch(() => setAiStatus(null))
   }, [])
   useEffect(() => { setRun(null); loadRun(runId) }, [runId])
+  useEffect(() => {
+    if (!usePlan || plan) return
+    api.get('/care/diet/facility-plan', { timeout: 60000 }).then((r) => { setPlan(r.data); setPlanErr('') })
+      .catch((e) => setPlanErr(errMsg(e)))
+  }, [usePlan])
 
   // 실행 중이면 4초마다 진행 상황 갱신
   const active = status?.runs?.find((x) => ['queued', 'running'].includes(x.status))
@@ -253,7 +322,7 @@ export default function DietDesign() {
   const start = async () => {
     setErr(''); setBusy(true)
     try {
-      const r = await api.post('/care/diet/runs', { preset, selector: useAi ? 'llm' : 'rule', reviewer: useReview ? 'llm' : 'off', refiner: useRefine ? 'llm' : 'off', agent_mode: useAgentAi ? 'llm' : 'rule' })
+      const r = await api.post('/care/diet/runs', { preset, selector: useAi ? 'llm' : 'rule', reviewer: useReview ? 'llm' : 'off', refiner: useRefine ? 'llm' : 'off', agent_mode: useAgentAi ? 'llm' : 'rule', facility_plan: usePlan }, { timeout: 60000 })
       setRunId(r.data.id)
       await loadStatus()
     } catch (e) { setErr(errMsg(e)) } finally { setBusy(false) }
@@ -324,6 +393,7 @@ export default function DietDesign() {
             <Stat label="진행 상태" value={live ? RUN_STATUS[live.status]?.label : '–'} sub={live && fmtDate(live.created_at)} />
           )}
         </div>
+        <FacilityPlanBox on={usePlan} setOn={setUsePlan} plan={plan} err={planErr} />
         {!ready && <p className="mt-3 text-xs text-muted">진단 화면에서 어르신 평가를 먼저 실행해야 식단을 설계할 수 있습니다.</p>}
         {status?.runs?.length > 0 && (
           <div className="mt-4 flex flex-wrap gap-2">
@@ -334,6 +404,7 @@ export default function DietDesign() {
                 <span className={`badge ml-1.5 ${RUN_STATUS[x.status]?.cls}`}>{RUN_STATUS[x.status]?.label}</span>
                 {x.parent_run_id && <span className="ml-1 text-muted">{x.params?.candidate ? `후보 ${x.params.candidate}` : '수정본'}</span>}
                 {!x.parent_run_id && x.params?.selector === 'llm' && <span className="ml-1 text-violet-600">AI</span>}
+                {x.params?.facility_plan && <span className="ml-1 text-emerald-700" title={`시설 개선안 ${x.params.facility_plan.length}건 반영`}>개선안</span>}
                 {x.status === 'failed' && x.error && <span className="ml-1 text-rose-600" title={x.error}>ⓘ</span>}
                 {x.params?.preset && !x.parent_run_id && <span className="ml-1 text-muted">{PRESETS.find((p) => p.key === x.params.preset)?.label}</span>}
               </button>
@@ -589,6 +660,7 @@ function MenuTab({ run, onApprove, onEdited, onRerun, setErr }) {
 
   return (
     <div className="space-y-4">
+      <FacilityPlanResult fp={m.facility_plan} />
       <Section title="설계 결과"
         right={<>
           {run.status === 'approved'

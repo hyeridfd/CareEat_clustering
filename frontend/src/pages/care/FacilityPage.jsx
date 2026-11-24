@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import api from '../../lib/api'
 import CareLayout from '../../components/care/CareLayout'
 import { errMsg } from '../../components/care/CareUI'
@@ -387,6 +388,7 @@ export default function FacilityPage() {
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
   const [tab, setTab] = useState('scan')
+  const navigate = useNavigate()
   const [area, setArea] = useState('all')
   const [sevSel, setSevSel] = useState(null)
   const [act, setAct] = useState(null)
@@ -479,7 +481,11 @@ export default function FacilityPage() {
             <>
               <Section title="실행 개선안"
                 sub="우선순위 상위 항목에 공식 지침 근거와 식품·메뉴 DB의 후보를 붙였습니다. 제공량 산정과 최종 채택은 영양사가 합니다."
-                right={<button onClick={() => loadAction(true)} disabled={actBusy} className="btn-secondary text-sm">{actBusy ? '만드는 중…' : '다시 만들기'}</button>}>
+                right={<div className="flex flex-wrap gap-2">
+                  <button onClick={() => loadAction(true)} disabled={actBusy} className="btn-secondary text-sm">{actBusy ? '만드는 중…' : '다시 만들기'}</button>
+                  <button onClick={() => navigate('/care/solutions?tab=diet&plan=facility')} className="btn-primary text-sm"
+                    title="이 개선안을 반영해 28일 식단을 설계합니다. 기존 식단 기준(KDRI·개인 맞춤 기준·식단 규칙)은 그대로 지킵니다.">식단 솔루션 만들기 →</button>
+                </div>}>
                 {actErr && <p className="text-sm text-red-700 py-2">{actErr}</p>}
                 {!actErr && actBusy && !act && (
                   <p className="text-sm text-muted py-6 text-center">지침을 찾고 메뉴 후보를 고르는 중입니다… (30초쯤 걸립니다)</p>

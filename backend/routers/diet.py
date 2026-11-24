@@ -130,7 +130,16 @@ def _progress_writer(sb, run_id):
     return say
 
 
-def _job(run_id, home, preset, seed, menu=None, selector="llm", reviewer="llm", refiner="llm", agent_mode="rule"):
+def _facility_plan(sb, home):
+    """시설 진단 → 식단 반영 지시 (서버에서 매번 새로 계산 — 화면에서 받은 값은 쓰지 않음)"""
+    from care import facility as fac
+    from diet import facility_plan as FPL
+    prof = fac.build_profile(sb, home)
+    return FPL.from_priorities(prof.get("priorities") or [], prof)
+
+
+def _job(run_id, home, preset, seed, menu=None, selector="llm", reviewer="llm", refiner="llm", agent_mode="rule",
+         facility_plan=None):
     from diet import pipeline as P
     sb = get_supabase()
     try:
@@ -142,7 +151,8 @@ def _job(run_id, home, preset, seed, menu=None, selector="llm", reviewer="llm", 
         say = _progress_writer(sb, run_id)
         if menu is None:
             out = P.run_design(residents, assess, settings, inv, pref, preset=preset, seed=seed, progress=say, ehr=ehr,
-                               selector=selector, reviewer=reviewer, refiner=refiner, agent_mode=agent_mode)
+                               selector=selector, reviewer=reviewer, refiner=refiner, agent_mode=agent_mode,
+                               facility_plan=facility_plan)
         else:
             # 수정본: 원래 설계의 Stage 2 결과(어르신별 AI 종합 판단)를 재사용 — 평가가 같으면 LLM 을 다시 부르지 않음
             me = _one(sb.table("diet_runs").select("parent_run_id").eq("id", run_id).execute())
@@ -190,6 +200,7 @@ class RunRequest(BaseModel):
     reviewer: str = "llm"               # llm (AI 식단 검토 → 코드 검증 후 반영) | off
     refiner: str = "llm"                # llm (Stage 2 AI 임상 영양사 어르신별 종합 판단) | off
     agent_mode: str = "rule"            # llm (Stage 1 AI 영역 전문가 — 근거 검색 후 판단·인용) | rule
+    facility_plan: bool = False         # 시설 진단의 관리 우선순위(개선안)를 공통 식단 최적화에 반영
 
 
 @router.post("/runs")
@@ -199,16 +210,30 @@ def start_run(req: RunRequest, user: dict = Depends(require_staff)):
         raise HTTPException(status_code=409, detail="이미 식단 설계가 진행 중입니다. 끝난 뒤 다시 실행하세요.")
     inv = sb.table("diet_inventory").select("nursing_home_id,items,start_date").eq("nursing_home_id", home).execute().data
     pref = sb.table("diet_preferences").select("nursing_home_id,updated_at").eq("nursing_home_id", home).execute().data
+    plan = _facility_plan(sb, home) if req.facility_plan else None
+    if req.facility_plan and not (plan and plan.get("items")):
+        raise HTTPException(status_code=400, detail="식단에 반영할 시설 개선안이 없습니다. 시설 진단을 먼저 확인하세요.")
     row = _one(sb.table("diet_runs").insert({
         "nursing_home_id": home, "status": "queued", "progress": "대기 중", "created_by": user["actor"],
         "params": {"preset": req.preset, "seed": req.seed, "selector": req.selector, "reviewer": req.reviewer, "refiner": req.refiner,
                    "agent_mode": req.agent_mode,
+                   "facility_plan": [x["id"] for x in (plan or {}).get("items") or []] or None,
                    "inventory_used": bool(inv and inv[0].get("items")), "preference_used": bool(pref),
                    "start_date": (inv[0].get("start_date") if inv else None),
                    "preference_updated_at": pref[0]["updated_at"] if pref else None}}).execute())
-    threading.Thread(target=_job, args=(row["id"], home, req.preset, req.seed, None, req.selector, req.reviewer, req.refiner, req.agent_mode),
-                     daemon=True).start()
+    threading.Thread(target=_job, args=(row["id"], home, req.preset, req.seed, None, req.selector, req.reviewer, req.refiner, req.agent_mode,
+                                        plan), daemon=True).start()
     return {"id": row["id"], "status": "queued"}
+
+
+@router.get("/facility-plan")
+def facility_plan_preview(user: dict = Depends(require_staff)):
+    """식단 설계 화면의 '시설 개선안 반영' 미리보기 — 무엇이 어떻게 반영되는지"""
+    sb, home = get_supabase(), user["scope_home"]
+    plan = _facility_plan(sb, home)
+    return {"items": plan["items"], "outside": plan["outside"], "weights": plan["nutrient_weight"],
+            "n_prefer": len(plan["prefer"]), "n_limit": len(plan["limit"]), "potassium": plan["potassium"],
+            "pref_mult": plan["pref_mult"], "texture_mult": plan["texture_mult"], "avoid_menus": plan["avoid_menus"]}
 
 
 @router.get("/status")

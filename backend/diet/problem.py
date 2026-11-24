@@ -65,6 +65,10 @@ class MealPlanProblem(Problem):
             from .inventory import INV_WEIGHT as inv_weight
         self.inv_weight = inv_weight
         self.slot_sizes = [len(pool[cat]) for _, cat in DAILY_SLOTS]
+        # [2026-11-24] 시설 개선안 반영 (diet/facility_plan.py) — 기본값이면 기존과 같은 계산
+        self.pref_mult    = 1.0      # f4 시설 선호(섭취율) 항 배수
+        self.texture_mult = 1.0      # f4 다진찬 부적합 규칙 배수
+        self.plan_w       = 0.0      # f4 '개선안 부합도' 항 가중치 (0 이면 항 없음)
         super().__init__(
             n_var=N_DAYS * N_SLOTS, n_obj=4,
             xl=np.zeros(N_DAYS * N_SLOTS, dtype=int),
@@ -105,13 +109,19 @@ class MealPlanProblem(Problem):
 
     def _harmony_obj(self, chrom, menus, parts):
         pref = sum(m.get("preference_score", 0.7) for m in menus) / len(menus)
-        rw = F4_RULES_W
+        rw = dict(F4_RULES_W)
+        rw["texture"] = rw["texture"] * getattr(self, "texture_mult", 1.0)
         rules = sum(rw[k] * parts[k] for k in rw) / (sum(rw.values()) or 1.0)
+        pm = getattr(self, "pref_mult", 1.0)
+        plan = 0.0
+        if getattr(self, "plan_w", 0.0):
+            plan = self.plan_w * (1 - sum(m.get("plan_score", 0.5) for m in menus) / len(menus))
         if self.harmony is None:
             w = F4_W_NO_HAR
-            return w["preference"] * (1 - pref) + w["rules"] * rules
+            return w["preference"] * pm * (1 - pref) + w["rules"] * rules + plan
         w = F4_W
-        return w["harmony"] * (1 - self.harmony_objective(chrom)) + w["preference"] * (1 - pref) + w["rules"] * rules
+        return (w["harmony"] * (1 - self.harmony_objective(chrom)) + w["preference"] * pm * (1 - pref)
+                + w["rules"] * rules + plan)
 
     def objective_parts(self, chrom) -> dict:
         """[보고용] f3·f4 구성 요소"""
@@ -124,6 +134,8 @@ class MealPlanProblem(Problem):
                       "다진찬 부적합": round(parts["texture"], 4)}}
         if self.harmony is not None:
             out["f4"]["조화 모델(0~1)"] = round(self.harmony_objective(chrom), 4)
+        if getattr(self, "plan_w", 0.0):
+            out["f4"]["시설 개선안 부합도"] = round(sum(m.get("plan_score", 0.5) for m in menus) / len(menus), 4)
         return out
 
     def _cost_inventory(self, chrom, menus):
@@ -135,6 +147,7 @@ class MealPlanProblem(Problem):
 
     def _nutrition_violation(self, menus):
         c       = self.constraint
+        W       = getattr(c, "nutrient_weight", None) or {}   # [2026-11-24] 시설 개선안: 영양소별 위반 가중치 (기본 1)
         meal_v  = 0.0
         daily_v = 0.0
 
@@ -152,15 +165,17 @@ class MealPlanProblem(Problem):
                 for k, val in mn.items():
                     lo = getattr(c, f"{k}_min", None)
                     hi = getattr(c, f"{k}_max", None)
-                    if lo and val < lo: meal_v  += (lo - val) / lo
-                    if hi and val > hi: meal_v  += (val - hi) / hi
+                    w  = W.get(k, 1.0)
+                    if lo and val < lo: meal_v  += w * (lo - val) / lo
+                    if hi and val > hi: meal_v  += w * (val - hi) / hi
                     daily_sum[k] += val
 
             for k, val in daily_sum.items():
                 lo = getattr(c, f"daily_{k}_min", None)
                 hi = getattr(c, f"daily_{k}_max", None)
-                if lo and val < lo: daily_v += (lo - val) / lo
-                if hi and val > hi: daily_v += (val - hi) / hi
+                w  = W.get(k, 1.0)
+                if lo and val < lo: daily_v += w * (lo - val) / lo
+                if hi and val > hi: daily_v += w * (val - hi) / hi
 
         meal_score  = meal_v  / (N_DAYS * 3)
         daily_score = daily_v / N_DAYS

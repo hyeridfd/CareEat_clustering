@@ -1,0 +1,178 @@
+# -*- coding: utf-8 -*-
+"""[2026-11-24] 시설 개선안 → 맞춤 식단 설계 반영
+
+  시설 진단(care/facility_rules.py)의 관리 우선순위 중 '식단으로 풀 수 있는 문제'를
+  공통 식단 최적화(NSGA-II)의 지시로 바꾼다. 기존 기준(KDRI 공통 기준 · 개인 맞춤 기준 · 식단 규칙)은 그대로 두고
+  그 위에 무게와 선호만 얹는다 — 기준을 느슨하게 만드는 지시는 없다.
+
+  지시 종류
+    nutrient_weight  f1(영양 위반)에서 해당 영양소 위반의 가중치 (기본 1)        예: 나트륨 ×2
+    prefer / limit   메뉴 이름·재료 키워드 — f4(조화)에 '개선안 부합도' 항을 더해 선호·제한  예: 칼슘 급원 선호, 장아찌·젓갈 제한
+    potassium        칼륨이 많은 국·부찬을 선호 (나트륨 개선안, 고혈압 지침의 칼륨 권고)
+    pref_mult        f4 의 시설 선호(실제 섭취율) 항 가중치 배수                  예: 섭취율이 낮을 때 ×1.5
+    texture_mult     f4 의 다진찬 부적합 규칙 가중치 배수                         예: 형태 조정 수요가 많을 때 ×2
+    avoid_menus      잔반이 특히 많은 메뉴를 후보에서 뺀다 (자리별 후보가 10% 넘게 줄면 빼지 않음)
+
+  식사 도움·우울·끼니 운영처럼 식단 밖의 조치는 반영하지 않고 '식단 외 조치'로 따로 돌려준다.
+  어르신별 맞춤(대체찬·배식량)은 기존 개인 기준을 그대로 따른다.
+"""
+from __future__ import annotations
+
+import re
+
+PLAN_W = 0.15          # f4 에 더하는 '개선안 부합도' 항의 가중치 (조화 0.5 · 선호 0.2 · 규칙 0.3 과 같은 척도)
+PREFER_BONUS = 0.25    # 선호 키워드가 있는 메뉴 → 부합도 0.75
+LIMIT_PENALTY = 0.5    # 제한 키워드가 있는 메뉴 → 부합도 0.0
+K_BONUS = 0.15         # 칼륨 상위 25% 국·부찬 → 부합도 +0.15
+SCORED = ("국", "주찬", "부찬")   # 밥·김치는 후보가 1~2개라 선호·제한을 매기지 않는다 (김치의 젓갈은 피할 수 없음)
+
+SODIUM_LIMIT = ["장아찌", "젓갈", "젓무침", "명란", "창난", "오징어젓", "어리굴젓", "햄", "소시지", "베이컨", "스팸",
+                "어묵", "맛살", "짠지", "절임", "자반"]
+CALCIUM_SRC = ["우유", "요구르트", "요거트", "치즈", "멸치", "뱅어포", "두부", "무청", "시래기", "깻잎", "쑥", "미꾸라지",
+               "꽁치", "들깨"]
+VITD_SRC = ["표고", "고등어", "연어", "꽁치", "삼치", "달걀", "계란", "메추리알"]
+FIBER_SRC = ["나물", "시래기", "우거지", "버섯", "미역", "다시마", "톳", "잡곡", "보리", "현미", "고구마", "브로콜리", "배추", "양배추"]
+PROTEIN_SRC = ["두부", "달걀", "계란", "생선", "고등어", "조기", "가자미", "동태", "닭", "돼지", "소고기", "쇠고기", "불고기", "연두부"]
+
+# 관리 우선순위 id → 식단 반영 지시
+MENU_DIRECTIVES = {
+    "F_NUT_SODIUM": dict(weight={"sodium": 2.0}, limit=SODIUM_LIMIT, potassium=True,
+                         how=["영양 위반(f1)에서 나트륨 위반 가중치 ×2",
+                              "장아찌·젓갈·가공육·어묵 메뉴를 덜 고르도록 제한",
+                              "칼륨이 많은 국·부찬을 더 고르도록 선호 (신장질환·칼륨 보존 이뇨제 어르신은 개인 맞춤에서 제외)"]),
+    "F_NUT_ENERGY": dict(weight={"energy": 1.5}, how=["영양 위반(f1)에서 열량 부족 가중치 ×1.5"]),
+    "F_NUT_PROTEIN": dict(weight={"protein": 1.5}, prefer=PROTEIN_SRC,
+                          how=["영양 위반(f1)에서 단백질 부족 가중치 ×1.5", "단백질 급원 메뉴 선호"]),
+    "F_NUT_CALCIUM": dict(prefer=CALCIUM_SRC, how=["우유·멸치·두부·무청 등 칼슘 급원 메뉴 선호"]),
+    "F_NUT_FIBER": dict(weight={"fiber": 1.5}, prefer=FIBER_SRC,
+                        how=["영양 위반(f1)에서 식이섬유 부족 가중치 ×1.5", "나물·버섯·해조류·잡곡 메뉴 선호"]),
+    "F_NUT_VITD": dict(prefer=VITD_SRC, how=["표고버섯·등푸른생선·달걀 메뉴 선호"]),
+    "F_MALNUT": dict(weight={"energy": 1.5, "protein": 1.5}, how=["영양 위반(f1)에서 열량·단백질 부족 가중치 ×1.5"]),
+    "F_UNDERWEIGHT": dict(weight={"energy": 1.5, "protein": 1.5}, how=["영양 위반(f1)에서 열량·단백질 부족 가중치 ×1.5"]),
+    "F_TEXTURE_NEED": dict(texture=2.0, how=["다진찬으로 만들기 어려운 메뉴 제한 규칙 가중치 ×2"]),
+    "F_TEXTURE_GAP": dict(texture=2.0, how=["다진찬으로 만들기 어려운 메뉴 제한 규칙 가중치 ×2"]),
+    "F_LOW_INTAKE": dict(pref=1.5, how=["실제 섭취율이 높은 메뉴(시설 선호) 가중치 ×1.5"]),
+    "F_COMPONENT_LOW": dict(pref=1.5, how=["실제 섭취율이 높은 메뉴(시설 선호) 가중치 ×1.5"]),
+    "F_SATISFACTION": dict(pref=1.5, how=["실제 섭취율이 높은 메뉴(시설 선호) 가중치 ×1.5"]),
+    "F_MENU_WORST": dict(pref=1.5, avoid=True, how=["잔반이 특히 많은 메뉴를 후보에서 제외", "실제 섭취율이 높은 메뉴 가중치 ×1.5"]),
+}
+
+
+def _norm(s: str) -> str:
+    return re.sub(r"[\s()\[\]·,_\-*]|저염", "", str(s or ""))
+
+
+def from_priorities(priorities: list, profile: dict | None = None) -> dict:
+    """시설 관리 우선순위 → 식단 반영 지시 (같은 영양소 가중치는 큰 값)"""
+    plan = {"items": [], "outside": [], "nutrient_weight": {}, "prefer": [], "limit": [], "potassium": False,
+            "pref_mult": 1.0, "texture_mult": 1.0, "avoid_menus": []}
+    worst = [m.get("menu") for m in ((profile or {}).get("menus") or {}).get("worst") or []
+             if m.get("menu") and (m.get("rate") or 100) < 60]
+    for pr in priorities or []:
+        d = MENU_DIRECTIVES.get(pr.get("id"))
+        base = {"id": pr.get("id"), "title": pr.get("title"), "severity": pr.get("severity"),
+                "severity_label": pr.get("severity_label"), "detail": pr.get("detail")}
+        if not d:
+            plan["outside"].append({**base, "action": pr.get("action")})
+            continue
+        for k, w in (d.get("weight") or {}).items():
+            plan["nutrient_weight"][k] = max(plan["nutrient_weight"].get(k, 1.0), w)
+        for kw in d.get("prefer") or []:
+            if kw not in plan["prefer"]:
+                plan["prefer"].append(kw)
+        for kw in d.get("limit") or []:
+            if kw not in plan["limit"]:
+                plan["limit"].append(kw)
+        plan["potassium"] = plan["potassium"] or bool(d.get("potassium"))
+        plan["pref_mult"] = max(plan["pref_mult"], d.get("pref", 1.0))
+        plan["texture_mult"] = max(plan["texture_mult"], d.get("texture", 1.0))
+        if d.get("avoid"):
+            plan["avoid_menus"] = worst
+        plan["items"].append({**base, "how": d["how"]})
+    # 선호와 제한이 겹치면 제한을 따른다 (예: 멸치 → 젓갈은 제한)
+    plan["prefer"] = [k for k in plan["prefer"] if k not in plan["limit"]]
+    return plan
+
+
+def _menu_text(m: dict, recipes: dict) -> str:
+    ings = recipes.get(m.get("menu_name")) or {}
+    return f"{m.get('menu_name', '')} {' '.join(ings)}"
+
+
+def apply_pool(pool: dict, plan: dict) -> tuple[dict, dict]:
+    """메뉴마다 plan_score(개선안 부합도 0~1)를 달고, 피할 메뉴를 뺀다. → (pool, 적용 기록)"""
+    from .inventory import recipe_ingredients
+    recipes = recipe_ingredients()
+    prefer, limit = plan.get("prefer") or [], plan.get("limit") or []
+    k_cut = {}
+    if plan.get("potassium"):
+        for cat in ("국", "부찬"):
+            ks = sorted(float(m.get("potassium") or 0) for m in pool.get(cat, []))
+            k_cut[cat] = ks[int(len(ks) * 0.75)] if ks else None
+    log = {"preferred": 0, "limited": 0, "potassium": 0, "removed": []}
+    avoid = {_norm(n) for n in plan.get("avoid_menus") or []}
+    for cat, ms in pool.items():
+        keep = [m for m in ms if _norm(m.get("menu_name")) not in avoid]
+        if avoid and len(keep) < len(ms) and len(keep) >= 0.9 * len(ms):
+            log["removed"] += [m["menu_name"] for m in ms if m not in keep]
+            pool[cat] = ms = keep
+        for m in ms:
+            if cat not in SCORED:
+                m["plan_score"] = 0.5
+                continue
+            txt = _menu_text(m, recipes)
+            score = 0.5
+            if limit and any(k in txt for k in limit):
+                score -= LIMIT_PENALTY
+                log["limited"] += 1
+            elif prefer and any(k in txt for k in prefer):
+                score += PREFER_BONUS
+                log["preferred"] += 1
+            cut = k_cut.get(cat)
+            if cut is not None and float(m.get("potassium") or 0) >= cut and score >= 0.5:
+                score += K_BONUS
+                log["potassium"] += 1
+            m["plan_score"] = round(max(0.0, min(1.0, score)), 3)
+    return pool, log
+
+
+def configure(problem, plan: dict):
+    """최적화 문제에 지시를 건다 — 기준값은 그대로, 가중치만"""
+    problem.constraint.nutrient_weight = dict(plan.get("nutrient_weight") or {})
+    problem.pref_mult = float(plan.get("pref_mult") or 1.0)
+    problem.texture_mult = float(plan.get("texture_mult") or 1.0)
+    problem.plan_w = PLAN_W if (plan.get("prefer") or plan.get("limit") or plan.get("potassium")) else 0.0
+    return problem
+
+
+def evaluate(problem, chrom, plan: dict, pool_log: dict | None = None) -> dict:
+    """설계된 28일 식단이 개선안을 얼마나 반영했는지"""
+    from .problem import MEAL_SETS, N_DAYS, N_SLOTS
+    from .inventory import recipe_ingredients
+    recipes = recipe_ingredients()
+    menus = problem.effective_menus(chrom)
+    c = problem.constraint
+    meals, na, k = 0, [], []
+    for day in range(N_DAYS):
+        dm = menus[day * N_SLOTS:(day + 1) * N_SLOTS]
+        for _, slots in MEAL_SETS.items():
+            mm = [dm[s] for s in slots]
+            na.append(sum(float(m.get("sodium") or 0) for m in mm))
+            k.append(sum(float(m.get("potassium") or 0) for m in mm))
+            meals += 1
+    names = [m.get("menu_name") for m in menus]
+    txt = [_menu_text(m, recipes) for m in menus if m.get("category") in SCORED]
+    prefer, limit = plan.get("prefer") or [], plan.get("limit") or []
+    out = {
+        "끼니": meals,
+        "나트륨_끼니평균_mg": round(sum(na) / meals) if meals else None,
+        "나트륨_기준이내_끼니_%": round(100 * sum(v <= (c.sodium_max or 1e9) for v in na) / meals, 1) if meals else None,
+        "칼륨_끼니평균_mg": round(sum(k) / meals) if meals else None,
+        "선호_메뉴_횟수": sum(1 for t in txt if prefer and any(x in t for x in prefer) and not (limit and any(y in t for y in limit))),
+        "제한_메뉴_횟수": sum(1 for t in txt if limit and any(y in t for y in limit)),
+        "제외_메뉴_사용": sum(1 for n in names if _norm(n) in {_norm(a) for a in plan.get("avoid_menus") or []}),
+        "개선안_부합도_평균": round(sum(m.get("plan_score", 0.5) for m in menus) / len(menus), 3) if menus else None,
+    }
+    return {"items": plan.get("items") or [], "outside": plan.get("outside") or [],
+            "weights": plan.get("nutrient_weight") or {}, "pref_mult": plan.get("pref_mult"),
+            "texture_mult": plan.get("texture_mult"), "pool": pool_log or {}, "result": out}
