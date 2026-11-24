@@ -61,6 +61,68 @@ export function ScoreBar({ score, level }) {
   )
 }
 
+// 돌봄 우선순위 점수 산출 근거 — '?' 에 마우스를 올리거나(키보드 포커스·터치) 하면 요인별 배점을 보여준다
+const FACTOR_UNIT = {
+  mna_malnourished: '점', mna_at_risk: '점', intake_very_low: '%', intake_low: '%', protein_dish_low: '%',
+  depressive: '점', depressive_mild: '점',
+}
+const FACTOR_NO_VALUE = new Set(['swallowing', 'chewing', 'eating_full_help', 'eating_partial_help'])
+
+function factorText(x) {
+  if (x.code === 'type_risk') return `${x.value} 유형 (${String(x.label || '').replace(/^유형:\s*/, '')})`
+  const v = x.value
+  if (v == null || v === 1 || typeof v === 'boolean' || FACTOR_NO_VALUE.has(x.code)) return x.label
+  return `${x.label} — ${v}${FACTOR_UNIT[x.code] || ''}`
+}
+
+export function ScoreHelp({ score, factors }) {
+  const [pos, setPos] = useState(null)
+  const list = factors || []
+  const scored = list.filter((x) => x.points > 0)
+  const notes = list.filter((x) => !x.points)
+  const sum = scored.reduce((s, x) => s + x.points, 0)
+  const open = (e) => {
+    const r = e.currentTarget.getBoundingClientRect()
+    const w = 320
+    const left = Math.min(Math.max(8, r.left + r.width / 2 - w / 2), window.innerWidth - w - 8)
+    const up = window.innerHeight - r.bottom < 280
+    setPos(up ? { left, bottom: window.innerHeight - r.top + 8, w } : { left, top: r.bottom + 8, w })
+  }
+  const close = () => setPos(null)
+  return (
+    <span className="inline-flex" onClick={(e) => e.stopPropagation()}>
+      <button type="button" aria-label="점수 산출 근거 보기"
+        onMouseEnter={open} onMouseLeave={close} onFocus={open} onBlur={close}
+        className="w-4 h-4 shrink-0 rounded-full border border-gray-300 text-[10px] font-bold leading-none text-gray-500 inline-flex items-center justify-center hover:border-blue-400 hover:text-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-200">?</button>
+      {pos && (
+        <div role="tooltip" style={{ position: 'fixed', left: pos.left, top: pos.top, bottom: pos.bottom, width: pos.w, zIndex: 60 }}
+          className="pointer-events-none rounded-lg bg-gray-900 text-white text-xs leading-5 shadow-lg p-3 text-left font-normal">
+          <p className="font-semibold mb-1.5">점수 산출 근거</p>
+          {scored.length ? (
+            <ul className="space-y-1">
+              {scored.map((x) => (
+                <li key={x.code} className="flex items-start justify-between gap-3">
+                  <span className="text-gray-200">
+                    {x.kind === 'trend' && <span className="mr-1 text-[10px] rounded bg-rose-500/30 text-rose-100 px-1">변화</span>}
+                    {factorText(x)}
+                  </span>
+                  <span className="shrink-0 font-semibold tabular-nums">+{x.points}점</span>
+                </li>
+              ))}
+            </ul>
+          ) : <p className="text-gray-300">해당하는 위험 요인이 없습니다.</p>}
+          <div className="mt-2 pt-2 border-t border-white/20 flex justify-between font-semibold">
+            <span>합계{sum > 100 ? ` ${sum}점 → 상한 적용` : ''}</span>
+            <span className="tabular-nums">{Math.round(score ?? Math.min(100, sum))}점</span>
+          </div>
+          {notes.map((x) => <p key={x.code} className="mt-1 text-[11px] text-amber-200">참고: {x.label}</p>)}
+          <p className="mt-2 text-[11px] text-gray-400">45점 이상 우선 관리 · 20–44점 주의 관찰 · 20점 미만 정기 관리</p>
+        </div>
+      )}
+    </span>
+  )
+}
+
 export function Card({ title, right, children, className = '' }) {
   return (
     <section className={`bg-white rounded-2xl border border-gray-200 shadow-sm ${className}`}>

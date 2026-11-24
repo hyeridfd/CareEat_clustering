@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import api from '../../lib/api'
 import CareLayout from '../../components/care/CareLayout'
-import { Card, LevelPill, ScoreBar, SOLUTION_STATUS, TRANSITION, TypeBadge, errMsg, fmtDate } from '../../components/care/CareUI'
+import { Card, LevelPill, ScoreBar, ScoreHelp, SOLUTION_STATUS, TRANSITION, TypeBadge, errMsg, fmtDate } from '../../components/care/CareUI'
 import Avatar from '../../components/care/Avatar'
 import ResidentProfileTab from './ResidentProfileTab'
 import ResidentHistoryTab from './ResidentHistoryTab'
@@ -344,7 +344,7 @@ export default function ResidentCarePage() {
             <Card title="평가 결과"><p className="text-sm text-gray-500">아직 평가되지 않았습니다. 목록 화면에서 평가를 실행하세요.</p></Card>
           ) : (
             <>
-              <Card title="돌봄 우선순위" right={<span className="text-xs text-gray-400">0–100</span>}>
+              <Card title="돌봄 우선순위" right={<span className="inline-flex items-center gap-1.5 text-xs text-gray-400">0–100 <ScoreHelp score={a.priority_score} factors={a.priority_factors} /></span>}>
                 <ScoreBar score={a.priority_score} level={a.priority_level} />
                 <ul className="mt-4 space-y-2">
                   {a.priority_factors.map((x) => (

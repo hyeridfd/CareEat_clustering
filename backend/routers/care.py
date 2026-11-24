@@ -213,6 +213,9 @@ def overview(user: dict = Depends(require_staff)):
             "assessment": a and {k: a[k] for k in ("id", "type_code", "type_name", "priority_score", "priority_level",
                                                    "is_borderline", "transition", "model_version", "created_at")},
             "top_factors": a and [f["label"] for f in a["priority_factors"] if f["points"] > 0][:3],
+            # 목록의 '?' 도움말: 점수 산출 근거 (요인·배점·측정값)
+            "priority_factors": a and [{k: f.get(k) for k in ("code", "label", "points", "value", "kind")}
+                                       for f in (a.get("priority_factors") or [])],
             "solution": sols.get(r["id"]),
         })
     rows.sort(key=lambda x: -(x["assessment"]["priority_score"] if x["assessment"] else -1))

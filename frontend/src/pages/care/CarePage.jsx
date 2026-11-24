@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../../lib/api'
 import CareLayout from '../../components/care/CareLayout'
-import { Card, LEVELS, LevelPill, ScoreBar, SOLUTION_STATUS, SortTh, TRANSITION, TypeBadge, errMsg, fmtDate, sortRows, useSortState } from '../../components/care/CareUI'
+import { Card, LEVELS, LevelPill, ScoreBar, ScoreHelp, SOLUTION_STATUS, SortTh, TRANSITION, TypeBadge, errMsg, fmtDate, sortRows, useSortState } from '../../components/care/CareUI'
 
 const LEVEL_KEYS = ['high', 'medium', 'low', 'unassessed']
 
@@ -177,7 +177,7 @@ export default function CarePage() {
                       </div>
                     </td>
                     <td className="px-2 py-3">
-                      {a ? (<div className="space-y-1"><ScoreBar score={a.priority_score} level={a.priority_level} /><LevelPill level={a.priority_level} /></div>) : <span className="text-xs text-gray-400">–</span>}
+                      {a ? (<div className="space-y-1"><div className="flex items-center gap-1.5"><ScoreBar score={a.priority_score} level={a.priority_level} /><ScoreHelp score={a.priority_score} factors={r.priority_factors} /></div><LevelPill level={a.priority_level} /></div>) : <span className="text-xs text-gray-400">–</span>}
                     </td>
                     <td className="px-2 py-3">
                       <div className="flex flex-wrap gap-1 max-w-xs">
