@@ -655,7 +655,7 @@ export default function ReportView({ r }) {
         {(sol.verified || (staff && sol.verification)) && (
           <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl bg-sky-50/70 ring-1 ring-sky-100 px-3 py-2">
             <span className="flex items-end gap-1">
-              <PixelSprite kind="nutritionist" scale={2} /><PixelSprite kind="nurse" scale={2} />
+              <PixelSprite kind="nutritionist" scale={3} nametag /><PixelSprite kind="nurse" scale={3} nametag />
             </span>
             <div className="min-w-0 flex-1 text-xs leading-5">
               {staff && sol.verification ? (<>
