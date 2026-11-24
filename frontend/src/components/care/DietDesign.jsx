@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import api from '../../lib/api'
 import { errMsg, fmtDate } from './CareUI'
+import { CrewWalk } from './PixelCrew'
 
 /* 맞춤 식단 설계 — 솔루션 > 맞춤 식단 설계
    ① 일반식 28일 식단(NSGA-II) → 영양사 검토·수정·승인
@@ -84,6 +85,15 @@ const STAGES = [
   { key: '배식량', label: '개인별 배식량' },
   { key: '저장', label: '발주·저장' },
 ]
+// 식단 설계 중 AI 영양사 말풍선 — 지금 단계에 맞춰
+const STAGE_LINES = [
+  ['어르신 정보 읽는 중…', '질환·식사형태 확인 중', '못 드시는 재료 확인 중'],
+  ['28일 식단 조합 짜는 중…', '영양 기준 맞추는 중', '반복 메뉴 줄이는 중', '한 끼 어울림 보는 중'],
+  ['죽·백김치 준비 중…', '식사형태 맞추는 중'],
+  ['어르신별 대체찬 고르는 중…', '못 드시는 재료 바꾸는 중'],
+  ['개인별 배식량 계산 중…', '열량·단백질 맞추는 중'],
+  ['발주량 정리 중…', '식단표 저장 중'],
+]
 function stageIdx(msg) {
   msg = String(msg || '')
   if (msg.includes('저장') || msg.includes('발주')) return 5
@@ -130,7 +140,11 @@ function RunProgress({ run, nResidents, big, onStop }) {
         <span>{Math.round(p * 100)}%</span>
         <span className="ml-auto">경과 {fmtSec(elapsed)}</span>
       </div>
-      <ol className="mt-5 grid grid-cols-2 md:grid-cols-6 gap-2">
+      <div className="mt-5">
+        <CrewWalk crew={['nutritionist']} title={run.parent_run_id ? 'AI 영양사가 수정본을 다시 계산하고 있어요' : 'AI 영양사가 식단을 짜고 있어요'}
+          lines={{ nutritionist: STAGE_LINES[si] }} />
+      </div>
+      <ol className="grid grid-cols-2 md:grid-cols-6 gap-2">
         {stages.map((s) => {
           const i = STAGES.indexOf(s)
           const st = i < si ? 'done' : i === si ? 'now' : 'todo'
