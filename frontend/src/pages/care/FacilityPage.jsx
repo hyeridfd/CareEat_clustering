@@ -28,6 +28,53 @@ const SEV = {
   1: { label: '관찰', chip: 'bg-slate-100 text-slate-600', bar: 'bg-slate-400' },
 }
 
+/* 심각도 카드 — 시급·주의·관찰을 큰 카드로 먼저 보여주고, 누르면 그 단계의 문제 목록을 연다 */
+const SEV_CARD = {
+  3: { desc: '건강 위해로 직접 이어지는 문제', on: 'ring-2 ring-rose-400 bg-rose-50', off: 'ring-1 ring-rose-100 bg-white hover:bg-rose-50/60',
+       num: 'text-rose-600', head: 'text-rose-700', dot: 'bg-rose-500' },
+  2: { desc: '장기적이거나 운영 조정으로 바로 개선할 수 있는 문제', on: 'ring-2 ring-amber-400 bg-amber-50', off: 'ring-1 ring-amber-100 bg-white hover:bg-amber-50/60',
+       num: 'text-amber-600', head: 'text-amber-800', dot: 'bg-amber-500' },
+  1: { desc: '섭취에 간접 영향을 주거나 지켜보는 문제', on: 'ring-2 ring-slate-400 bg-slate-50', off: 'ring-1 ring-slate-200 bg-white hover:bg-slate-50',
+       num: 'text-slate-600', head: 'text-slate-700', dot: 'bg-slate-400' },
+}
+
+function SeverityCards({ items, sel, onSel }) {
+  return (
+    <div className="grid gap-3 sm:grid-cols-3">
+      {[3, 2, 1].map((s) => {
+        const list = items.filter((x) => x.severity === s)
+        const c = SEV_CARD[s]
+        const on = sel === s
+        return (
+          <button key={s} type="button" disabled={!list.length} onClick={() => onSel(s)} aria-pressed={on}
+            className={`text-left rounded-2xl p-5 transition ${on ? `${c.on} shadow-sm` : c.off} ${list.length ? '' : 'opacity-50 cursor-default'}`}>
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <p className={`text-lg font-extrabold ${c.head}`}>{SEV[s].label}</p>
+                <p className="text-[11px] text-muted">심각도 {s}</p>
+              </div>
+              <p className={`text-3xl font-extrabold tabular-nums ${c.num}`}>{list.length}<span className="ml-0.5 text-sm font-semibold">건</span></p>
+            </div>
+            <p className="mt-2 text-xs leading-5 text-slate-600">{c.desc}</p>
+            {list.length > 0 && (
+              <ul className="mt-3 space-y-1">
+                {list.slice(0, 3).map((x) => (
+                  <li key={x.id} className="flex items-center gap-1.5 text-xs text-slate-700">
+                    <span className={`w-1.5 h-1.5 shrink-0 rounded-full ${c.dot}`} />
+                    <span className="truncate">{x.title}</span>
+                  </li>
+                ))}
+                {list.length > 3 && <li className="pl-3 text-[11px] text-muted">외 {list.length - 3}건</li>}
+              </ul>
+            )}
+            <p className={`mt-3 text-[11px] font-semibold ${on ? c.head : 'text-navy-500'}`}>{on ? '아래에 표시 중' : list.length ? '눌러서 보기 →' : '해당 없음'}</p>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 /* 관리 우선순위 — "왜 이 순위인가"를 점수 산식까지 드러낸다 */
 function PriorityCard({ x }) {
   const sev = SEV[x.severity] || SEV[1]
@@ -305,6 +352,7 @@ export default function FacilityPage() {
   const [busy, setBusy] = useState(false)
   const [tab, setTab] = useState('scan')
   const [area, setArea] = useState('all')
+  const [sevSel, setSevSel] = useState(null)
   const [act, setAct] = useState(null)
   const [actBusy, setActBusy] = useState(false)
   const [actErr, setActErr] = useState('')
@@ -337,7 +385,11 @@ export default function FacilityPage() {
     for (const x of d?.priorities || []) m.set(x.area, x.area_label)
     return [...m].map(([key, label]) => ({ key, label }))
   }, [d])
-  const shownPriorities = (d?.priorities || []).filter((x) => area === 'all' || x.area === area)
+  const allPri = d?.priorities || []
+  const sev = sevSel ?? ([3, 2, 1].find((s) => allPri.some((x) => x.severity === s)) || 3)
+  const sevPri = allPri.filter((x) => x.severity === sev)
+  const sevAreas = areas.filter((a) => sevPri.some((x) => x.area === a.key))
+  const shownPriorities = sevPri.filter((x) => area === 'all' || x.area === area)
 
   return (
     <CareLayout
@@ -355,15 +407,19 @@ export default function FacilityPage() {
           {tab === 'priority' && (
             <>
               <Section title="관리 우선순위"
-                sub="심각도(시급 3 → 주의 2 → 관찰 1) 순으로, 같은 심각도 안에서는 점수(규모 × 심각도 ÷ 3) 순으로 보여줍니다."
-                right={areas.length > 1 && (
+                sub="문제를 심각도로 나눴습니다. 카드를 누르면 그 단계의 문제가 아래에 점수(규모 × 심각도 ÷ 3) 순으로 표시됩니다.">
+                {allPri.length > 0 && <SeverityCards items={allPri} sel={sev} onSel={(s) => { setSevSel(s); setArea('all') }} />}
+              </Section>
+              <Section title={`${SEV[sev]?.label || ''} 문제 ${sevPri.length}건`}
+                sub={SEV_CARD[sev] && `심각도 ${sev} · ${SEV_CARD[sev].desc}`}
+                right={sevAreas.length > 1 && (
                   <div className="flex flex-wrap gap-1">
                     <button onClick={() => setArea('all')}
-                      className={`badge ${area === 'all' ? 'bg-navy-900 text-white' : 'bg-navy-50 text-navy-700'}`}>전체 {d.priorities.length}</button>
-                    {areas.map((a) => (
+                      className={`badge ${area === 'all' ? 'bg-navy-900 text-white' : 'bg-navy-50 text-navy-700'}`}>전체 {sevPri.length}</button>
+                    {sevAreas.map((a) => (
                       <button key={a.key} onClick={() => setArea(a.key)}
                         className={`badge ${area === a.key ? 'bg-navy-900 text-white' : 'bg-navy-50 text-navy-700'}`}>
-                        {a.label} {d.priorities.filter((x) => x.area === a.key).length}
+                        {a.label} {sevPri.filter((x) => x.area === a.key).length}
                       </button>
                     ))}
                   </div>
@@ -372,7 +428,7 @@ export default function FacilityPage() {
                   <ol className="space-y-3">{shownPriorities.map((x) => <PriorityCard key={x.id} x={x} />)}</ol>
                 ) : (
                   <p className="text-sm text-muted py-2">
-                    {d.priorities?.length ? '이 영역에는 해당 항목이 없습니다.' : '기준을 넘는 문제가 탐지되지 않았습니다.'}
+                    {allPri.length ? '이 단계에는 해당 항목이 없습니다.' : '기준을 넘는 문제가 탐지되지 않았습니다.'}
                   </p>
                 )}
               </Section>
