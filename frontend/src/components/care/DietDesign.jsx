@@ -177,7 +177,15 @@ function Stat({ label, value, unit, sub, tone }) {
   )
 }
 
-function Section({ title, right, children, className = '' }) {
+function Section({ title, right, children, className = '', bare = false }) {
+  if (bare) {                                    // 접힌 상자(Fold) 안에서는 제목·테두리 없이
+    return (
+      <div className={className}>
+        {right && <div className="flex flex-wrap items-center justify-end gap-2 mb-3">{right}</div>}
+        {children}
+      </div>
+    )
+  }
   return (
     <section className={`surface p-5 ${className}`}>
       {(title || right) && (
@@ -188,6 +196,20 @@ function Section({ title, right, children, className = '' }) {
       )}
       {children}
     </section>
+  )
+}
+
+/* [2026-11-24] 접어 두는 상세 — 제목 한 줄 + 요약, 누르면 펼침 */
+function Fold({ id, title, summary, children, defaultOpen = false }) {
+  return (
+    <details id={id} className="surface group" open={defaultOpen}>
+      <summary className="flex cursor-pointer list-none items-center gap-2 px-5 py-3.5 [&::-webkit-details-marker]:hidden">
+        <span className="text-[10px] text-muted transition-transform group-open:rotate-90">▶</span>
+        <span className="shrink-0 text-sm font-bold text-navy-900">{title}</span>
+        {summary && <span className="min-w-0 truncate text-xs text-muted">{summary}</span>}
+      </summary>
+      <div className="px-5 pb-5">{children}</div>
+    </details>
   )
 }
 
@@ -276,7 +298,7 @@ function EffectRow({ r }) {
     </tr>
   )
 }
-function FacilityPlanResult({ fp }) {
+function FacilityPlanResult({ fp, bare = false }) {
   if (!fp) return null
   const w = Object.entries(fp.weights || {}).map(([k, v]) => `${NUT_KO[k] || k} ×${v}`).join(' · ')
   // 같은 지표를 쓰는 개선안(예: 섭취율 관련 3건)은 한 카드로 묶는다
@@ -289,9 +311,9 @@ function FacilityPlanResult({ fp }) {
   }
   const nGood = (fp.effects || []).filter((e) => e.rows.some((r) => r.good)).length
   return (
-    <div className="surface p-5 ring-1 ring-emerald-200">
+    <div className={bare ? '' : 'surface p-5 ring-1 ring-emerald-200'}>
       <div className="flex flex-wrap items-center gap-2">
-        <p className="text-sm font-extrabold text-navy-900">시설 개선안이 식단에 어떻게 반영됐나</p>
+        {!bare && <p className="text-sm font-extrabold text-navy-900">시설 개선안이 식단에 어떻게 반영됐나</p>}
         <span className="badge bg-emerald-50 text-emerald-700">{fp.items?.length || 0}건 반영</span>
         {fp.effects && <span className="badge bg-navy-50 text-navy-700">비교 기준보다 나아진 항목 {nGood}/{fp.effects.length}</span>}
       </div>
@@ -544,13 +566,13 @@ const SEL_COLS = [
 ]
 const HIGHER_BETTER = new Set(['pr', 'hm'])
 
-function SelectionPanel({ run, onEdited, setErr }) {
+function SelectionPanel({ run, onEdited, setErr, bare = false }) {
   const [busy, setBusy] = useState('')
   const sel = run.metrics?.selection
   const p = run.params || {}
   if (run.parent_run_id && p.candidate) {
     return (
-      <div className="surface px-5 py-3 text-sm text-navy-800">
+      <div className={`${bare ? '' : 'surface px-5 py-3 '}text-sm text-navy-800`}>
         영양사가 <b>후보 {p.candidate}</b>를 골라 다시 계산한 식단입니다.
         {p.ai_choice && <span className="text-muted"> (AI 영양사 선택 {p.ai_choice} · 규칙 선택 {p.rule_choice || 'A'})</span>}
       </div>
@@ -569,7 +591,7 @@ function SelectionPanel({ run, onEdited, setErr }) {
     catch (e) { setErr(errMsg(e)) } finally { setBusy('') }
   }
   return (
-    <Section title="AI 영양사 선택"
+    <Section title="AI 영양사 선택" bare={bare}
       right={sel.mode === 'llm'
         ? <span className="badge bg-violet-50 text-violet-700">후보 {sel.choice} 선택 · {sel.agreed_with_rule ? '규칙 선택과 같음' : `규칙 선택(A)과 다름`}</span>
         : <span className="badge bg-amber-50 text-amber-700">규칙 선택(A) 사용</span>}>
@@ -641,12 +663,12 @@ function SelectionPanel({ run, onEdited, setErr }) {
 
 /* ─────────────────────────── AI 식단 검토 (교체 제안 → 코드 검증) ─────────────────────────── */
 
-function ReviewPanel({ run, onEdited, setErr }) {
+function ReviewPanel({ run, onEdited, setErr, bare = false }) {
   const [busy, setBusy] = useState('')
   const rv = run.metrics?.review
   if (!rv) return null
   if (rv.mode !== 'llm') {
-    return <div className="surface px-5 py-3 text-xs text-muted">AI 식단 검토: {rv.note || '검토하지 않았습니다.'}</div>
+    return <div className={`${bare ? '' : 'surface px-5 py-3 '}text-xs text-muted`}>AI 식단 검토: {rv.note || '검토하지 않았습니다.'}</div>
   }
   const acc = rv.accepted || [], rej = rv.rejected || []
   const revert = async (a) => {
@@ -659,7 +681,7 @@ function ReviewPanel({ run, onEdited, setErr }) {
   }
   const fd = (k) => (rv.f_after?.[k] != null && rv.f_before?.[k] != null ? (rv.f_after[k] - rv.f_before[k]).toFixed(3) : '–')
   return (
-    <Section title="AI 식단 검토"
+    <Section title="AI 식단 검토" bare={bare}
       right={<span className="badge bg-violet-50 text-violet-700">제안 {rv.n_suggested}건 · 반영 {acc.length} · 거절 {rej.length}</span>}>
       {rv.overall && <p className="text-sm text-navy-900">{rv.overall}</p>}
       {acc.length > 0 ? (
@@ -714,6 +736,7 @@ function MenuTab({ run, onApprove, onEdited, onRerun, setErr }) {
     const d = new Date(Date.now() + 9 * 3600e3); d.setUTCDate(d.getUTCDate() + 1); return d.toISOString().slice(0, 10)
   })())
   const [week, setWeek] = useState(1)
+  const [detail, setDetail] = useState(false)     // 식단표에 영양 수치 열 보이기
   const [edits, setEdits] = useState({})          // "일차|끼니|칸" → 메뉴
   const [editing, setEditing] = useState(null)     // {일차, 끼니, 칸}
   const [options, setOptions] = useState(null)
@@ -741,28 +764,181 @@ function MenuTab({ run, onApprove, onEdited, onRerun, setErr }) {
     } catch (e) { setErr(errMsg(e)) } finally { setSaving(false) }
   }
 
+  // [2026-11-24] 화면 정리 — 식단표를 먼저, 점수·AI 판단·개선안은 한 줄 요약 + 접어 둔 상세
+  const f1 = sel['f1_영양'] ?? sel['f1_영양위반']
+  const okPct = pct(ss.끼니 - ss.조정불가, ss.끼니)
+  const fp = m.facility_plan
+  const fpGood = fp?.effects ? fp.effects.filter((e) => e.rows.some((r) => r.good)).length : null
+  const selInfo = m.selection
+  const rv = m.review
+  const openFold = (id) => {
+    const el = document.getElementById(id)
+    if (el) { el.open = true; el.scrollIntoView({ behavior: 'smooth', block: 'start' }) }
+  }
+  const flags = (r) => {
+    const out = []
+    if (r['나트륨(mg)'] > 600) out.push({ t: '나트륨↑', c: 'bg-rose-50 text-rose-700', tip: `나트륨 ${r['나트륨(mg)']}mg (끼니 600mg 초과)` })
+    if (r.조화 != null && r.조화 < 0.4) out.push({ t: '조화↓', c: 'bg-amber-50 text-amber-800', tip: `한 끼 조화 ${r.조화.toFixed(2)} (0.4 미만)` })
+    if (r.다진찬주의 && r.다진찬주의 !== '-' && r.다진찬주의.includes('부적합')) out.push({ t: '다진찬', c: 'bg-slate-100 text-slate-700', tip: `다진찬 주의: ${r.다진찬주의}` })
+    return out
+  }
+
   return (
     <div className="space-y-4">
-      <FacilityPlanResult fp={m.facility_plan} />
-      <Section title="설계 결과"
+      {/* ① 한눈에 보기 + 승인 */}
+      <section className="surface p-5">
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="text-base font-extrabold text-navy-900">28일 식단</h3>
+          {run.parent_run_id && <span className="badge bg-amber-50 text-amber-800">영양사 수정본</span>}
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            {run.status === 'approved'
+              ? <span className="badge bg-emerald-50 text-emerald-700">승인됨 · {fmtDate(run.approved_at)}{run.start_date ? ` · ${run.start_date} 시작` : ''}</span>
+              : askStart ? (
+                <span className="flex items-center gap-2 rounded-xl bg-navy-50 px-2 py-1">
+                  <span className="text-xs text-navy-700">식단 1일차</span>
+                  <input type="date" className="form-input !py-1 !w-auto" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+                  <button className="btn-primary text-xs" disabled={!startDate} onClick={() => { setAskStart(false); onApprove(startDate) }}>승인 확정</button>
+                  <button className="btn-ghost text-xs" onClick={() => setAskStart(false)}>취소</button>
+                </span>
+              ) : <button className="btn-primary" onClick={() => setAskStart(true)} disabled={nEdits > 0}>영양사 승인</button>}
+            <button className="btn-secondary" onClick={onRerun}>다시 최적화</button>
+          </div>
+        </div>
+        {askStart && <p className="mt-1 text-right text-[11px] text-muted">승인하면 주간 발주량이 입고로 재고에 기록됩니다</p>}
+        <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
+          <Stat label="개인 배식 기준 충족" value={okPct} unit="%" tone={okPct >= 90 ? 'bg-emerald-50' : 'bg-amber-50'}
+            sub={`나트륨 ${pct(ss.나트륨OK, ss.끼니) ?? '–'}% · 열량 ${pct(ss.열량OK, ss.끼니) ?? '–'}% · 단백질 ${pct(ss.단백질OK, ss.끼니) ?? '–'}%`} />
+          <Stat label="영양 점수 (f1, 낮을수록 좋음)" value={f1} tone={f1 <= 0.3 ? 'bg-emerald-50' : 'bg-amber-50'} sub={f1 <= 0.3 ? '목표(0.3 이하) 충족' : '목표 0.3 이하 — 확인 필요'} />
+          <Stat label="대체찬" value={res.substitutions?.length ?? 0} unit="건" sub={`${(res.residents || []).filter((x) => x.substitutions > 0).length}명 / ${res.residents?.length ?? '–'}명`} />
+          {fp ? <Stat label="시설 개선안" value={fp.items?.length ?? 0} unit="건 반영" sub={fpGood != null ? `비교 기준보다 나아진 항목 ${fpGood}/${fp.effects.length}` : ''} />
+            : <Stat label="한 끼 조화" value={m.harmony?.mean ?? '–'} sub={m.harmony ? `시설 실제 식단 ${m.harmony.model?.ref_real_mean ?? '–'}` : ''} />}
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2 text-xs">
+          {selInfo?.candidates?.length > 0 && (
+            <button onClick={() => openFold('fold-select')} className="rounded-full bg-violet-50 px-3 py-1 text-violet-800 hover:bg-violet-100">
+              AI 영양사 · {selInfo.mode === 'llm' ? `후보 ${selInfo.choice} 선택${selInfo.agreed_with_rule ? '' : ' (규칙 선택과 다름)'}` : '규칙 선택(A)'} →
+            </button>
+          )}
+          {rv?.mode === 'llm' && (
+            <button onClick={() => openFold('fold-review')} className="rounded-full bg-violet-50 px-3 py-1 text-violet-800 hover:bg-violet-100">
+              AI 검토 · 메뉴 교체 {rv.accepted?.length || 0}건 →
+            </button>
+          )}
+          {fp && (
+            <button onClick={() => openFold('fold-plan')} className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-800 hover:bg-emerald-100">
+              개선안 반영 결과 →
+            </button>
+          )}
+          <button onClick={() => openFold('fold-score')} className="rounded-full bg-navy-50 px-3 py-1 text-navy-700 hover:bg-navy-100">점수 자세히 →</button>
+        </div>
+      </section>
+
+      {/* ② 식단표 */}
+      <Section title="28일 일반식 식단표"
         right={<>
-          {run.status === 'approved'
-            ? <span className="badge bg-emerald-50 text-emerald-700">승인됨 · {fmtDate(run.approved_at)}{run.start_date ? ` · ${run.start_date} 시작` : ''}</span>
-            : askStart ? (
-              <span className="flex items-center gap-2 rounded-xl bg-navy-50 px-2 py-1">
-                <span className="text-xs text-navy-700">식단 1일차</span>
-                <input type="date" className="form-input !py-1 !w-auto" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-                <button className="btn-primary text-xs" disabled={!startDate} onClick={() => { setAskStart(false); onApprove(startDate) }}>승인 확정</button>
-                <span className="text-[11px] text-muted">주간 발주량이 입고로 재고에 기록됩니다</span>
-                <button className="btn-ghost text-xs" onClick={() => setAskStart(false)}>취소</button>
-              </span>
-            ) : <button className="btn-primary" onClick={() => setAskStart(true)} disabled={nEdits > 0}>영양사 승인</button>}
-          <button className="btn-secondary" onClick={onRerun}>다시 최적화</button>
+          {[1, 2, 3, 4].map((w) => (
+            <button key={w} onClick={() => setWeek(w)} className={`px-3 py-1 rounded-full text-xs font-semibold ${week === w ? 'bg-navy-900 text-white' : 'bg-navy-50 text-navy-700'}`}>{w}주</button>
+          ))}
+          <label className="ml-1 flex items-center gap-1 text-xs text-navy-700">
+            <input type="checkbox" checked={detail} onChange={(e) => setDetail(e.target.checked)} /> 영양 수치
+          </label>
+          {nEdits > 0 && <>
+            <span className="text-xs text-amber-700">수정 {nEdits}건</span>
+            <button className="btn-ghost text-xs" onClick={() => setEdits({})}>취소</button>
+            <button className="btn-primary text-xs" disabled={saving} onClick={saveEdits}>{saving ? '저장 중…' : '수정본 계산'}</button>
+          </>}
         </>}>
+        <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted">
+          <span>메뉴를 누르면 같은 칸의 다른 후보로 바꿀 수 있어요</span>
+          {Object.keys(planTags).length > 0 && <>
+            <span><span className="text-emerald-600">●</span> 개선안으로 더 고른 메뉴</span>
+            <span><span className="text-rose-500">●</span> 개선안이 줄이려는 메뉴</span>
+          </>}
+          {Object.keys(reviewed).length > 0 && <span><span className="rounded bg-violet-50 px-1 text-violet-900">보라</span> AI 검토로 바뀐 메뉴</span>}
+          <span><span className="rounded bg-amber-50 px-1 text-amber-900">노랑</span> 지금 고치는 중</span>
+        </div>
+        <div className="overflow-x-auto">
+          <table className={`w-full text-[13px] ${detail ? 'min-w-[1080px]' : 'min-w-[860px]'}`}>
+            <thead>
+              <tr className="text-left text-[11px] text-muted border-b border-navy-100">
+                <th className="py-2 pr-2 w-12">일차</th><th className="py-2 pr-2 w-10">끼니</th>
+                {SLOTS.map((s) => <th key={s} className="py-2 pr-2">{s}</th>)}
+                {detail ? <>
+                  <th className="py-2 pr-2 text-right">열량</th><th className="py-2 pr-2 text-right">나트륨</th><th className="py-2 pr-2 text-right">단백질</th>
+                  <th className="py-2 pr-2 text-right" title="실제 요양원 식단표로 학습한 국·주찬·부찬 조합 점수 (0~1)">조화</th>
+                  <th className="py-2">다진찬 주의</th>
+                </> : <th className="py-2">확인</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.일차 + r.끼니} className={`border-b align-top ${r.끼니 === '저녁' ? 'border-navy-100' : 'border-navy-50'}`}>
+                  <td className="py-1.5 pr-2 font-semibold text-navy-900 whitespace-nowrap">{r.끼니 === '아침' ? r.일차 : ''}</td>
+                  <td className="py-1.5 pr-2 text-muted whitespace-nowrap">{r.끼니}</td>
+                  {SLOTS.map((s) => {
+                    const k = `${r.일차}|${r.끼니}|${s}`
+                    const v = edits[k] ?? r[s]
+                    const isEdit = editing && editing.k === k
+                    return (
+                      <td key={s} className="py-1.5 pr-2">
+                        {isEdit ? (
+                          <select autoFocus className="form-select !py-1 !text-xs" value={v}
+                            onBlur={() => setEditing(null)}
+                            onChange={(e) => { setEdits({ ...edits, [k]: e.target.value }); setEditing(null) }}>
+                            {!options && <option>불러오는 중…</option>}
+                            {(options?.[SLOT_CAT[s]] || []).map((o) => <option key={o} value={o}>{o}</option>)}
+                          </select>
+                        ) : (
+                          <button disabled={String(r[s]).startsWith('-(')} onClick={() => openEdit({ k })}
+                            title={!edits[k] && reviewed[k] ? `AI 검토로 바뀜: ${reviewed[k].current} → ${reviewed[k].replace_with} (${reviewed[k].problem || ''})` : undefined}
+                            className={`text-left rounded px-1 -mx-1 hover:bg-navy-50 ${edits[k] ? 'bg-amber-50 text-amber-900 font-semibold' : reviewed[k] ? 'bg-violet-50 text-violet-900' : ''}`}>{v}</button>
+                        )}
+                        {!isEdit && planTags[v] && (
+                          <span className={`ml-0.5 text-[9px] align-top cursor-help ${planTags[v].some((t) => t.kind === 'limit') ? 'text-rose-500' : 'text-emerald-600'}`}
+                            title={`시설 개선안: ${planTags[v].map((t) => t.label).join(', ')}`}>●</span>
+                        )}
+                      </td>
+                    )
+                  })}
+                  {detail ? <>
+                    <td className="py-1.5 pr-2 text-right tabular-nums">{r['열량(kcal)']}</td>
+                    <td className={`py-1.5 pr-2 text-right tabular-nums ${r['나트륨(mg)'] > 600 ? 'text-rose-600 font-semibold' : ''}`}>{r['나트륨(mg)']}</td>
+                    <td className="py-1.5 pr-2 text-right tabular-nums">{r['단백질(g)']}</td>
+                    <td className={`py-1.5 pr-2 text-right tabular-nums ${r.조화 != null && r.조화 < 0.4 ? 'text-amber-700 font-semibold' : 'text-muted'}`}>{r.조화 != null ? r.조화.toFixed(2) : '–'}</td>
+                    <td className="py-1.5 text-[11px] text-muted">{r.다진찬주의 === '-' ? '' : r.다진찬주의}</td>
+                  </> : (
+                    <td className="py-1.5 whitespace-nowrap">
+                      {flags(r).map((x) => <span key={x.t} title={x.tip} className={`mr-1 cursor-help rounded px-1.5 py-0.5 text-[10px] font-semibold ${x.c}`}>{x.t}</span>)}
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {!detail && <p className="mt-2 text-[11px] text-muted">확인 칸: 나트륨↑ 끼니 600mg 초과 · 조화↓ 한 끼 조합 점수 0.4 미만 · 다진찬 다진찬으로 만들기 어려운 메뉴 포함 (마우스를 올리면 자세히). 수치는 ‘영양 수치’를 켜면 보여요.</p>}
+      </Section>
+
+      {/* ③ 접어 둔 상세 */}
+      {fp && (
+        <Fold id="fold-plan" title="시설 개선안 반영 결과" summary={fpGood != null ? `${fp.items?.length || 0}건 반영 · 비교 기준보다 나아진 항목 ${fpGood}/${fp.effects.length}` : `${fp.items?.length || 0}건 반영`}>
+          <FacilityPlanResult fp={fp} bare />
+        </Fold>
+      )}
+      {(selInfo?.candidates?.length > 0 || run.parent_run_id) && (
+        <Fold id="fold-select" title="AI 영양사 선택" summary={selInfo?.summary}>
+          <SelectionPanel run={run} onEdited={onEdited} setErr={setErr} bare />
+        </Fold>
+      )}
+      {rv && (
+        <Fold id="fold-review" title="AI 식단 검토" summary={rv.mode === 'llm' ? `제안 ${rv.n_suggested}건 · 반영 ${rv.accepted?.length || 0}건 · 거절 ${rv.rejected?.length || 0}건` : (rv.note || '검토하지 않음')}>
+          <ReviewPanel run={run} onEdited={onEdited} setErr={setErr} bare />
+        </Fold>
+      )}
+      <Fold id="fold-score" title="점수 자세히" summary="목적함수 4개 · 조화 · 파레토 해 품질 · 영양 위반 기여도 · 식단 규칙 · 재고 활용">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {(() => {
-            // [2026-10-28] 목적함수 이름 변경 (이전 설계 결과는 옛 이름으로 표시)
-            const f1 = sel['f1_영양'] ?? sel['f1_영양위반'], f2 = sel['f2_비용'] ?? sel['f2_예산·재고']
+            const f2 = sel['f2_비용'] ?? sel['f2_예산·재고']
             const isNew = sel['f3_다양성'] != null
             const p3 = m.objective_parts?.f3 || {}, p4 = m.objective_parts?.f4 || {}
             return (<>
@@ -785,120 +961,39 @@ function MenuTab({ run, onApprove, onEdited, onRerun, setErr }) {
             <Stat label="시설 스타일 유사도 ↑" value={m.harmony.style_similarity} sub={`끼니별 국 종류·조리법·주재료 분포 (${m.harmony.model?.facility} ${m.harmony.model?.n_meals}끼 학습)`} />
           )}
           <Stat label="파레토 해 품질(HV) ↑" value={m.front?.hv?.toFixed?.(3) ?? '–'} sub={m.front ? `비지배해 ${m.front.n_nondom}개 · f1 통과 ${m.front.f1_pass_rate}%` : '수정본은 계산 안 함'} />
-          <Stat label="배식 기준 충족 ↑" value={pct(ss.끼니 - ss.조정불가, ss.끼니)} unit="%" sub={`나트륨 ${pct(ss.나트륨OK, ss.끼니) ?? '–'}% · 열량 ${pct(ss.열량OK, ss.끼니) ?? '–'}% · 단백질 ${pct(ss.단백질OK, ss.끼니) ?? '–'}%${ss.식이섬유OK != null ? ` · 식이섬유 ${pct(ss.식이섬유OK, ss.끼니)}% · 칼륨 ${pct(ss.칼륨OK, ss.끼니)}% · 탄수화물 ${pct(ss.탄수화물OK, ss.끼니)}%` : ''}`} />
-          <Stat label="대체찬" value={res.substitutions?.length ?? 0} unit="건" sub={`${(res.residents || []).filter((x) => x.substitutions > 0).length}명 대상`} />
           <Stat label="설계 어르신" value={run.result?.residents?.length} unit="명" sub={m.optimize_sec ? `최적화 ${m.optimize_sec}초` : run.parent_run_id ? '영양사 수정본' : ''} />
         </div>
-        <details className="mt-4 text-sm">
-          <summary className="cursor-pointer text-navy-700 font-semibold">영양 위반 기여도 · 식단 규칙 점검 · 재고 활용</summary>
-          <div className="mt-3 grid md:grid-cols-3 gap-4">
-            <div>
-              <p className="text-xs font-bold text-muted mb-1">f1 영양소별 기여도</p>
-              {Object.entries(m.nutrition_breakdown || {}).slice(0, 10).map(([k, v]) => (
-                <div key={k} className="flex justify-between text-xs py-0.5"><span>{k}</span><span className="tabular-nums">{v}</span></div>
-              ))}
-            </div>
-            <div>
-              <p className="text-xs font-bold text-muted mb-1">식단 규칙 점검 (84끼)</p>
-              {Object.entries(m.pattern || {}).map(([k, v]) => (
-                <div key={k} className="flex justify-between text-xs py-0.5"><span>{k.replaceAll('_', ' ')}</span><span className="tabular-nums">{v}</span></div>
-              ))}
-              {m.repeat_repair?.changes?.length > 0 && (
-                <details className="mt-2 text-[11px]">
-                  <summary className="cursor-pointer text-navy-700">반복 메뉴 보정 {m.repeat_repair.changes.length}건 (3일 안 반복 → 같은 분류 다른 메뉴)</summary>
-                  {m.repeat_repair.changes.map((c, k) => (
-                    <p key={k} className="text-muted">{c.일차} {c.끼니} {c.칸}: {c.기존} → <b className="text-navy-800">{c.변경}</b></p>
-                  ))}
-                </details>
-              )}
-              {m.selection_rule && <p className="mt-2 text-[11px] text-muted">해 선택: {m.selection_rule}</p>}
-            </div>
-            <div>
-              <p className="text-xs font-bold text-muted mb-1">재고 활용 (유통기한 전 사용)</p>
-              {(m.inventory || []).map((x) => (
-                <div key={x.식재료명} className="flex justify-between text-xs py-0.5"><span>{x.식재료명} <span className="text-muted">D-{x.남은일수}</span></span><span className="tabular-nums">{x['활용률(%)']}%</span></div>
-              ))}
-              {!m.inventory && <p className="text-xs text-muted">재고를 입력하면 표시됩니다.</p>}
-            </div>
+        <div className="mt-4 grid md:grid-cols-3 gap-4 text-sm">
+          <div>
+            <p className="text-xs font-bold text-muted mb-1">f1 영양소별 기여도</p>
+            {Object.entries(m.nutrition_breakdown || {}).slice(0, 10).map(([k, v]) => (
+              <div key={k} className="flex justify-between text-xs py-0.5"><span>{k}</span><span className="tabular-nums">{v}</span></div>
+            ))}
           </div>
-        </details>
-      </Section>
-
-      <SelectionPanel run={run} onEdited={onEdited} setErr={setErr} />
-      <ReviewPanel run={run} onEdited={onEdited} setErr={setErr} />
-
-      <Section title="28일 일반식 식단표"
-        right={<>
-          {[1, 2, 3, 4].map((w) => (
-            <button key={w} onClick={() => setWeek(w)} className={`px-3 py-1 rounded-full text-xs font-semibold ${week === w ? 'bg-navy-900 text-white' : 'bg-navy-50 text-navy-700'}`}>{w}주</button>
-          ))}
-          {nEdits > 0 && <>
-            <span className="text-xs text-amber-700">수정 {nEdits}건</span>
-            <button className="btn-ghost text-xs" onClick={() => setEdits({})}>취소</button>
-            <button className="btn-primary text-xs" disabled={saving} onClick={saveEdits}>{saving ? '저장 중…' : '수정본 계산'}</button>
-          </>}
-        </>}>
-        <p className="mb-3 text-xs text-muted">메뉴를 누르면 같은 칸의 후보 메뉴로 바꿀 수 있습니다. 수정본을 계산하면 대체찬·배식량이 새 식단 기준으로 다시 계산됩니다.</p>
-        <div className="overflow-x-auto">
-          <table className="w-full text-[13px] min-w-[980px]">
-            <thead>
-              <tr className="text-left text-[11px] text-muted border-b border-navy-100">
-                <th className="py-2 pr-2">일차</th><th className="py-2 pr-2">끼니</th>
-                {SLOTS.map((s) => <th key={s} className="py-2 pr-2">{s}</th>)}
-                <th className="py-2 pr-2 text-right">열량</th><th className="py-2 pr-2 text-right">나트륨</th><th className="py-2 pr-2 text-right">단백질</th>
-                <th className="py-2 pr-2 text-right" title="실제 요양원 식단표로 학습한 국·주찬·부찬 조합 점수 (0~1)">조화</th>
-                <th className="py-2">다진찬 주의</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.일차 + r.끼니} className={`border-b border-navy-50 align-top ${r.끼니 === '저녁' ? 'border-b-navy-100' : ''}`}>
-                  <td className="py-1.5 pr-2 font-semibold text-navy-900 whitespace-nowrap">{r.끼니 === '아침' ? r.일차 : ''}</td>
-                  <td className="py-1.5 pr-2 text-muted whitespace-nowrap">{r.끼니}</td>
-                  {SLOTS.map((s) => {
-                    const k = `${r.일차}|${r.끼니}|${s}`
-                    const v = edits[k] ?? r[s]
-                    const isEdit = editing && editing.k === k
-                    return (
-                      <td key={s} className="py-1.5 pr-2">
-                        {isEdit ? (
-                          <select autoFocus className="form-select !py-1 !text-xs" value={v}
-                            onBlur={() => setEditing(null)}
-                            onChange={(e) => { setEdits({ ...edits, [k]: e.target.value }); setEditing(null) }}>
-                            {!options && <option>불러오는 중…</option>}
-                            {(options?.[SLOT_CAT[s]] || []).map((o) => <option key={o} value={o}>{o}</option>)}
-                          </select>
-                        ) : (
-                          <button disabled={String(r[s]).startsWith('-(')} onClick={() => openEdit({ k })}
-                            title={!edits[k] && reviewed[k] ? `AI 검토로 바뀜: ${reviewed[k].current} → ${reviewed[k].replace_with} (${reviewed[k].problem || ''})` : undefined}
-                            className={`text-left rounded px-1 -mx-1 hover:bg-navy-50 ${edits[k] ? 'bg-amber-50 text-amber-900 font-semibold' : reviewed[k] ? 'bg-violet-50 text-violet-900' : ''}`}>{v}</button>
-                        )}
-                        {(() => {
-                          // 제한 메뉴(●빨강)는 그 끼니 나트륨이 상한(600 mg)을 넘을 때만 표시 — 넘지 않으면 오해를 줄이려 표시하지 않음
-                          if (isEdit || !planTags[v]) return null
-                          const over = Number(r['나트륨(mg)']) > 600
-                          const tags = planTags[v].filter((t) => t.kind !== 'limit' || over)
-                          if (!tags.length) return null
-                          const lim = tags.some((t) => t.kind === 'limit')
-                          return (
-                            <span className={`ml-0.5 text-[9px] align-top cursor-help ${lim ? 'text-rose-500' : 'text-emerald-600'}`}
-                              title={`시설 개선안: ${tags.map((t) => t.label).join(', ')}${lim ? ` · 이 끼니 나트륨 ${r['나트륨(mg)']} mg (상한 600 mg 초과)` : ''}`}>●</span>
-                          )
-                        })()}
-                      </td>
-                    )
-                  })}
-                  <td className="py-1.5 pr-2 text-right tabular-nums">{r['열량(kcal)']}</td>
-                  <td className={`py-1.5 pr-2 text-right tabular-nums ${r['나트륨(mg)'] > 600 ? 'text-rose-600 font-semibold' : ''}`}>{r['나트륨(mg)']}</td>
-                  <td className="py-1.5 pr-2 text-right tabular-nums">{r['단백질(g)']}</td>
-                  <td className={`py-1.5 pr-2 text-right tabular-nums ${r.조화 != null && r.조화 < 0.4 ? 'text-amber-700 font-semibold' : 'text-muted'}`}>{r.조화 != null ? r.조화.toFixed(2) : '–'}</td>
-                  <td className="py-1.5 text-[11px] text-muted">{r.다진찬주의 === '-' ? '' : r.다진찬주의}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div>
+            <p className="text-xs font-bold text-muted mb-1">식단 규칙 점검 (84끼)</p>
+            {Object.entries(m.pattern || {}).map(([k, v]) => (
+              <div key={k} className="flex justify-between text-xs py-0.5"><span>{k.replaceAll('_', ' ')}</span><span className="tabular-nums">{v}</span></div>
+            ))}
+            {m.repeat_repair?.changes?.length > 0 && (
+              <details className="mt-2 text-[11px]">
+                <summary className="cursor-pointer text-navy-700">반복 메뉴 보정 {m.repeat_repair.changes.length}건 (3일 안 반복 → 같은 분류 다른 메뉴)</summary>
+                {m.repeat_repair.changes.map((c, k) => (
+                  <p key={k} className="text-muted">{c.일차} {c.끼니} {c.칸}: {c.기존} → <b className="text-navy-800">{c.변경}</b></p>
+                ))}
+              </details>
+            )}
+            {m.selection_rule && <p className="mt-2 text-[11px] text-muted">해 선택: {m.selection_rule}</p>}
+          </div>
+          <div>
+            <p className="text-xs font-bold text-muted mb-1">재고 활용 (유통기한 전 사용)</p>
+            {(m.inventory || []).map((x) => (
+              <div key={x.식재료명} className="flex justify-between text-xs py-0.5"><span>{x.식재료명} <span className="text-muted">D-{x.남은일수}</span></span><span className="tabular-nums">{x['활용률(%)']}%</span></div>
+            ))}
+            {!m.inventory && <p className="text-xs text-muted">재고를 입력하면 표시됩니다.</p>}
+          </div>
         </div>
-      </Section>
+      </Fold>
     </div>
   )
 }
@@ -910,7 +1005,7 @@ function ServingTab({ run }) {
   const [q, setQ] = useState('')
   const [eid, setEid] = useState(residents[0]?.elderly_id || null)
   const [meals, setMeals] = useState(null)
-  const [day, setDay] = useState('all')
+  const [week, setWeek] = useState(1)
   const [err, setErr] = useState('')
 
   useEffect(() => {
@@ -921,57 +1016,74 @@ function ServingTab({ run }) {
 
   const list = residents.filter((r) => !q || r.display_name.includes(q))
   const me = residents.find((r) => r.elderly_id === eid)
-  const shown = (meals || []).filter((x) => day === 'all' || x.일차 === day)
-  const days = [...new Set((meals || []).map((x) => x.일차))]
+  const shown = (meals || []).filter((x) => week === 0 || Math.ceil(dayNo(x.일차) / 7) === week)
+  const s = me?.serving || {}
+  const okPct = pct((s.끼니 || 0) - (s.조정불가 || 0), s.끼니)
+  // 안전 확인(알레르기·연하·약물) — 영역별 평가의 Level 1 항목을 머리에 한 줄로
+  const safety = ((run.result?.assessments?.[eid]?.synth?.priorities) || []).filter((i) => issueLevel(i) === 1).map((i) => i.title)
+  const nOver = (meals || []).filter((x) => String(x.조정결과).startsWith('조정불가')).length
 
   return (
-    <div className="space-y-4">
-    <LabelPrint run={run} />
-    <div className="grid md:grid-cols-[260px_1fr] gap-4">
-      <div className="surface p-3 max-h-[720px] overflow-y-auto">
+    <div className="grid md:grid-cols-[240px_1fr] gap-4">
+      <div className="surface p-3 max-h-[760px] overflow-y-auto">
         <input className="form-input !py-2 mb-2" placeholder="이름 검색" value={q} onChange={(e) => setQ(e.target.value)} />
         {list.map((r) => {
-          const s = r.serving || {}
+          const rs = r.serving || {}
+          const p = pct((rs.끼니 || 0) - (rs.조정불가 || 0), rs.끼니)
+          const on = eid === r.elderly_id
           return (
             <button key={r.elderly_id} onClick={() => setEid(r.elderly_id)}
-              className={`w-full text-left rounded-xl px-3 py-2 mb-1 ${eid === r.elderly_id ? 'bg-navy-900 text-white' : 'hover:bg-navy-50'}`}>
-              <span className="text-sm font-semibold">{r.display_name}</span>
-              <span className={`ml-1.5 text-[11px] ${eid === r.elderly_id ? 'text-navy-100' : 'text-muted'}`}>{r.type} · {r.texture}</span>
-              <span className={`block text-[11px] ${eid === r.elderly_id ? 'text-navy-100' : 'text-muted'}`}>
-                대체 {r.substitutions}건 · 기준 충족 {pct((s.끼니 || 0) - (s.조정불가 || 0), s.끼니) ?? '–'}%{r.no_spicy ? ' · 백김치' : ''}
+              className={`w-full text-left rounded-xl px-3 py-2 mb-1 ${on ? 'bg-navy-900 text-white' : 'hover:bg-navy-50'}`}>
+              <span className="flex items-center justify-between gap-2">
+                <span className="text-sm font-semibold">{r.display_name}</span>
+                {p != null && <span className={`text-[11px] tabular-nums ${on ? 'text-navy-100' : p >= 90 ? 'text-emerald-600' : 'text-amber-700'}`}>{p}%</span>}
               </span>
+              <span className={`block text-[11px] ${on ? 'text-navy-100' : 'text-muted'}`}>{r.texture}{r.no_spicy ? ' · 백김치' : ''}{r.substitutions ? ` · 대체 ${r.substitutions}` : ''}</span>
             </button>
           )
         })}
       </div>
+
       <div className="space-y-4 min-w-0">
         {me && (
-          <Section title={`${me.display_name} 님 배식표`}
-            right={<select className="form-select !py-1.5 !w-auto" value={day} onChange={(e) => setDay(e.target.value)}>
-              <option value="all">28일 전체</option>
-              {days.map((d) => <option key={d} value={d}>{d}</option>)}
-            </select>}>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-              <Stat label="질환 유형" value={me.type} sub={me.diseases?.join(' · ') || '해당 없음'} />
-              <Stat label="식사 형태" value={me.texture} sub={me.no_spicy ? '매운 음식 불가 → 백김치' : ''} />
-              <Stat label="목표 열량" value={Math.round(me.target_energy)} unit="kcal/끼" sub={`나트륨 상한 ${me.sodium_max}mg/끼`} />
-              <Stat label="대체찬" value={me.substitutions} unit="건" sub={Object.entries(me.reasons || {}).slice(0, 2).map(([k, v]) => `${k} ${v}`).join(' · ')} />
+          <section className="surface p-5">
+            {/* 어르신 요약 — 배식 담당자가 먼저 알아야 할 것만 */}
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-base font-extrabold text-navy-900">{me.display_name} 님 배식표</h3>
+              <span className="badge bg-navy-50 text-navy-700">{me.type}</span>
+              <span className="badge bg-sky-50 text-sky-800">{me.texture}</span>
+              {me.no_spicy && <span className="badge bg-sky-50 text-sky-800">매운 음식 불가 · 백김치</span>}
+              {(me.diseases || []).map((d) => <span key={d} className="badge bg-slate-100 text-slate-600">{d}</span>)}
             </div>
-            <details className="mb-4 rounded-2xl bg-white ring-1 ring-navy-100 px-4 py-3" open>
-              <summary className="cursor-pointer text-sm font-bold text-navy-900">영역별 에이전트 평가 <span className="font-normal text-xs text-muted">— 7개 영역이 각자 정보만 보고 따로 판단한 결과</span></summary>
-              <div className="mt-3"><AgentPanel a={run.result?.assessments?.[eid]} /></div>
-            </details>
-            <CarePlan run={run} eid={eid} setErr={setErr} />
+            {safety.length > 0 && (
+              <p className="mt-2 rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-800">
+                <b>안전 확인</b> · {safety.join(' · ')} <span className="text-rose-600">— 자세한 내용은 아래 ‘이렇게 정한 근거’</span>
+              </p>
+            )}
+            <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm">
+              <span><span className="text-muted text-xs mr-1">목표 열량</span><b className="tabular-nums">{Math.round(me.target_energy)}</b><span className="text-xs text-muted">kcal/끼</span></span>
+              <span><span className="text-muted text-xs mr-1">나트륨 상한</span><b className="tabular-nums">{me.sodium_max}</b><span className="text-xs text-muted">mg/끼</span></span>
+              <span><span className="text-muted text-xs mr-1">대체찬</span><b className="tabular-nums">{me.substitutions}</b><span className="text-xs text-muted">건{Object.keys(me.reasons || {}).length ? ` (${Object.entries(me.reasons).slice(0, 2).map(([k, v]) => `${k} ${v}`).join(', ')})` : ''}</span></span>
+              <span><span className="text-muted text-xs mr-1">기준 충족</span><b className={`tabular-nums ${okPct >= 90 ? 'text-emerald-700' : 'text-amber-700'}`}>{okPct ?? '–'}%</b></span>
+            </div>
+
+            <div className="mt-4 mb-2 flex flex-wrap items-center gap-1.5">
+              {[1, 2, 3, 4].map((w) => (
+                <button key={w} onClick={() => setWeek(w)} className={`px-3 py-1 rounded-full text-xs font-semibold ${week === w ? 'bg-navy-900 text-white' : 'bg-navy-50 text-navy-700'}`}>{w}주</button>
+              ))}
+              <button onClick={() => setWeek(0)} className={`px-3 py-1 rounded-full text-xs font-semibold ${week === 0 ? 'bg-navy-900 text-white' : 'bg-navy-50 text-navy-700'}`}>28일 전체</button>
+              {meals && nOver > 0 && <span className="ml-auto text-[11px] text-amber-700">기준 일부 초과 끼니 {nOver}끼</span>}
+            </div>
             {err && <p className="text-sm text-rose-700">{err}</p>}
             {!meals ? <p className="text-sm text-muted">불러오는 중…</p> : (
               <div className="overflow-x-auto">
-                <table className="w-full text-[13px] min-w-[1000px]">
+                <table className="w-full text-[13px] min-w-[900px]">
                   <thead>
                     <tr className="text-left text-[11px] text-muted border-b border-navy-100">
-                      <th className="py-2 pr-2">일차</th><th className="py-2 pr-2">끼니</th>
-                      {SLOTS.map((s) => <th key={s} className="py-2 pr-2">{s}</th>)}
-                      <th className="py-2 pr-2 text-right">열량</th><th className="py-2 pr-2 text-right">단백질</th><th className="py-2 pr-2 text-right">나트륨</th>
-                      <th className="py-2 pr-2">기준</th>
+                      <th className="py-2 pr-2 w-12">일차</th><th className="py-2 pr-2 w-10">끼니</th>
+                      {SLOTS.map((sl) => <th key={sl} className="py-2 pr-2">{sl}</th>)}
+                      <th className="py-2 pr-2 text-right">열량</th><th className="py-2 pr-2 text-right">나트륨</th>
+                      <th className="py-2 text-center">기준</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -979,42 +1091,59 @@ function ServingTab({ run }) {
                       const ratio = Object.fromEntries((x.칸별비율 || '').split(' ').map((t) => {
                         const mm = t.match(/^(밥|국|주찬|부찬1|부찬2|김치)([\d.]+)/); return mm ? [mm[1], mm[2]] : [t, '']
                       }))
+                      const over = String(x.조정결과).startsWith('조정불가')
                       return (
-                        <tr key={x.일차 + x.끼니} className="border-b border-navy-50 align-top">
-                          <td className="py-1.5 pr-2 font-semibold text-navy-900 whitespace-nowrap">{x.일차}</td>
+                        <tr key={x.일차 + x.끼니} className={`border-b align-top ${x.끼니 === '저녁' ? 'border-navy-100' : 'border-navy-50'}`}>
+                          <td className="py-1.5 pr-2 font-semibold text-navy-900 whitespace-nowrap">{x.끼니 === '아침' || week === 0 ? x.일차 : ''}</td>
                           <td className="py-1.5 pr-2 text-muted">{x.끼니}</td>
-                          {SLOTS.map((s) => {
-                            const changed = (x.대체 || []).includes(s) || (x.식사형태변경 || []).includes(s)
-                            const g = x[s]
+                          {SLOTS.map((sl) => {
+                            const sub = (x.대체 || []).includes(sl)
+                            const form = (x.식사형태변경 || []).includes(sl)
+                            const g = x[sl]
+                            const r = ratio[sl] ? Number(ratio[sl]) : null
                             return (
-                              <td key={s} className="py-1.5 pr-2">
-                                <span className={`block leading-5 ${(x.대체 || []).includes(s) ? 'text-emerald-800 font-semibold' : changed ? 'text-navy-700 font-semibold' : 'text-navy-900'}`}>
-                                  {x.메뉴?.[s]}
+                              <td key={sl} className="py-1.5 pr-2">
+                                <span className={`block leading-5 ${sub ? 'text-emerald-800 font-semibold' : form ? 'text-sky-800 font-semibold' : 'text-navy-900'}`}>
+                                  {x.메뉴?.[sl]}
+                                  {sub && <span className="ml-1 rounded bg-emerald-50 px-1 text-[10px] font-semibold text-emerald-700">대체</span>}
                                 </span>
-                                <span className="text-[11px] text-muted tabular-nums">{g ? `${g}g` : '미배식'}{ratio[s] && g ? ` · ×${Number(ratio[s])}` : ''}</span>
+                                <span className="text-[11px] text-muted tabular-nums">
+                                  {g ? `${g}g` : '미배식'}
+                                  {g && r != null && r !== 1 && <span className={`ml-1 font-semibold ${r < 1 ? 'text-amber-700' : 'text-sky-700'}`}>×{r}</span>}
+                                </span>
                               </td>
                             )
                           })}
                           <td className="py-1.5 pr-2 text-right tabular-nums">{x.예상열량}</td>
-                          <td className="py-1.5 pr-2 text-right tabular-nums">{x.예상단백질}</td>
                           <td className="py-1.5 pr-2 text-right tabular-nums">{x.예상나트륨}</td>
-                          <td className="py-1.5 pr-2 text-[11px] whitespace-nowrap">
-                            {String(x.조정결과).startsWith('조정불가')
-                              ? <span className="text-amber-700">일부 초과</span>
-                              : <span className="text-emerald-600">충족</span>}
+                          <td className="py-1.5 text-center" title={over ? `조정 결과: ${x.조정결과}` : '개인 기준 충족'}>
+                            {over ? <span className="text-amber-700 text-xs font-semibold">⚠</span> : <span className="text-emerald-600 text-xs">✓</span>}
                           </td>
                         </tr>
                       )
                     })}
                   </tbody>
                 </table>
-                <p className="mt-2 text-[11px] text-muted">초록 글씨 = 고령친화식품 대체(1인분 그대로) · 파란 글씨 = 죽·백김치 · 배식량은 0·0.25·0.5·0.75·1·1.25·1.5·2배 단계</p>
+                <p className="mt-2 text-[11px] text-muted">
+                  <span className="text-emerald-700 font-semibold">초록·대체</span> 고령친화식품 대체(1인분 그대로) · <span className="text-sky-800 font-semibold">파랑</span> 죽·백김치 등 식사형태 변경 ·
+                  배식량은 기본 1인분이고 다를 때만 <span className="text-amber-700 font-semibold">×0.5</span>처럼 표시 · ⚠ 일부 영양 기준 초과(마우스를 올리면 자세히)
+                </p>
               </div>
             )}
-          </Section>
+          </section>
         )}
+        {me && (
+          <Fold title="이렇게 정한 근거" summary="영역별 AI 평가 · 우선순위 · 개인 영양 기준">
+            <AgentPanel a={run.result?.assessments?.[eid]} />
+          </Fold>
+        )}
+        {me && (
+          <Fold title="AI 영양 관리 계획" summary={run.result?.care_plans?.[eid] ? '작성됨' : '평가 · 영양 진단 · 중재 · 모니터링 — 필요할 때 작성'}>
+            <CarePlan run={run} eid={eid} setErr={setErr} bare />
+          </Fold>
+        )}
+        <LabelPrint run={run} />
       </div>
-    </div>
     </div>
   )
 }
@@ -2052,7 +2181,7 @@ const FIELD_LABEL = {
 const ACTION_LABEL = { limit: '줄이기', increase: '늘리기', avoid: '피하기', texture: '식사형태', monitor: '관찰', check: '확인 필요', timing: '복약 시간' }
 
 /* [Stage 3] 어르신별 영양 관리 계획 (ADIME) — 요청할 때 작성 */
-function CarePlan({ run, eid, setErr }) {
+function CarePlan({ run, eid, setErr, bare = false }) {
   const [plan, setPlan] = useState(run.result?.care_plans?.[eid] || null)
   const [busy, setBusy] = useState(false)
   useEffect(() => { setPlan(run.result?.care_plans?.[eid] || null) }, [run.id, eid])
@@ -2066,7 +2195,7 @@ function CarePlan({ run, eid, setErr }) {
     catch (e) { setErr(errMsg(e)) } finally { setBusy(false) }
   }
   return (
-    <div className="mb-4 rounded-2xl bg-white ring-1 ring-navy-100 px-4 py-3">
+    <div className={bare ? '' : 'mb-4 rounded-2xl bg-white ring-1 ring-navy-100 px-4 py-3'}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-bold text-navy-900">AI 영양 관리 계획 <span className="font-normal text-xs text-muted">— 평가 · 영양 진단 · 중재 · 모니터링 (Stage 3)</span></p>
         <button className="btn-secondary !py-1 text-xs" disabled={busy} onClick={make}>{busy ? '작성 중…' : plan ? '다시 작성' : '계획 작성'}</button>
