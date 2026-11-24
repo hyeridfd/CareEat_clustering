@@ -335,7 +335,7 @@ function FacilityPlanResult({ fp }) {
         </div>
       )}
       <p className="mt-3 text-[11px] text-muted">
-        식단표에서 <span className="text-emerald-600">●</span> 개선안으로 더 고른 메뉴, <span className="text-rose-500">●</span> 개선안이 줄이려는 메뉴(제한)입니다. 점에 마우스를 올리면 어떤 개선안 때문인지 보입니다.
+        식단표에서 <span className="text-emerald-600">●</span> 개선안으로 더 고른 메뉴, <span className="text-rose-500">●</span> 개선안이 줄이려는 메뉴(제한)가 들어갔고 그 끼니 나트륨이 600 mg을 넘은 경우입니다. 점에 마우스를 올리면 어떤 개선안 때문인지 보입니다.
         {' '}▲▼는 비교 기준과의 차이이고, ✓는 개선안이 원하는 방향입니다.
       </p>
       {fp.outside?.length > 0 && <p className="mt-1 text-[11px] text-muted">식단 외 조치(운영): {fp.outside.map((x) => x.title).join(' · ')}</p>}
@@ -867,10 +867,18 @@ function MenuTab({ run, onApprove, onEdited, onRerun, setErr }) {
                             title={!edits[k] && reviewed[k] ? `AI 검토로 바뀜: ${reviewed[k].current} → ${reviewed[k].replace_with} (${reviewed[k].problem || ''})` : undefined}
                             className={`text-left rounded px-1 -mx-1 hover:bg-navy-50 ${edits[k] ? 'bg-amber-50 text-amber-900 font-semibold' : reviewed[k] ? 'bg-violet-50 text-violet-900' : ''}`}>{v}</button>
                         )}
-                        {!isEdit && planTags[v] && (
-                          <span className={`ml-0.5 text-[9px] align-top cursor-help ${planTags[v].some((t) => t.kind === 'limit') ? 'text-rose-500' : 'text-emerald-600'}`}
-                            title={`시설 개선안: ${planTags[v].map((t) => t.label).join(', ')}`}>●</span>
-                        )}
+                        {(() => {
+                          // 제한 메뉴(●빨강)는 그 끼니 나트륨이 상한(600 mg)을 넘을 때만 표시 — 넘지 않으면 오해를 줄이려 표시하지 않음
+                          if (isEdit || !planTags[v]) return null
+                          const over = Number(r['나트륨(mg)']) > 600
+                          const tags = planTags[v].filter((t) => t.kind !== 'limit' || over)
+                          if (!tags.length) return null
+                          const lim = tags.some((t) => t.kind === 'limit')
+                          return (
+                            <span className={`ml-0.5 text-[9px] align-top cursor-help ${lim ? 'text-rose-500' : 'text-emerald-600'}`}
+                              title={`시설 개선안: ${tags.map((t) => t.label).join(', ')}${lim ? ` · 이 끼니 나트륨 ${r['나트륨(mg)']} mg (상한 600 mg 초과)` : ''}`}>●</span>
+                          )
+                        })()}
                       </td>
                     )
                   })}
