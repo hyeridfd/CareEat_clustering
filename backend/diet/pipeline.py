@@ -341,6 +341,9 @@ def plan_metrics(problem, chrom, F_front=None, F_all=None, inv_model=None) -> di
                      "f3_다양성": round(f[2], 4), "f4_조화": round(f[3], 4)},
         "objective_parts": problem.objective_parts(chrom),
         "nutrition_breakdown": {k: round(v, 4) for k, v in problem.nutrition_breakdown(menus).items() if v >= 0.001},
+        # [2026-11-24] 분해표는 f1 과 같은 계산(개선안 가중치 포함) — 합이 f1 과 같아야 한다
+        "nutrition_breakdown_check": {"f1": round(f[0], 6), "sum": round(sum(problem.nutrition_breakdown(menus).values()), 6),
+                                      "weights": dict(getattr(problem.constraint, "nutrient_weight", None) or {})},
         "harmony": _harmony_summary(problem, chrom),
         "pattern": problem.pattern_breakdown(chrom),
     }

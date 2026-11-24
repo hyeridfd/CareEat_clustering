@@ -2,6 +2,7 @@
 problem.py  ─  28일 식단 4목적 문제 정의 (에이전트 optimizer_agent.py의 MealPlanProblem, 서버판)
 """
 
+import math
 import numpy as np
 
 from .meal_rules import (effective_meal, F4_WEIGHTS, ONE_DISH_MAX_PER_WEEK,
@@ -38,7 +39,7 @@ NUTRIENTS = ["energy", "protein", "fat", "sugar", "sat_fat",
 #   f1 영양   목표 영양소 충족 여부 — 끼니·일일 기준 위반 정도
 #   f2 비용   급식 예산 초과 + 재고 미활용 (유통기한 가중)
 #   f3 다양성 28일간 메뉴 반복·편중
-#            = 0.4 × 편중(1 − Simpson 다양성) + 0.5 × 14일 안 반복(가까울수록 무겁게) + 0.1 × 한 그릇 음식 주간 상한 초과
+#            = 0.4 × 편중(1 − 다양성: 국·주찬·부찬의 정규화 엔트로피, 후보 수로 낼 수 있는 최대 종류 수 기준) + 0.5 × 14일 안 반복(가까울수록 무겁게) + 0.1 × 한 그릇 음식 주간 상한 초과
 #   f4 조화   한 끼 내부 음식 조합·수용 적합성
 #            = 0.5 × (1 − 조화 모델 점수: 실제 요양원 한 끼와 닮은 정도 + 시설 끼니별 스타일)
 #            + 0.2 × (1 − 시설 선호도: 잔반 기록 섭취율)
@@ -103,7 +104,7 @@ class MealPlanProblem(Problem):
         ]
 
     def _diversity(self, menus, parts):
-        skew = 1 - self._simpson_diversity(menus) / 100
+        skew = 1 - self._menu_diversity(menus) / 100
         w = F3_W
         return w["skew"] * skew + w["repeat"] * parts["carry_over"] + w["one_dish_week"] * parts["one_dish_week"]
 
@@ -127,7 +128,7 @@ class MealPlanProblem(Problem):
         """[보고용] f3·f4 구성 요소"""
         menus = self.effective_menus(chrom)
         parts = self._pattern_parts(chrom, menus)
-        out = {"f3": {"편중(1-Simpson)": round(1 - self._simpson_diversity(menus) / 100, 4),
+        out = {"f3": {"편중(1-Simpson)": round(1 - self._menu_diversity(menus) / 100, 4),
                       "14일 반복": round(parts["carry_over"], 4), "한그릇 주간 초과": round(parts["one_dish_week"], 4)},
                "f4": {"시설 선호(섭취율)": round(sum(m.get("preference_score", 0.7) for m in menus) / len(menus), 4),
                       "부찬 중복": round(parts["side_dup"], 4), "한그릇 2개 이상": round(parts["one_dish_meal"], 4),
@@ -145,66 +146,92 @@ class MealPlanProblem(Problem):
         U = self.inventory.daily_usage_chrom(chrom, DAILY_SLOTS, N_SLOTS)
         return over + self.inv_weight * self.inventory.unused_score(U)
 
-    def _nutrition_violation(self, menus):
-        c       = self.constraint
-        W       = getattr(c, "nutrient_weight", None) or {}   # [2026-11-24] 시설 개선안: 영양소별 위반 가중치 (기본 1)
-        meal_v  = 0.0
-        daily_v = 0.0
-
-        for day in range(N_DAYS):
-            # [2026-10-11 수정] NUTRIENTS 하나로 끼니·일일 합계를 함께 계산
-            #   (기존: 끼니 합계에 vit_d 누락 → daily_vit_d_min 매일 위반 → f1 +0.4 고정)
-            daily_sum = {k: 0.0 for k in NUTRIENTS}
-            base      = day * N_SLOTS
-            day_menus = menus[base:base+N_SLOTS]
-
-            for _, slots in MEAL_SETS.items():
-                mm = [day_menus[s] for s in slots]
-                mn = {k: sum(m.get(k, 0) or 0 for m in mm) for k in NUTRIENTS}
-
-                for k, val in mn.items():
-                    lo = getattr(c, f"{k}_min", None)
-                    hi = getattr(c, f"{k}_max", None)
-                    w  = W.get(k, 1.0)
-                    if lo and val < lo: meal_v  += w * (lo - val) / lo
-                    if hi and val > hi: meal_v  += w * (val - hi) / hi
-                    daily_sum[k] += val
-
-            for k, val in daily_sum.items():
-                lo = getattr(c, f"daily_{k}_min", None)
-                hi = getattr(c, f"daily_{k}_max", None)
-                w  = W.get(k, 1.0)
-                if lo and val < lo: daily_v += w * (lo - val) / lo
-                if hi and val > hi: daily_v += w * (val - hi) / hi
-
-        meal_score  = meal_v  / (N_DAYS * 3)
-        daily_score = daily_v / N_DAYS
-        return meal_score * 0.6 + daily_score * 0.4
-
-    def nutrition_breakdown(self, menus) -> dict:
-        """[진단용] f1을 영양소별 기여도로 분해 (끼니 60% / 일일 40% 가중 반영)"""
-        c   = self.constraint
-        out = {}
-        def _add(key, v):
-            out[key] = out.get(key, 0.0) + v
+    def _nutrition_core(self, menus, detail: dict | None = None) -> float:
+        """[2026-11-24] f1 계산의 단일 원천 — 최적화 점수(f1)와 분해표(nutrition_breakdown)가 같은 식을 쓴다.
+        영양소별 위반 = (기준 − 값) / 기준 × 개선안 가중치(기본 1)
+        f1 = 0.6 × 끼니 위반 평균(84끼) + 0.4 × 일일 위반 평균(28일)
+        detail 을 넘기면 '끼니 sodium 초과' 같은 항목별 기여도를 채운다 (합 = f1)."""
+        c  = self.constraint
+        W  = getattr(c, "nutrient_weight", None) or {}   # 시설 개선안: 영양소별 위반 가중치 (기본 1)
+        km = 0.6 / (N_DAYS * 3)
+        kd = 0.4 / N_DAYS
+        total = 0.0
         for day in range(N_DAYS):
             daily_sum = {k: 0.0 for k in NUTRIENTS}
-            day_menus = menus[day*N_SLOTS:(day+1)*N_SLOTS]
+            day_menus = menus[day * N_SLOTS:(day + 1) * N_SLOTS]
             for _, slots in MEAL_SETS.items():
                 mm = [day_menus[s] for s in slots]
                 for k in NUTRIENTS:
                     val = sum(m.get(k, 0) or 0 for m in mm)
                     daily_sum[k] += val
-                    lo = getattr(c, f"{k}_min", None); hi = getattr(c, f"{k}_max", None)
-                    if lo and val < lo: _add(f"끼니 {k} 부족", (lo-val)/lo * 0.6/(N_DAYS*3))
-                    if hi and val > hi: _add(f"끼니 {k} 초과", (val-hi)/hi * 0.6/(N_DAYS*3))
+                    lo = getattr(c, f"{k}_min", None)
+                    hi = getattr(c, f"{k}_max", None)
+                    w  = W.get(k, 1.0)
+                    if lo and val < lo:
+                        v = w * (lo - val) / lo * km
+                        total += v
+                        if detail is not None:
+                            detail[f"끼니 {k} 부족"] = detail.get(f"끼니 {k} 부족", 0.0) + v
+                    if hi and val > hi:
+                        v = w * (val - hi) / hi * km
+                        total += v
+                        if detail is not None:
+                            detail[f"끼니 {k} 초과"] = detail.get(f"끼니 {k} 초과", 0.0) + v
             for k, val in daily_sum.items():
-                lo = getattr(c, f"daily_{k}_min", None); hi = getattr(c, f"daily_{k}_max", None)
-                if lo and val < lo: _add(f"일일 {k} 부족", (lo-val)/lo * 0.4/N_DAYS)
-                if hi and val > hi: _add(f"일일 {k} 초과", (val-hi)/hi * 0.4/N_DAYS)
+                lo = getattr(c, f"daily_{k}_min", None)
+                hi = getattr(c, f"daily_{k}_max", None)
+                w  = W.get(k, 1.0)
+                if lo and val < lo:
+                    v = w * (lo - val) / lo * kd
+                    total += v
+                    if detail is not None:
+                        detail[f"일일 {k} 부족"] = detail.get(f"일일 {k} 부족", 0.0) + v
+                if hi and val > hi:
+                    v = w * (val - hi) / hi * kd
+                    total += v
+                    if detail is not None:
+                        detail[f"일일 {k} 초과"] = detail.get(f"일일 {k} 초과", 0.0) + v
+        return total
+
+    def _nutrition_violation(self, menus):
+        return self._nutrition_core(menus)
+
+    def nutrition_breakdown(self, menus) -> dict:
+        """[진단용] f1 을 항목별 기여도로 분해 — f1 과 같은 계산(개선안 가중치 포함)이라 합이 f1 과 같다"""
+        out: dict = {}
+        self._nutrition_core(menus, out)
         return dict(sorted(out.items(), key=lambda x: -x[1]))
 
+    def _menu_diversity(self, menus):
+        """[2026-11-24] f3 편중 항의 다양성 (0~100, 클수록 다양)
+        · 대상: 국·주찬·부찬1·부찬2 (밥·김치는 후보가 1~2개라 매 끼니 반복이 정상 → 제외)
+        · 정규화 엔트로피 H / ln(M_max) — 쓴 메뉴 종류가 많을수록, 횟수가 고를수록 커진다
+          M_max = min(대상 칸 수, 후보 메뉴 종류 수) = 이 후보로 낼 수 있는 최대 종류 수
+          (이전 식은 실제로 나온 종류 수로 나눠, 2종을 고르게 돌린 식단과 20종을 고르게 돌린 식단이 둘 다 만점이었다.
+           Gini-Simpson 은 6종만 써도 0.83 으로 금방 포화돼 종류 수를 잘 가르지 못해 엔트로피를 쓴다)"""
+        names = [menus[t * 6 + k]["menu_name"] for t in range(len(menus) // 6) for k in REPEAT_SLOTS]
+        names = [n for n in names if n not in WHITELIST and not str(n).startswith("-(")]
+        N = len(names)
+        if N <= 1:
+            return 0.0
+        counts: dict = {}
+        for n in names:
+            counts[n] = counts.get(n, 0) + 1
+        m_max = min(N, self._n_candidates())
+        if m_max <= 1:
+            return 0.0
+        H = -sum((c / N) * math.log(c / N) for c in counts.values())
+        return min(1.0, H / math.log(m_max)) * 100
+
+    def _n_candidates(self) -> int:
+        """국·주찬·부찬 후보 메뉴 종류 수 (화이트리스트 제외)"""
+        if getattr(self, "_n_cand", None) is None:
+            names = {m["menu_name"] for cat in ("국", "주찬", "부찬") for m in self.pool.get(cat, [])}
+            self._n_cand = len(names - set(WHITELIST))
+        return self._n_cand
+
     def _simpson_diversity(self, menus):
+        """(구버전 f3 · 벤치마크 호환) 실제로 나온 종류 수로 정규화한 Simpson — 지금 f3 에는 쓰지 않는다"""
         names = [m["menu_name"] for m in menus]
         N = len(names)
         counts: dict = {}
