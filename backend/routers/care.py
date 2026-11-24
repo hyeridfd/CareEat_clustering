@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from care import engine, priority as prio, solution as sol, notify, nutrition as nutri, retrieval as rag
-from care import facility as fac, action as act
+from care import facility as fac, action as act, verify as ver
 from care.report import build_report
 from care.data import fetch_all, fetch_surveys
 from dependencies import create_token, get_supabase, require_staff, get_kst_now
@@ -535,10 +535,16 @@ def survey_check(eid: str, user: dict = Depends(require_staff)):
 
 class SolutionRequest(BaseModel):
     provider: Optional[str] = None  # openai | anthropic | rules (미지정 시 LLM_PROVIDER)
+    auto: Optional[bool] = None     # 자동 검증·승인·발송 (미지정 시 CARE_AUTO_VERIFY, 기본 켬)
+
+
+def _env_on(name: str, default: str = "1") -> bool:
+    return (os.getenv(name, default) or "").strip().lower() in ("1", "true", "yes", "on")
 
 
 @router.post("/residents/{eid}/solutions")
 def create_solution(eid: str, req: SolutionRequest, user: dict = Depends(require_staff)):
+    """초안 생성 → (자동 모드) 관리자용·보호자용 검증 → 통과 시 자동 승인·발송 / 수정 가능 시 재작성·재검증 / 근거 부족 시 보류"""
     sb, home = get_supabase(), user["scope_home"]
     _resident(sb, home, eid)
     a = _one(sb.table("care_assessments").select("*").eq("elderly_id", eid).order("created_at", desc=True).limit(1).execute(),
@@ -548,15 +554,38 @@ def create_solution(eid: str, req: SolutionRequest, user: dict = Depends(require
     except Exception:
         tinfo = {"code": a["type_code"], "name": a["type_name"], "guardian_label": a["type_name"], "description": ""}
     pr = {"score": a["priority_score"], "level": a["priority_level"], "factors": a["priority_factors"]}
-    content, gen, flags, cands = sol.generate(a["features"], tinfo, pr, a.get("transition") or {},
-                                              a["is_borderline"], req.provider)
+    auto = _env_on("CARE_AUTO_VERIFY") if req.auto is None else req.auto
+    verification = None
+    if auto:
+        res = ver.run(a["features"], tinfo, pr, a.get("transition") or {}, a["is_borderline"], req.provider,
+                      imputed=a.get("imputed_vars") or [])
+        content, gen, flags, cands, verification = res["content"], res["generator"], res["flags"], res["candidates"], res["verification"]
+    else:
+        content, gen, flags, cands = sol.generate(a["features"], tinfo, pr, a.get("transition") or {},
+                                                  a["is_borderline"], req.provider)
+    decision = (verification or {}).get("decision")
+    approved = decision in ("pass", "pass_staff_only")
+    body = {**{k: v for k, v in content.items() if k != "guardian_message"}, "candidate_rules": [c["id"] for c in cands]}
+    if verification:
+        body["verification"] = verification
     rec = jsonable({"assessment_id": a["id"], "elderly_id": eid, "nursing_home_id": home, "generator": gen,
-                    "content": {**{k: v for k, v in content.items() if k != "guardian_message"},
-                                "candidate_rules": [c["id"] for c in cands]},
-                    "guardian_message": content["guardian_message"], "guardrail_flags": flags,
-                    "status": "draft", "edited_by": user["actor"]})
+                    "content": body, "guardian_message": content["guardian_message"], "guardrail_flags": flags,
+                    "status": "approved" if approved else "draft", "edited_by": user["actor"],
+                    **({"approved_by": ver.AUTO_ACTOR, "approved_at": get_kst_now()} if approved else {})})
     out = sb.table("care_solutions").insert(rec).execute()
-    return out.data[0] if out.data else rec
+    row = out.data[0] if out.data else rec
+    if decision == "pass" and _env_on("CARE_AUTO_SEND") and row.get("id"):
+        try:
+            sent = _send(sb, home, row, None, ver.AUTO_ACTOR)
+            row["auto_send"] = {"ok": True, **sent}
+            if any(x["status"] == "sent" for x in sent["results"]):
+                row["status"] = "sent"
+        except HTTPException as e:          # 동의한 보호자가 없음 등 → 승인만 하고 발송은 건너뜀
+            row["auto_send"] = {"ok": False, "reason": e.detail}
+        verification["send"] = row["auto_send"]
+        sb.table("care_solutions").update(jsonable({"content": {**body, "verification": verification}})).eq("id", row["id"]).execute()
+        row["content"] = {**body, "verification": verification}
+    return row
 
 
 class SolutionEdit(BaseModel):
@@ -578,6 +607,9 @@ def edit_solution(sid: str, req: SolutionEdit, user: dict = Depends(require_staf
     warnings = []
     if req.content is not None:
         upd["content"] = {**s["content"], **req.content}
+    if (s.get("content") or {}).get("verification"):   # 검증 뒤 사람이 고침 → 표시
+        upd["content"] = {**(upd.get("content") or s["content"])}
+        upd["content"]["verification"] = {**upd["content"]["verification"], "edited_after": True}
     if req.guardian_message is not None:
         g = req.guardian_message.strip()
         warnings = sol._scan(g) + (["전문용어·코드 포함"] if sol.JARGON.search(g) else [])
@@ -624,14 +656,20 @@ def _focus(content):
 def send_solution(sid: str, req: SendRequest, user: dict = Depends(require_staff)):
     sb, home = get_supabase(), user["scope_home"]
     s = _solution(sb, home, sid)
+    return _send(sb, home, s, req.guardian_ids, user["actor"])
+
+
+def _send(sb, home, s, guardian_ids, actor):
+    """승인된 솔루션을 동의한 보호자에게 발송 (담당자 발송·자동 발송 공용)"""
+    sid = s["id"]
     if s["status"] not in ("approved", "sent"):
         raise HTTPException(status_code=400, detail="담당자 승인 후에만 보호자에게 보낼 수 있습니다.")
     r = _resident(sb, home, s["elderly_id"])
     a = _one(sb.table("care_assessments").select("*").eq("id", s["assessment_id"]).execute())
     q = sb.table("guardians").select("*").eq("elderly_id", s["elderly_id"]).eq("is_active", True)
     guardians = q.execute().data
-    if req.guardian_ids:
-        guardians = [g for g in guardians if g["id"] in req.guardian_ids]
+    if guardian_ids:
+        guardians = [g for g in guardians if g["id"] in guardian_ids]
     consented = [g for g in guardians if g.get("consent_health_info")]
     if not consented:
         raise HTTPException(status_code=400, detail="건강정보 수신에 동의한 보호자가 없습니다.")
@@ -663,7 +701,7 @@ def send_solution(sid: str, req: SendRequest, user: dict = Depends(require_staff
         rec = {"solution_id": sid, "guardian_id": g["id"], "elderly_id": s["elderly_id"], "nursing_home_id": home,
                "channel": "sms" if mode == "sms" else "kakao_alimtalk", "mode": mode, "provider": sender.name, "template_code": "CARE_REPORT_V1", "variables": variables,
                "rendered_text": text, "report_token": token, "report_expires_at": expires.isoformat(),
-               "status": status, "provider_response": resp, "sent_by": user["actor"]}
+               "status": status, "provider_response": resp, "sent_by": actor}
         sb.table("care_notifications").insert(jsonable(rec)).execute()
         results.append({"guardian": g["name"], "phone": notify.mask_phone(g["phone"]), "status": status,
                         "mode": mode, "text": text, "button": extra["button"], "report_url": link,

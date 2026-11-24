@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import api from '../../lib/api'
 import CareLayout from '../../components/care/CareLayout'
-import { Card, LevelPill, ScoreBar, ScoreHelp, SOLUTION_STATUS, TRANSITION, TypeBadge, errMsg, fmtDate } from '../../components/care/CareUI'
+import { Card, LevelPill, ScoreBar, ScoreHelp, SOLUTION_STATUS, TRANSITION, TypeBadge, VerifyPanel, errMsg, fmtDate } from '../../components/care/CareUI'
 import Avatar from '../../components/care/Avatar'
 import ResidentProfileTab from './ResidentProfileTab'
 import ResidentHistoryTab from './ResidentHistoryTab'
@@ -267,8 +267,15 @@ export default function ResidentCarePage() {
 
   const reassess = () => act('assess', () => api.post('/care/assess', { elderly_ids: [elderlyId], force: true }, { timeout: 120000 }),
     () => '최신 설문 기준으로 다시 평가했습니다.')
-  const generate = () => act('gen', () => api.post(`/care/residents/${elderlyId}/solutions`, provider ? { provider } : {}, { timeout: 120000 }),
-    (r) => `솔루션 초안을 만들었습니다 (${r.data.generator}). 검토 후 승인하세요.`)
+  // [2026-11-24] 초안 생성 → 자동 검증(재작성 최대 2회) → 통과 시 자동 승인·발송 / 근거 부족 시 보류
+  const generate = () => act('gen', () => api.post(`/care/residents/${elderlyId}/solutions`, provider ? { provider } : {}, { timeout: 420000 }),
+    (r) => {
+      const v = r.data.content?.verification
+      if (!v) return `솔루션 초안을 만들었습니다 (${r.data.generator}). 검토 후 승인하세요.`
+      if (v.decision === 'pass') return `검증을 통과해 자동 승인했습니다${v.rewrites ? ` (재작성 ${v.rewrites}회)` : ''}. ${v.send?.ok ? '보호자에게 자동 발송했습니다.' : `자동 발송 안 함: ${v.send?.reason || '설정 꺼짐'}`}`
+      if (v.decision === 'pass_staff_only') return '관리자용은 자동 승인했고, 보호자 안내문은 기준 미달이라 발송하지 않았습니다. 확인 후 발송하세요.'
+      return `보류했습니다 — ${v.reason.replace(/^보류 — /, '')}`
+    })
   const save = () => act('save', () => api.put(`/care/solutions/${draft.id}`, {
     content: { summary: draft.summary, staff_actions: draft.staff_actions, meal_guidance: draft.meal_guidance.filter(Boolean),
       monitoring: draft.monitoring.filter(Boolean), cautions: draft.cautions.filter(Boolean),
@@ -419,7 +426,10 @@ export default function ResidentCarePage() {
 
         {/* 오른쪽: 솔루션 · 보호자 · 기록 */}
         <div className="lg:col-span-3 space-y-5">
-          <Card title="돌봄 솔루션" right={sol && <span className={`text-xs rounded-full px-2.5 py-0.5 ${SOLUTION_STATUS[sol.status]?.cls}`}>{SOLUTION_STATUS[sol.status]?.label}</span>}>
+          <Card title="돌봄 솔루션" right={sol && <span className={`text-xs rounded-full px-2.5 py-0.5 ${SOLUTION_STATUS[sol.status]?.cls}`}>
+            {sol.status === 'draft' && sol.content?.verification?.decision === 'hold' ? '보류 · 검토 필요'
+              : sol.approved_by === 'auto-verifier' && sol.status === 'approved' ? '자동 승인됨'
+              : sol.approved_by === 'auto-verifier' && sol.status === 'sent' ? '자동 승인 · 발송됨' : SOLUTION_STATUS[sol.status]?.label}</span>}>
             <div className="flex flex-wrap items-center gap-2 mb-4">
               <select value={provider} onChange={(e) => setProvider(e.target.value)} className="form-select w-auto text-sm">
                 {PROVIDERS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
@@ -429,6 +439,9 @@ export default function ResidentCarePage() {
               </button>
               {sol && <span className="text-xs text-gray-400">{sol.generator} · {fmtDate(sol.created_at)}</span>}
             </div>
+
+            {sol?.content?.verification && <VerifyPanel v={sol.content.verification} />}
+            {busy === 'gen' && <p className="mb-3 text-xs text-gray-500">초안 생성 → 관리자용·보호자용 검증 중입니다. 기준에 못 미치면 다시 써서 재검증하므로 1~3분 걸릴 수 있습니다.</p>}
 
             {sol?.guardrail_flags?.length > 0 && (
               <div className="mb-4 rounded-xl bg-amber-50 border border-amber-200 px-4 py-3">

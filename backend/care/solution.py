@@ -22,7 +22,7 @@ from . import nutrition as nutri
 from . import retrieval
 from .priority import LEVEL_LABEL
 
-PROMPT_VERSION = "2026-09-20-cite5"   # 프롬프트를 고칠 때마다 올린다 (배포 확인용)
+PROMPT_VERSION = "2026-11-24-verify1"   # 프롬프트를 고칠 때마다 올린다 (배포 확인용)
 
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-5")
@@ -89,6 +89,7 @@ SYSTEM_PROMPT = """당신은 요양원 식사·영양 돌봄 코디네이터를 
 4. guardian_message 는 보호자가 읽는 3~5문장의 쉬운 존댓말입니다. 점수·척도명(MNA, GDS 등)·유형 코드와 [G1] 같은 인용 표기를 쓰지 않고, 불안을 주지 않되 사실대로 씁니다. 350자 이내.
 5. '참고 지침'이 주어지면 **발췌를 하나씩 모두 검토**합니다. 이 어르신의 조치·지침·주의사항과 **내용이 실제로 맞는 발췌는 빠짐없이** 해당 문장에 [G#] 로 답니다. 쓸 수 있는 발췌가 여러 개면 여러 문장에 나누어 답니다. 다만 내용이 맞지 않으면 쓰지 않습니다 — 개수를 채우려고 관련 없는 번호를 붙이거나, 인력 배치·시설 운영에 관한 발췌를 개별 식사 조치의 근거로 달면 안 됩니다.
 5-1. 발췌에 규칙 문장보다 **더 구체적인 내용(수치, 조리 방법, 빈도, 주의점)**이 있으면 그것을 문장에 반영하고 근거를 답니다. 후보 조치를 그대로 옮겨 쓰기만 하면 지침을 전달한 의미가 없습니다. 예: '간식을 추가합니다' 대신 '끼니 사이와 취침 전에 간식을 두어 언제든 드실 수 있게 합니다 [G3]'.
+5-2. 입력에 '검증 피드백'이 있으면 이전 초안을 검수에서 지적한 내용입니다. 지적한 항목을 모두 고쳐 처음부터 다시 작성합니다. 다른 규칙(후보 안에서만 조치, 약·용량 금지, 근거 번호 규칙)은 그대로 지킵니다.
 6. 반드시 아래 JSON 한 개만 출력합니다.
 
 {"summary": "담당자용 2~3문장 요약",
@@ -370,7 +371,10 @@ def validate(out: dict, candidates: list, fallback: dict, refs: list | None = No
     return clean, flags
 
 
-def generate(features, type_info, priority, transition, is_borderline, provider: str | None = None):
+def generate(features, type_info, priority, transition, is_borderline, provider: str | None = None,
+             feedback: list | None = None, detail: dict | None = None):
+    """feedback: 검증 에이전트의 재작성 지시 (care/verify.py)
+       detail : 넘기면 검증에 쓸 중간 자료(ctx_rules, snippets, refs, ctx_payload)를 채워 준다"""
     _n, npct, low_meal = nutrition_summary(features)
     ctx_rules = {"factor_codes": {x["code"] for x in priority["factors"]}, "is_borderline": is_borderline,
                  "priority_level": priority["level"], "nutrition_pct": npct, "low_meal": low_meal,
@@ -378,10 +382,17 @@ def generate(features, type_info, priority, transition, is_borderline, provider:
     candidates = care_rules.select(features, ctx_rules)
     fallback = rules_solution(type_info, priority, candidates)
     provider = (provider or os.getenv("LLM_PROVIDER", "none")).lower()
+    if detail is not None:
+        detail.update(ctx_rules=ctx_rules, snippets=[], refs=[],
+                      ctx_payload=build_context(features, type_info, priority, candidates, transition))
     if provider in ("", "none", "rules"):
         return fallback, "rules", [], candidates
     snippets, refs = retrieval.guideline_context(features, candidates, ctx_rules)
     ctx = build_context(features, type_info, priority, candidates, transition, snippets)
+    if detail is not None:
+        detail.update(snippets=snippets, refs=refs)
+    if feedback:
+        ctx["검증 피드백"] = {"설명": "이전 초안을 검수한 결과입니다. 아래를 모두 고쳐 다시 작성하세요.", "고칠 점": feedback}
     try:
         raw, gen = call_openai(ctx) if provider == "openai" else call_anthropic(ctx)
         clean, flags = validate(raw, candidates, fallback, refs)
