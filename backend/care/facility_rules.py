@@ -99,7 +99,9 @@ def rule(id, area, severity, title, needs_nutrition=False):
 
 
 # ── 데이터 품질: 진단의 신뢰도가 먼저다 ──
-@rule("F_DATA_COVERAGE", "data", 3, "평가가 끝나지 않아 시설 진단을 신뢰하기 어렵습니다")
+# [2026-11-24] 관리 우선순위에서 제외: 평가 완료율은 조사 진행 상황이지 시설 운영 문제가 아님.
+#   (규칙 함수는 남겨 둠 — 다시 쓰려면 아래 줄의 주석을 풀면 된다)
+# @rule("F_DATA_COVERAGE", "data", 3, "평가가 끝나지 않아 시설 진단을 신뢰하기 어렵습니다")
 def _f_cov(p):
     cov = p.get("coverage_pct")
     if cov is None or cov >= 80:
