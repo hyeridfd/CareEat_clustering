@@ -95,7 +95,7 @@ function PriorityCard({ x }) {
           {x.basis && <p className="mt-0.5 text-xs text-muted">{x.basis}</p>}
           {x.severity_reason && (
             <p className="mt-1.5 text-xs leading-5 text-slate-600">
-              <b className={`mr-1 rounded px-1 py-0.5 text-[11px] ${sev.chip}`}>왜 심각도 {x.severity}?</b>
+              <b className={`mr-1 rounded px-1 py-0.5 text-[11px] ${sev.chip}`}>{sev.label} 판단 근거</b>
               {x.severity_reason}
               {x.severity_rule && <span className="text-muted"> (심각도 {x.severity} 기준: {x.severity_rule})</span>}
             </p>
