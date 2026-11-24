@@ -25,7 +25,7 @@ from . import solution as sol
 
 log = logging.getLogger("uvicorn.error")
 
-VERIFY_VERSION = "2026-11-24-v3"
+VERIFY_VERSION = "2026-11-24-v4"
 STAFF_PASS = 80          # 관리자용 통과 점수
 GUARDIAN_PASS = 85       # 보호자용 통과 점수
 MAX_REWRITE = 2          # 재작성 최대 횟수 (첫 초안 + 2회)
@@ -50,7 +50,7 @@ def _undereat(f, c):
 DISEASE_CHECKS = [
     dict(id="HTN", label="고혈압·나트륨 과다", source="대한고혈압학회 진료지침",
          when=lambda f, c: CR._flag(f, "dx_hypertension") or CR._dx(f, "고혈압") or CR._above(c, "na", 130),
-         must=[("국물·절임 등 염분 줄이기", r"국물|염분|나트륨|짠|저염|싱겁|간을|간이|절임|젓갈|장아찌")],
+         must=[("국물·절임 등 염분 줄이기", r"국물|염분|나트륨|소금|짠|저염|싱겁|간을|간이|절임|젓갈|장아찌|건더기|국과 찌개|국·찌개|찌개")],
          forbid=[("국물·간을 늘리는 권장", r"(국물|간)[을를]?\s*(더|많이|넉넉히|충분히)\s*(드|제공|늘)|짜게")]),
     dict(id="DM", label="당뇨", source="대한당뇨병학회 진료지침",
          when=lambda f, c: CR._flag(f, "dx_diabetes") or CR._dx(f, "당뇨"),
@@ -94,8 +94,9 @@ WHEN = re.compile(r"아침|점심|저녁|끼니마다|매\s?끼|식사\s?(전|�
 WHAT = re.compile(r"두부|달걀|계란|우유|두유|요구르트|요거트|치즈|생선|고등어|조기|고기|닭|소고기|돼지|멸치|콩|나물|채소|과일|바나나|사과|고구마|감자|죽|미음|누룽지|국물|김치|젓갈|장아찌|밥|간식|떡|빵|견과|다져|다진|갈아|간\s|으깨|데쳐|삶|찜|구이|볶|저염|싱겁|걸쭉|점도|자세|턱|숟가락|빨대|컵|체중|섭취율|혈당|기록|사레|기침|식판|손잡이|보조")
 # 식사로 해결하는 조치인가 — 메뉴·음식·조리·식사형태·배식 표현 (체중·기록·혈당 같은 관찰어는 제외)
 MEALFOOD = re.compile(r"두부|달걀|계란|우유|두유|요구르트|요거트|치즈|생선|고등어|가자미|동태|조기|고기|닭|소고기|돼지|멸치|뱅어포|콩|나물|채소|시금치|무청|버섯|미역|과일|바나나|사과|고구마|감자|잡곡|죽|미음|누룽지|숭늉|국물|국을|국은|건더기|김치|백김치|물김치|젓갈|장아찌|가공육|밥|반찬|주찬|부찬|간식|떡|빵|카스텔라|견과|메뉴|배식|담아|제공|드립니다|드리고|다져|다진|갈아|갈은|으깨|데쳐|삶|찜|조림|구이|볶음|저염|싱겁|간장|된장|들기름|참기름|깨|식초|레몬|점도|걸쭉|식사형태|한입|주먹밥|전\b|물\s?\d|물 하루")
-SPEC_MIN = 0.7           # 식사 조치 중 '무엇·얼마나·언제'를 모두 갖춘 비율이 이보다 낮으면 재작성
 MEAL_MIN = 0.8           # 조치 중 식사로 해결하는 조치의 비율이 이보다 낮으면 재작성
+NUM = re.compile(r"(?<![\[\d.])(\d[\d,]*(?:\.\d+)?)(?![\]\d])")   # 조치 속 숫자 (근거 번호 [1] 은 제외)
+REFTAG = re.compile(r"\[(\d+)\]")
 
 
 def _sentences(t: str):
@@ -135,7 +136,8 @@ def conditions(features: dict, ctx: dict) -> list[dict]:
 
 # ─────────────────────────── ① 결정적 검사 ───────────────────────────
 
-def rule_checks(content: dict, conds: list, priority: dict, candidates: list, flags: list) -> dict:
+def rule_checks(content: dict, conds: list, priority: dict, candidates: list, flags: list,
+                ref_text: dict | None = None, input_text: str = "") -> dict:
     texts = staff_texts(content)
     joined = " ".join(texts)
     sents = [s for t in texts for s in _sentences(t)]
@@ -161,28 +163,59 @@ def rule_checks(content: dict, conds: list, priority: dict, candidates: list, fl
     miss = [n for n in need if not n["ok"]]
     if miss:
         gates.append({"code": "H6", "label": "돌봄 우선순위 요인 누락", "detail": [f"{n['factor']} ({'/'.join(n['rules'])})" for n in miss]})
-    # 식사 해결 + 구체성: 식사 조치는 무엇(메뉴·음식·조리)·얼마나(양·횟수)·언제(끼니·주기)를 모두 갖춰야 한다
+    # ① 근거 지침: 조치마다 [n] 근거가 있어야 한다 (의료진 확인·재평가 같은 예외 규칙 제외)
+    # ② 숫자 출처: 조치 속 숫자는 출처(근거 발췌 또는 입력 자료)에서 확인되어야 한다
+    # ③ 식사 해결: 메뉴·음식·조리·배식으로 해결하는 조치인가  (얼마나·언제는 점수에만 반영, 관문 아님)
+    ref_text = {str(k): re.sub(r"[,\s]", "", v or "") for k, v in (ref_text or {}).items()}
+    inp = re.sub(r"[,\s]", "", input_text or "")
     spec_items = []
     for i, a in enumerate(acts, 1):
         t = a.get("action", "")
+        body = t + " " + a.get("why", "")
         exempt = a.get("rule_id") in CR.NON_MEAL_RULES
+        cites = sorted(set(REFTAG.findall(body)), key=int)
         has = {"무엇": bool(MEALFOOD.search(t)) if not exempt else bool(WHAT.search(t)),
                "얼마나": bool(AMOUNT.search(t)), "언제": bool(WHEN.search(t))}
-        meal = exempt or has["무엇"]
-        ok = True if exempt else all(has.values())   # 의료진 확인·재평가는 식사 조치가 아니라 예외
-        spec_items.append({"index": i, "rule_id": a.get("rule_id"), "text": t[:60], "has": has, "ok": ok, "meal": meal, "exempt": exempt})
+        declared = [(str(n.get("value", "")).replace(",", ""), str(n.get("source", ""))) for n in a.get("numbers") or []]
+        nums = []
+        for m in NUM.finditer(REFTAG.sub("", t)):
+            v = m.group(1).replace(",", "")
+            src = next((s_ for k_, s_ in declared if v in k_), "")
+            tag = re.sub(r"\D", "", src) if re.fullmatch(r"G?\d+", src) else ""
+            has_num = lambda txt: bool(re.search(rf"(?<![\d.]){re.escape(v)}(?![\d])", txt or ""))
+            hit = next((c for c in cites if has_num(ref_text.get(c, ""))), None)
+            if tag and has_num(ref_text.get(tag, "")):
+                ok, label = True, f"근거 [{tag}]"
+            elif src.startswith("입력") and has_num(inp):
+                ok, label = True, src
+            elif hit:                                 # 출처를 안 적었어도 인용한 발췌에 있는 숫자면 인정
+                ok, label = True, f"근거 [{hit}]"
+            else:                                     # 출처를 안 적은 숫자는 입력 자료에 우연히 같은 숫자가 있어도 인정하지 않는다
+                ok, label = False, src or "출처 없음"
+            nums.append({"value": m.group(0), "source": label, "ok": ok})
+        spec_items.append({"index": i, "rule_id": a.get("rule_id"), "text": t[:60], "has": has, "meal": exempt or has["무엇"],
+                           "exempt": exempt, "cites": cites, "cited": exempt or bool(cites), "numbers": nums,
+                           "ok": all(has.values()) or exempt})
     mg = content.get("meal_guidance") or []
     mg_ok = [bool(MEALFOOD.search(x)) and (bool(AMOUNT.search(x)) or bool(WHEN.search(x))) for x in mg]
-    act_ratio = sum(x["ok"] for x in spec_items) / len(spec_items) if spec_items else 0
-    meal_ratio = sum(x["meal"] for x in spec_items) / len(spec_items) if spec_items else 0
+    n = len(spec_items) or 1
+    cite_ratio = sum(x["cited"] for x in spec_items) / n if spec_items else 0
+    meal_ratio = sum(x["meal"] for x in spec_items) / n if spec_items else 0
+    act_ratio = sum(x["ok"] for x in spec_items) / n if spec_items else 0
     mg_ratio = sum(mg_ok) / len(mg_ok) if mg_ok else 0
-    spec = 0.5 * act_ratio + 0.2 * meal_ratio + 0.3 * mg_ratio
+    all_nums = [y for x in spec_items for y in x["numbers"]]
+    num_ratio = sum(y["ok"] for y in all_nums) / len(all_nums) if all_nums else 1.0
+    spec = 0.5 * meal_ratio + 0.3 * act_ratio + 0.2 * mg_ratio
+    if spec_items and cite_ratio < 1.0:
+        gates.append({"code": "H9", "label": "근거 지침이 없는 조치",
+                      "detail": [f"조치 {x['index']}({x['rule_id']})" for x in spec_items if not x["cited"]]})
+    bad_nums = [(x["index"], y["value"]) for x in spec_items for y in x["numbers"] if not y["ok"]]
+    if bad_nums:
+        gates.append({"code": "H10", "label": "출처를 확인할 수 없는 숫자",
+                      "detail": [f"조치 {i}: {v}" for i, v in bad_nums]})
     if spec_items and meal_ratio < MEAL_MIN:
         gates.append({"code": "H8", "label": "식사로 해결하는 조치가 부족함",
                       "detail": [f"조치 {x['index']}: 관찰·확인 위주" for x in spec_items if not x["meal"]]})
-    if spec_items and act_ratio < SPEC_MIN:
-        gates.append({"code": "H7", "label": "조치가 구체적이지 않음",
-                      "detail": [f"조치 {x['index']}: {', '.join(k for k, v in x['has'].items() if not v)} 빠짐" for x in spec_items if not x["ok"]]})
     # 형식
     fmt_issues = []
     for key, lo, hi in (("staff_actions", 3, 6), ("meal_guidance", 3, 5), ("monitoring", 3, 5), ("cautions", 2, 4)):
@@ -196,6 +229,7 @@ def rule_checks(content: dict, conds: list, priority: dict, candidates: list, fl
         fmt_issues.append(f"가드레일이 고친 항목 {len(replaced)}건")
     return {"gates": gates, "must": must_res, "forbid": forbid_hits, "coverage": need,
             "specificity": round(spec, 3), "spec_actions": spec_items, "spec_meal": round(mg_ratio, 3), "meal_ratio": round(meal_ratio, 3),
+            "cite_ratio": round(cite_ratio, 3), "num_ratio": round(num_ratio, 3),
             "format_issues": fmt_issues, "decimals": dec}
 
 
@@ -231,7 +265,7 @@ NUTRITIONIST_PROMPT = """당신은 요양원 급식을 20년 담당한 임상 �
 """ + _COMMON + """
 
 맡은 항목과 기준
-- actions (입력의 '맡은 조치' 번호만): 식사(메뉴·음식·조리·배식)로 해결하는 조치인가, 구체적인 메뉴·양·시점이 있어 조리실과 배식 담당자가 그대로 따라 할 수 있는가, 이유(why)가 입력 지표와 맞는가, 영양·질환 식사 지침과 충돌이 없는가. 관찰·기록만 하는 조치는 fix.
+- actions (입력의 '맡은 조치' 번호만): 조치 내용이 붙은 근거 발췌([n])에 실제로 적힌 방법인가(가장 중요 — 발췌에 없는 방법·숫자면 unsupported), 조치에 쓴 숫자가 근거 발췌나 입력 자료에 있는가, 식사(메뉴·음식·조리·배식)로 해결하는 조치인가, 구체적인 메뉴·양·시점이 있어 조리실과 배식 담당자가 그대로 따라 할 수 있는가, 이유(why)가 입력 지표와 맞는가, 영양·질환 식사 지침과 충돌이 없는가. 관찰·기록만 하는 조치는 fix.
 - meal_guidance: 진단 질환에 맞는 식사 조정과 잔반이 많은 음식군 대응이 각각 있는가, 기준 80% 미만 영양소와 나트륨 초과가 반영됐는가, 음식과 양·시점이 구체적인가.
 - disease_alignment: '지침 점검 조건' 중 맡은 조건마다 met / missing / conflict.
 
@@ -247,7 +281,7 @@ NURSE_PROMPT = """당신은 요양원에서 15년 일한 간호사(AI 간호사)
 
 맡은 항목과 기준
 - summary: 입력 지표와 우선순위 요인을 맞게 요약했는가, 과장·누락이 없는가.
-- actions (입력의 '맡은 조치' 번호만): 식사 안전·도움·정서·질환 관리 조치가 입력과 맞는가, 누가·언제·무엇을 확인하는지 구체적인가, 의료 판단이 필요한 부분을 의료진 상의로 넘겼는가.
+- actions (입력의 '맡은 조치' 번호만): 조치 내용이 붙은 근거 발췌([n])에 실제로 적힌 방법인가(발췌에 없는 방법·숫자면 unsupported), 식사 안전·도움·정서·질환 관리 조치가 입력과 맞는가, 누가·언제·무엇을 확인하는지 구체적인가, 의료 판단이 필요한 부분을 의료진 상의로 넘겼는가.
 - monitoring: 관찰할 지표, 주기, 기준(얼마나 바뀌면 알릴지)이 있는가.
 - cautions: 이 어르신에게 해당하는 위험인가, 질환 간 충돌(예: 당뇨인데 영양불량)을 짚는가.
 - disease_alignment: '지침 점검 조건' 중 맡은 조건마다 met / missing / conflict.
@@ -406,8 +440,10 @@ def score(content: dict, rc: dict, gc: dict, ag: dict | None, has_refs: bool) ->
     ag_act = (sum(_s(a) for a in acts) / (2 * len(acts))) if acts else None
     spec = rc["specificity"] if ag_act is None else 0.5 * rc["specificity"] + 0.5 * ag_act
     fmt = max(0.0, 1 - 0.25 * len(rc["format_issues"]))
-    staff_parts = {"질환 지침 일치": round(30 * align, 1), "우선순위 요인 대응": round(25 * cover, 1),
-                   "근거 인용 정확도": round(20 * cite, 1), "구체성": round(15 * spec, 1), "형식": round(10 * fmt, 1)}
+    evid = rc.get("cite_ratio", 0) * (0.5 + 0.5 * cite)          # 조치마다 근거가 달렸는가 × 그 근거가 실제로 뒷받침하는가
+    staff_parts = {"근거 지침 연결": round(25 * evid, 1), "질환 지침 일치": round(25 * align, 1),
+                   "우선순위 요인 대응": round(20 * cover, 1), "식사 해결·구체성": round(15 * spec, 1),
+                   "숫자 출처": round(10 * rc.get("num_ratio", 1.0), 1), "형식": round(5 * fmt, 1)}
     # 보호자용 (보호자 행동 안내 항목은 뺐다)
     cons = _s(gd.get("consistency")) / 2 if gd.get("consistency") else 0.75
     tone = gc["tone_rule"] + (5 * _s(gd.get("tone")) / 2 if gd.get("tone") else 3)          # 0~20
@@ -464,13 +500,13 @@ def feedback(content: dict, rc: dict, gc: dict, sc: dict, ag: dict | None) -> li
         if not c["ok"]:
             fb.append(f"우선순위 요인 '{c['factor']}'에 대한 조치({'/'.join(c['rules'])})를 포함하세요.")
     for x in rc.get("spec_actions") or []:
+        if not x["cited"]:
+            fb.append(f"조치 {x['index']}({x['rule_id']}) “{x['text']}…”에 근거 지침이 없습니다. 그 규칙의 '근거 발췌'에 적힌 방법으로 다시 쓰고 [G#] 를 붙이세요. 뒷받침하는 발췌가 없으면 그 내용은 쓰지 마세요.")
+        for y in x["numbers"]:
+            if not y["ok"]:
+                fb.append(f"조치 {x['index']}의 숫자 '{y['value']}'는 근거 발췌·입력 자료에서 확인되지 않습니다. 출처가 있는 숫자만 쓰고 numbers 에 출처를 적거나, 숫자 대신 '지금보다 적게' 같은 표현으로 바꾸세요.")
         if not x["meal"]:
-            fb.append(f"조치 {x['index']}({x['rule_id']}) “{x['text']}…”는 관찰·확인 위주입니다. 식사로 해결하는 방법(어떤 메뉴·음식을, 얼마나, 언제)으로 바꾸고 관찰은 monitoring 으로 옮기세요. 후보의 '식사 해결 예시'와 '식사 기록 메뉴'를 쓰세요.")
-        elif not x["ok"]:
-            miss = [k for k, v in x["has"].items() if not v]
-            fb.append(f"조치 {x['index']}({x['rule_id']}) “{x['text']}…”에 '{'·'.join(miss)}' 내용을 구체적으로 쓰세요 (예: 어떤 음식을, 몇 번·얼마나, 어느 끼니·요일에).")
-    if rc.get("spec_meal", 1) < 0.8:
-        fb.append("식사 지침마다 구체적인 음식과 양 또는 시점을 함께 쓰세요.")
+            fb.append(f"조치 {x['index']}({x['rule_id']}) “{x['text']}…”는 관찰·확인 위주입니다. 근거 발췌의 방법을 식사(메뉴·조리·배식)로 적용하고, 관찰은 monitoring 으로 옮기세요.")
     for x in rc["format_issues"]:
         fb.append(f"형식: {x}" + (" — 소수점 첫째 자리까지만 쓰세요." if "소수점" in x else ""))
     st = (ag or {}).get("staff") or {}
@@ -504,7 +540,10 @@ def run(features, type_info, priority, transition, is_borderline, provider=None,
                                                   provider, feedback=fb, detail=detail)
         ctx_rules = detail.get("ctx_rules") or {}
         conds = conditions(features, ctx_rules)
-        rc = rule_checks(content, conds, priority, cands, flags)
+        by_orig = {x["id"]: x.get("내용", "") for x in detail.get("snippets") or []}
+        ref_text = {str(r["tag"]): by_orig.get(r.get("orig_tag"), "") for r in content.get("references") or []}
+        rc = rule_checks(content, conds, priority, cands, flags, ref_text,
+                         json.dumps(detail.get("ctx_payload") or {}, ensure_ascii=False))
         gc = guardian_checks(content.get("guardian_message", ""), flags)
         ag, ag_gen, ag_err = None, None, None
         vp = _verify_provider(gen_provider)

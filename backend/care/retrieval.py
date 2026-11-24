@@ -28,6 +28,7 @@ MAX_QUERIES = int(os.getenv("RAG_QUERIES", "5"))        # 질의 수 (임베딩 
 PER_QUERY = int(os.getenv("RAG_PER_QUERY", "2"))        # 질의당 문단 수
 MAX_SNIPPETS = int(os.getenv("RAG_SNIPPETS", "6"))      # 프롬프트에 넣을 문단 총수
 SNIPPET_CHARS = int(os.getenv("RAG_SNIPPET_CHARS", "420"))
+PINNED_CHARS = int(os.getenv("RAG_PINNED_CHARS", "800"))   # 규칙에 고정 연결한 조항은 숫자·방법이 잘리지 않게 길게
 MIN_SIM = float(os.getenv("RAG_MIN_SIM", "0.33"))       # 절대 하한
 
 # 상대 하한 — 한 질의 안에서 1등 대비 이 비율 아래는 버린다.
@@ -232,6 +233,43 @@ def guideline_context(features: dict, candidates: list, ctx_rules: dict):
     return pack(rows)
 
 
+def guideline_context_pinned(features: dict, candidates: list, ctx_rules: dict, pairs_by_rule: dict,
+                             max_pinned: int = 12, max_total: int = 14):
+    """[2026-11-24] 개인 솔루션용 근거: ① 후보 규칙마다 연결해 둔 지침 조항을 먼저 ② 남는 자리는 의미 검색으로.
+    반환: (snippets, refs, rule_tags) — rule_tags = {rule_id: [그 규칙의 근거 조항 G 번호]}"""
+    if not enabled():
+        return [], [], {}
+    pairs = []
+    for ps in pairs_by_rule.values():
+        for p in ps:
+            if tuple(p) not in pairs:
+                pairs.append(tuple(p))
+    rows = []
+    try:
+        rows = by_sections(pairs[:max_pinned])
+    except Exception as e:
+        log.warning("[care] 고정 근거 조항 읽기 실패: %r", e)
+    try:
+        queries = build_queries(features, candidates, ctx_rules)
+        seen = {(r["source_id"], r.get("section")) for r in rows}
+        for r in (search(queries) if queries else []):
+            if len(rows) >= max_total:
+                break
+            if (r["source_id"], r.get("section")) not in seen:
+                rows.append(r)
+                seen.add((r["source_id"], r.get("section")))
+    except Exception as e:
+        log.warning("[care] 지침 검색 생략: %r", e)
+    if not rows:
+        return [], [], {}
+    snippets, refs = pack(rows)
+    tag_of = {}
+    for i, r in enumerate(rows, 1):
+        tag_of.setdefault((r["source_id"], r.get("section")), f"G{i}")
+    rule_tags = {rid: [tag_of[tuple(p)] for p in ps if tuple(p) in tag_of] for rid, ps in pairs_by_rule.items()}
+    return snippets, refs, rule_tags
+
+
 def pack(rows: list, start: int = 1):
     """검색 결과 → (프롬프트용 발췌, 출처 목록). 개인/시설 양쪽에서 함께 쓴다."""
     snippets, refs = [], []
@@ -240,7 +278,7 @@ def pack(rows: list, start: int = 1):
         src = row.get("source") or {}
         label = src.get("citation") or " ".join(str(x) for x in [src.get("title"), src.get("org"), src.get("year")] if x)
         loc = _locator(row)
-        text = re.sub(r"\s+", " ", re.sub(r"\*\*|__", "", row["text"])).strip()[:SNIPPET_CHARS]
+        text = re.sub(r"\s+", " ", re.sub(r"\*\*|__", "", row["text"])).strip()[:PINNED_CHARS if row.get("pinned") else SNIPPET_CHARS]
         snippets.append({"id": tag, "출처": f"{label}{(' — ' + loc) if loc else ''}", "내용": text})
         refs.append({"tag": tag, "source_id": row["source_id"], "section": row.get("section"),
                      "title": src.get("title") or row["source_id"],

@@ -182,6 +182,30 @@ function CiteBadges({ cites }) {
   )
 }
 
+/* [2026-11-24] 조치마다 근거 지침(조항 이름)과 숫자 출처 */
+const NON_MEAL_RULES = new Set(['R_REASSESS', 'R_MAINTAIN', 'R_DX_KIDNEY'])
+function ActionBasis({ x, refs }) {
+  const cites = [...new Set([...splitCites(x.action).cites, ...splitCites(x.why).cites])].sort((a, b) => a - b)
+  const byTag = Object.fromEntries((refs || []).map((r) => [String(r.tag).replace('G', ''), r]))
+  const name = (n) => { const r = byTag[String(n)]; return r ? (r.locator || r.title) + (r.short ? ` · ${r.short}` : '') : '' }
+  return (
+    <div className="mt-1.5 space-y-0.5 text-[11px] leading-5">
+      {cites.length > 0 ? (
+        <p className="text-navy-800"><span className="text-gray-400 mr-1">근거 지침</span>
+          {cites.map((n, i) => <span key={n}>{i > 0 && ' · '}<b className="tabular-nums">[{n}]</b> {name(n)}</span>)}
+        </p>
+      ) : !NON_MEAL_RULES.has(x.rule_id) && <p className="text-amber-700">근거 지침이 연결되지 않은 조치입니다.</p>}
+      {x.numbers?.length > 0 && (
+        <p className="text-gray-600"><span className="text-gray-400 mr-1">숫자 출처</span>
+          {x.numbers.map((n, i) => (
+            <span key={i}>{i > 0 && ' · '}<b>{n.value}</b> ← {/^\d+$/.test(String(n.source)) ? `근거 [${n.source}] ${name(n.source)}` : n.source || '출처 미기재'}</span>
+          ))}
+        </p>
+      )}
+    </div>
+  )
+}
+
 function ListEditor({ items, onChange, placeholder }) {
   return (
     <div className="space-y-2">
@@ -486,7 +510,7 @@ export default function ResidentCarePage() {
                         </div>
                         <textarea rows={2} className="form-input text-sm" value={splitCites(x.action).body} disabled={!editable}
                           onChange={(e) => setDraft({ ...draft, staff_actions: draft.staff_actions.map((y, j) => (j === i ? { ...y, action: joinCites(e.target.value, splitCites(x.action).cites) } : y)) })} />
-                        <CiteBadges cites={[...new Set([...splitCites(x.action).cites, ...splitCites(x.why).cites])].sort((a, b) => a - b)} />
+                        <ActionBasis x={x} refs={draft.references} />
                         {x.why && <p className="mt-1 text-xs text-gray-500">이유: {splitCites(x.why).body}</p>}
                       </div>
                     ))}

@@ -22,7 +22,7 @@ from . import nutrition as nutri
 from . import retrieval
 from .priority import LEVEL_LABEL
 
-PROMPT_VERSION = "2026-11-24-meal3"   # 프롬프트를 고칠 때마다 올린다 (배포 확인용)
+PROMPT_VERSION = "2026-11-24-evidence4"   # 프롬프트를 고칠 때마다 올린다 (배포 확인용)
 
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-5")
@@ -89,20 +89,22 @@ SYSTEM_PROMPT = """당신은 요양원 식사·영양 돌봄 코디네이터를 
 4. guardian_message 는 보호자가 읽는 3~5문장의 쉬운 존댓말입니다. 점수·척도명(MNA, GDS 등)·유형 코드와 [G1] 같은 인용 표기를 쓰지 않고, 불안을 주지 않되 사실대로 씁니다. 350자 이내.
 5. '참고 지침'이 주어지면 **발췌를 하나씩 모두 검토**합니다. 이 어르신의 조치·지침·주의사항과 **내용이 실제로 맞는 발췌는 빠짐없이** 해당 문장에 [G#] 로 답니다. 쓸 수 있는 발췌가 여러 개면 여러 문장에 나누어 답니다. 다만 내용이 맞지 않으면 쓰지 않습니다 — 개수를 채우려고 관련 없는 번호를 붙이거나, 인력 배치·시설 운영에 관한 발췌를 개별 식사 조치의 근거로 달면 안 됩니다.
 5-1. 발췌에 규칙 문장보다 **더 구체적인 내용(수치, 조리 방법, 빈도, 주의점)**이 있으면 그것을 문장에 반영하고 근거를 답니다. 후보 조치를 그대로 옮겨 쓰기만 하면 지침을 전달한 의미가 없습니다. 예: '간식을 추가합니다' 대신 '끼니 사이와 취침 전에 간식을 두어 언제든 드실 수 있게 합니다 [G3]'.
-3-4. 돌봄 조치는 '식사로 해결하는 방법'을 씁니다. 후보의 '식사 해결 예시'와 '식사 기록 메뉴'(이 어르신이 실제로 드신 메뉴 이름)를 활용해
-     ① 무엇을(구체적인 메뉴·음식·조리법·식사형태) ② 얼마나(양·횟수) ③ 언제(끼니·시간·주기)를 모두 씁니다.
-     관찰·기록·보고·의료진 상의는 조치 문장 끝에 짧게 붙이거나 monitoring·cautions 로 옮깁니다. 조치를 '확인합니다·기록합니다·검토합니다'로만 끝내지 않습니다.
-     식사로 해결할 수 없는 조치(신장질환 의료진 확인, 재평가)만 예외입니다. 식사 지침도 메뉴 이름과 양 또는 시점을 함께 씁니다.
-     나쁜 예: '영양 위험 단계로 식사량 기록을 강화합니다'
-     좋은 예: '잘 드시는 두부조림·달걀찜은 1.5배 배식하고, 오후 3시에 두유 1팩과 삶은 달걀 1개를 드립니다. 끼니별 섭취율은 그대로 기록합니다'
-     나쁜 예: '김치를 드시지 않아 대체 반찬을 검토합니다'
-     좋은 예: '배추김치(섭취 40%) 대신 점심·저녁에 백김치나 시금치나물을 반 접시씩 드립니다'
+3-4. 돌봄 조치의 내용은 '근거 지침'에서 가져옵니다 — 이것이 가장 중요합니다.
+     후보 조치마다 '근거 발췌'(G 번호)가 연결되어 있습니다. 각 조치는 그 발췌(또는 내용이 실제로 맞는 다른 발췌)에 적힌 방법을
+     이 어르신의 식사에 맞게 적용해 쓰고, 문장 끝에 [G#] 를 반드시 붙입니다. 뒷받침하는 발췌가 없는 내용은 조치로 쓰지 않습니다.
+     적용할 때는 '식사 기록 메뉴'(이 어르신이 실제로 드신 메뉴)와 '식사 해결 예시'를 활용해 어떤 메뉴·음식을, 어떻게(조리·배식·식사형태) 바꾸는지 씁니다.
+     조치는 식사로 해결하는 방법을 우선하고, 관찰·기록·보고는 monitoring·cautions 로 보냅니다.
+     좋은 예: '배추김치(섭취 40%)는 백김치나 시금치나물로 바꾸고, 국은 양을 줄여 건더기 위주로 담습니다 [G1]'
+3-4-1. 숫자(양·횟수·시간·기준값·비율)는 근거 발췌나 입력 자료에 있는 숫자만 씁니다. 숫자를 쓰면 그 조치의 numbers 에
+     {"value": "숫자 표현", "source": "G2"} 또는 {"value": "40%", "source": "입력: 배추김치 섭취율"} 처럼 출처를 하나씩 적습니다.
+     출처가 없으면 숫자를 쓰지 말고 '지금보다 적게', '건더기 위주로', '끼니 사이에'처럼 씁니다. '주 3회', '하루 1컵' 같은 숫자를 지어내지 않습니다.
 3-5. 입력의 '반드시 포함할 조치'에 있는 rule_id 는 이 어르신의 돌봄 우선순위 요인이므로 빠짐없이 staff_actions 에 넣고, 앞쪽에 둡니다.
 5-2. 입력에 '검증 피드백'이 있으면 이전 초안을 검수에서 지적한 내용입니다. 지적한 항목을 모두 고쳐 처음부터 다시 작성합니다. 다른 규칙(후보 안에서만 조치, 약·용량 금지, 근거 번호 규칙)은 그대로 지킵니다.
 6. 반드시 아래 JSON 한 개만 출력합니다.
 
 {"summary": "담당자용 2~3문장 요약",
- "staff_actions": [{"rule_id": "R_...", "category": "...", "action": "구체적 조치 [G1]", "why": "이 어르신에게 필요한 이유 [G2]"}],
+ "staff_actions": [{"rule_id": "R_...", "category": "...", "action": "구체적 조치 [G1]", "why": "이 어르신에게 필요한 이유 [G2]",
+                    "numbers": [{"value": "조치에 쓴 숫자", "source": "G1 또는 입력: 항목 이름"}]}],
  "meal_guidance": ["식사 지침 [G1]", "..."],
  "monitoring": ["관찰·재평가 항목", "..."],
  "cautions": ["담당자가 주의할 점 [G3]"],
@@ -189,7 +191,7 @@ def meal_menu_ctx(features: dict, top: int = 6):
 
 
 def build_context(features: dict, type_info: dict, priority: dict, candidates: list, transition: dict,
-                  guidelines: list | None = None):
+                  guidelines: list | None = None, rule_tags: dict | None = None):
     ind = {FEATURE_LABELS[k]: features.get(k) for k in FEATURE_LABELS if features.get(k) is not None}
     ctx = {
         "유형": {"이름": type_info.get("name"), "설명": type_info.get("description"),
@@ -207,7 +209,8 @@ def build_context(features: dict, type_info: dict, priority: dict, candidates: l
         "실제 섭취 영양소(하루 평균)": nutrition_ctx(features),
         "급식 개선 의견": (features.get("improvement_text") or "")[:200],
         "후보 조치 목록": [{"rule_id": c["id"], "category": c["category"], "staff": c["staff"], "meal": c["meal"],
-                       "monitor": c["monitor"], **({"식사 해결 예시": care_rules.MEAL_HINTS[c["id"]]} if c["id"] in care_rules.MEAL_HINTS else {})}
+                       "monitor": c["monitor"], **({"식사 해결 예시": care_rules.MEAL_HINTS[c["id"]]} if c["id"] in care_rules.MEAL_HINTS else {}),
+                       **({"근거 발췌": (rule_tags or {}).get(c["id"])} if (rule_tags or {}).get(c["id"]) else {})}
                       for c in candidates],
         "식사 기록 메뉴": meal_menu_ctx(features),
     }
@@ -336,6 +339,10 @@ def _renumber(clean: dict, refs: list) -> list:
             tag = f"G{m.group(1)}"
             if tag in by_tag and tag not in order:
                 order.append(tag)
+    for a in clean.get("staff_actions") or []:      # 숫자 출처로만 쓰인 근거도 목록에 남긴다
+        for n in a.get("numbers") or []:
+            if n.get("source") in by_tag and n["source"] not in order:
+                order.append(n["source"])
     if not order:
         return []
 
@@ -347,6 +354,9 @@ def _renumber(clean: dict, refs: list) -> list:
     for a in clean.get("staff_actions") or []:
         a["action"] = sub(a.get("action", ""))
         a["why"] = sub(a.get("why", ""))
+        for n in a.get("numbers") or []:
+            if n.get("source") in remap:
+                n["source"] = str(remap[n["source"]])
     for key in ("meal_guidance", "monitoring", "cautions"):
         clean[key] = [sub(x) for x in (clean.get(key) or [])]
 
@@ -382,8 +392,15 @@ def validate(out: dict, candidates: list, fallback: dict, refs: list | None = No
         if extra:
             used_tags.update(extra)
             action = (action + " " + "".join(f"[{t}]" for t in extra)).strip()
+        nums = []
+        for n in a.get("numbers") or []:          # 숫자마다 출처 (G# 또는 '입력: …')
+            if isinstance(n, dict) and str(n.get("value", "")).strip():
+                src = str(n.get("source", "")).strip()
+                if re.fullmatch(r"\[?G?\d+\]?", src):
+                    src = "G" + re.sub(r"\D", "", src)
+                nums.append({"value": str(n["value"]).strip()[:30], "source": src[:60]})
         acts.append({"rule_id": rid, "category": a.get("category") or care_rules.RULE_BY_ID[rid]["category"],
-                     "action": action, "why": why})
+                     "action": action, "why": why, "numbers": nums})
     if not acts:
         flags.append({"type": "empty_actions", "detail": "유효한 조치가 없어 규칙 기반 조치 사용"})
         acts = fallback["staff_actions"]
@@ -442,10 +459,13 @@ def generate(features, type_info, priority, transition, is_borderline, provider:
                       ctx_payload=build_context(features, type_info, priority, candidates, transition))
     if provider in ("", "none", "rules"):
         return fallback, "rules", [], candidates
-    snippets, refs = retrieval.guideline_context(features, candidates, ctx_rules)
-    ctx = build_context(features, type_info, priority, candidates, transition, snippets)
+    # [2026-11-24] 후보 규칙마다 연결한 근거 조항을 먼저 붙이고, 남는 자리는 의미 검색
+    snippets, refs, rule_tags = retrieval.guideline_context_pinned(
+        features, candidates, ctx_rules, {c["id"]: care_rules.RULE_EVIDENCE.get(c["id"], []) for c in candidates})
+    ctx = build_context(features, type_info, priority, candidates, transition, snippets, rule_tags)
     if detail is not None:
-        detail.update(snippets=snippets, refs=refs)
+        detail.update(snippets=snippets, refs=refs, rule_tags=rule_tags,
+                      ctx_payload={k: v for k, v in ctx.items() if k != "참고 지침"})
     if required:
         ctx["반드시 포함할 조치"] = [{"우선순위 요인": r["factor"], "rule_id": r["rules"][0]} for r in required]
     if feedback:

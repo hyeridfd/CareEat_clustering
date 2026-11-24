@@ -264,7 +264,7 @@ export const VERIFY_DECISION = {
   hold: { label: '보류 · 담당자 검토', cls: 'bg-amber-500 text-white', box: 'bg-amber-50/70 ring-amber-200' },
 }
 const AG_VERDICT = { ok: '적합', fix: '보완 필요', contradiction: '모순', unsupported: '근거 없음', met: '충족', missing: '누락', conflict: '반대', support: '뒷받침', partial: '일부', unrelated: '무관' }
-const PART_MAX = { '질환 지침 일치': 30, '우선순위 요인 대응': 25, '근거 인용 정확도': 20, '구체성': 15, '형식': 10, '관리자용과 내용 일치': 45, '읽기 쉬움': 30, '어조': 25 }
+const PART_MAX = { '근거 지침 연결': 25, '질환 지침 일치': 25, '우선순위 요인 대응': 20, '식사 해결·구체성': 15, '숫자 출처': 10, '형식': 5, '근거 인용 정확도': 20, '구체성': 15, '관리자용과 내용 일치': 45, '읽기 쉬움': 30, '어조': 25 }
 
 function ScoreBlock({ title, s, pass }) {
   if (!s) return null
@@ -373,11 +373,17 @@ export function VerifyPanel({ v, tab = 'staff' }) {
               </ul>
             </div>
             <div>
-              <p className="font-bold text-gray-700 mb-1">식사 해결 · 구체성 (식사 조치는 메뉴·양·시점 모두)</p>
+              <p className="font-bold text-gray-700 mb-1">조치별 근거 · 숫자 출처 · 식사 해결</p>
               <ul className="space-y-0.5">
                 {(last.rule?.spec_actions || []).map((x) => (
-                  <li key={x.index} className={x.ok ? 'text-gray-600' : 'text-amber-800'}>
-                    {x.ok ? '✓' : '✗'} 조치 {x.index} — {x.exempt ? '예외(의료진 확인·재평가)' : <>{x.meal === false ? '관찰 위주 · ' : '식사 · '}{Object.entries(x.has).map(([k, on]) => `${k}${on ? '○' : '×'}`).join(' ')}</>}
+                  <li key={x.index} className="text-gray-600">
+                    <span className={x.cited === false || x.numbers?.some((y) => !y.ok) || x.meal === false ? 'text-rose-700' : ''}>
+                      {x.cited === false || x.numbers?.some((y) => !y.ok) || x.meal === false ? '✗' : '✓'} 조치 {x.index} — </span>
+                    {x.exempt ? '예외(의료진 확인·재평가)' : <>
+                      {x.cited === false ? '근거 없음' : x.cites ? `근거 [${x.cites.join('][')}]` : ''}
+                      {x.numbers?.length > 0 && ` · 숫자 ${x.numbers.map((y) => `${y.value}${y.ok ? `←${y.source}` : '(출처 없음)'}`).join(', ')}`}
+                      {x.meal === false ? ' · 관찰 위주' : ' · 식사'}
+                    </>}
                   </li>
                 ))}
               </ul>
