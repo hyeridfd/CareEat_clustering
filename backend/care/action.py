@@ -132,8 +132,9 @@ def build(profile: dict, top: int = 5, use_rag: bool = True) -> dict:
     for pr in priorities[:top]:
         # ① 지침 근거
         snippets, refs = ([], [])
-        if use_rag and pr.get("query"):
-            snippets, refs = rag.context_for([pr["query"]])
+        if use_rag and (pr.get("query") or pr.get("evidence")):
+            snippets, refs = rag.context_for_rule(pr.get("evidence"), [pr["query"]] if pr.get("query") else [],
+                                                  pr.get("evidence_must"))
             # 우선순위마다 새로 검색하므로 번호가 겹치지 않게 통째로 다시 매긴다
             fixed_s, fixed_r = [], []
             for s, r in zip(snippets, refs):
@@ -154,6 +155,7 @@ def build(profile: dict, top: int = 5, use_rag: bool = True) -> dict:
         plans.append({
             "rank": pr.get("rank"), "id": pr.get("id"), "title": pr.get("title"),
             "area_label": pr.get("area_label"), "severity_label": pr.get("severity_label"),
+            "severity": pr.get("severity"), "severity_reason": pr.get("severity_reason"),
             "score": pr.get("score"), "impact": pr.get("impact"),
             "detail": pr.get("detail"), "basis": pr.get("basis"),
             "action": pr.get("action"),

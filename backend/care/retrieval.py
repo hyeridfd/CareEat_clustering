@@ -240,13 +240,59 @@ def pack(rows: list, start: int = 1):
         src = row.get("source") or {}
         label = src.get("citation") or " ".join(str(x) for x in [src.get("title"), src.get("org"), src.get("year")] if x)
         loc = _locator(row)
-        text = re.sub(r"\s+", " ", row["text"]).strip()[:SNIPPET_CHARS]
+        text = re.sub(r"\s+", " ", re.sub(r"\*\*|__", "", row["text"])).strip()[:SNIPPET_CHARS]
         snippets.append({"id": tag, "출처": f"{label}{(' — ' + loc) if loc else ''}", "내용": text})
         refs.append({"tag": tag, "source_id": row["source_id"], "title": src.get("title") or row["source_id"],
                      "short": src.get("short") or src.get("title") or row["source_id"],
                      "org": src.get("org"), "year": src.get("year"), "citation": label,
                      "locator": loc, "url": src.get("url"), "similarity": round(float(row["similarity"]), 3)})
     return snippets, refs
+
+
+def by_sections(pairs, per_section: int = 1) -> list[dict]:
+    """(문헌 id, 소제목) 목록 → 그 소제목의 문단. 규칙마다 미리 연결해 둔 '고정 근거'용 (임베딩 없이 바로 읽음)."""
+    if not pairs:
+        return []
+    from dependencies import get_supabase
+    sb = get_supabase()
+    rows = []
+    for sid, sec in pairs:
+        res = (sb.table("care_chunks").select("id,source_id,section,page,ord,text")
+               .eq("source_id", sid).eq("section", sec).order("ord").limit(per_section).execute())
+        for r in res.data or []:
+            rows.append({**r, "similarity": 1.0, "pinned": True})
+    meta = _sources_by_id(sb, {r["source_id"] for r in rows})
+    for r in rows:
+        r["source"] = meta.get(r["source_id"], {})
+    return rows
+
+
+def context_for_rule(pairs, queries: list[str] | None = None, must: str | None = None, limit: int = 3):
+    """시설 규칙의 근거: ① 규칙에 연결해 둔 지침 조항을 먼저 붙이고 ② 자리가 남으면 의미 검색으로 채운다.
+    의미 검색 결과는 must(정규식) 키워드가 문단·소제목에 있어야만 쓴다 — 주제와 동떨어진 문단이 붙는 것을 막는다."""
+    if not enabled():
+        return [], []
+    rows = []
+    try:
+        rows = by_sections(pairs or [])
+    except Exception as e:
+        log.warning("[care] 고정 근거 조회 실패: %r", e)
+    seen = {r["id"] for r in rows}
+    if len(rows) < limit and queries:
+        try:
+            extra = search([q for q in queries if q][:MAX_QUERIES])
+        except Exception as e:
+            log.warning("[care] 시설 지침 검색 생략: %r", e)
+            extra = []
+        pat = re.compile(must) if must else None
+        for r in extra:
+            if r["id"] in seen or (pat and not pat.search(f"{r.get('section') or ''} {r['text']}")):
+                continue
+            rows.append(r)
+            seen.add(r["id"])
+            if len(rows) >= limit:
+                break
+    return pack(rows[:limit])
 
 
 def context_for(queries: list[str]):
