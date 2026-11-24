@@ -145,34 +145,149 @@ def configure(problem, plan: dict):
     return problem
 
 
+NUT_KO = {"sodium": "나트륨", "energy": "열량", "protein": "단백질", "fiber": "식이섬유", "potassium": "칼륨"}
+NUT_UNIT = {"sodium": "mg", "energy": "kcal", "protein": "g", "fiber": "g", "potassium": "mg"}
+SRC_LABEL = {"F_NUT_PROTEIN": "단백질 급원", "F_NUT_CALCIUM": "칼슘 급원", "F_NUT_FIBER": "식이섬유 급원", "F_NUT_VITD": "비타민 D 급원"}
+PREF_IDS = {"F_LOW_INTAKE", "F_COMPONENT_LOW", "F_SATISFACTION", "F_MENU_WORST"}
+TEXTURE_IDS = {"F_TEXTURE_NEED", "F_TEXTURE_GAP"}
+N_BASE = 3000          # 비교 기준: 같은 후보에서 메뉴를 무작위로 고른 끼니 수
+
+
+def _meal_stats(meals, recipes, plan, c):
+    """끼니 목록(각 끼니 = 메뉴 dict 6개) → 끼니당 지표 합계 (평균은 호출한 쪽에서)"""
+    from .problem import NUTRIENTS
+    limit = plan.get("limit") or []
+    st = {"n": 0, "nut": {k: 0.0 for k in NUTRIENTS}, "ok": {}, "limit": 0, "src": {}, "pref": 0.0, "pref_n": 0, "tex_bad": 0}
+    srcs = {iid: [k for k in (MENU_DIRECTIVES[iid].get("prefer") or []) if k not in limit] for iid in SRC_LABEL}
+    for mm in meals:
+        st["n"] += 1
+        for k in NUTRIENTS:
+            v = sum(float(m.get(k) or 0) for m in mm)
+            st["nut"][k] += v
+            lo, hi = getattr(c, f"{k}_min", None), getattr(c, f"{k}_max", None)
+            if lo or hi:
+                st["ok"][k] = st["ok"].get(k, 0) + int((not lo or v >= lo) and (not hi or v <= hi))
+        for m in mm:
+            if m.get("category") not in SCORED:
+                continue
+            t = _menu_text(m, recipes)
+            if limit and any(y in t for y in limit):
+                st["limit"] += 1
+            else:
+                for iid, kws in srcs.items():
+                    if kws and any(x in t for x in kws):
+                        st["src"][iid] = st["src"].get(iid, 0) + 1
+            st["pref"] += float(m.get("preference_score", 0.7) or 0.7)
+            st["pref_n"] += 1
+        st["tex_bad"] += int(any(x.get("texture") == "부적합" for x in mm[1:]))
+    return st
+
+
 def evaluate(problem, chrom, plan: dict, pool_log: dict | None = None) -> dict:
-    """설계된 28일 식단이 개선안을 얼마나 반영했는지"""
-    from .problem import MEAL_SETS, N_DAYS, N_SLOTS
+    """설계된 28일 식단이 개선안을 얼마나 반영했는지 — 개선안 항목마다 '이 식단' vs '같은 후보에서 무작위로 고른 식단(기대값)'"""
+    import random
+    from .problem import MEAL_SETS, N_DAYS, N_SLOTS, DAILY_SLOTS
     from .inventory import recipe_ingredients
     recipes = recipe_ingredients()
     menus = problem.effective_menus(chrom)
     c = problem.constraint
-    meals, na, k = 0, [], []
+    meals = []
     for day in range(N_DAYS):
         dm = menus[day * N_SLOTS:(day + 1) * N_SLOTS]
         for _, slots in MEAL_SETS.items():
-            mm = [dm[s] for s in slots]
-            na.append(sum(float(m.get("sodium") or 0) for m in mm))
-            k.append(sum(float(m.get("potassium") or 0) for m in mm))
-            meals += 1
-    names = [m.get("menu_name") for m in menus]
-    txt = [_menu_text(m, recipes) for m in menus if m.get("category") in SCORED]
-    prefer, limit = plan.get("prefer") or [], plan.get("limit") or []
-    out = {
-        "끼니": meals,
-        "나트륨_끼니평균_mg": round(sum(na) / meals) if meals else None,
-        "나트륨_기준이내_끼니_%": round(100 * sum(v <= (c.sodium_max or 1e9) for v in na) / meals, 1) if meals else None,
-        "칼륨_끼니평균_mg": round(sum(k) / meals) if meals else None,
-        "선호_메뉴_횟수": sum(1 for t in txt if prefer and any(x in t for x in prefer) and not (limit and any(y in t for y in limit))),
-        "제한_메뉴_횟수": sum(1 for t in txt if limit and any(y in t for y in limit)),
-        "제외_메뉴_사용": sum(1 for n in names if _norm(n) in {_norm(a) for a in plan.get("avoid_menus") or []}),
+            meals.append([dm[s] for s in slots])
+    # 비교 기준: 같은 후보 풀(제외 메뉴를 뺀 뒤)에서 칸마다 무작위로 고른 끼니
+    rng = random.Random(0)
+    cats = [cat for _, cat in DAILY_SLOTS[:len(MEAL_SETS["아침"])]]
+    pool = problem.pool
+    base_meals = [[rng.choice(pool[cat]) for cat in cats] for _ in range(N_BASE)]
+    A, B = _meal_stats(meals, recipes, plan, c), _meal_stats(base_meals, recipes, plan, c)
+    nA, scale = A["n"] or 1, (A["n"] or 1) / N_BASE      # 무작위 횟수는 28일(끼니 수)로 환산
+
+    def avg(st, k): return round(st["nut"][k] / (st["n"] or 1), 1)
+    def okp(st, k): return round(100 * st["ok"].get(k, 0) / (st["n"] or 1), 1) if k in st["ok"] else None
+    def cnt(v_a, v_b): return v_a, round(v_b * scale, 1)
+
+    limit = plan.get("limit") or []
+    effects = []
+    for it in plan.get("items") or []:
+        iid, d = it.get("id"), MENU_DIRECTIVES.get(it.get("id"), {})
+        rows = []
+        for k in (d.get("weight") or {}):
+            up = k != "sodium"
+            rows.append({"label": f"{NUT_KO.get(k, k)} 끼니 평균", "value": avg(A, k), "base": avg(B, k), "unit": NUT_UNIT.get(k, ""), "better": "up" if up else "down"})
+            if okp(A, k) is not None:
+                rows.append({"label": f"{NUT_KO.get(k, k)} 기준 {'이상' if up else '이내'} 끼니", "value": okp(A, k), "base": okp(B, k), "unit": "%", "better": "up"})
+        if d.get("limit"):
+            a, b = cnt(A["limit"], B["limit"])
+            rows.append({"label": "장아찌·젓갈·가공육·어묵 메뉴 (28일)", "value": a, "base": b, "unit": "회", "better": "down"})
+        if d.get("potassium"):
+            rows.append({"label": "칼륨 끼니 평균", "value": avg(A, "potassium"), "base": avg(B, "potassium"), "unit": "mg", "better": "up"})
+        if iid in SRC_LABEL:
+            a, b = cnt(A["src"].get(iid, 0), B["src"].get(iid, 0))
+            rows.append({"label": f"{SRC_LABEL[iid]} 메뉴 (28일, 국·주찬·부찬)", "value": a, "base": b, "unit": "회", "better": "up"})
+        if iid in PREF_IDS:
+            rows.append({"label": "고른 메뉴의 평균 섭취율 (잔반 기록)", "value": round(100 * A["pref"] / (A["pref_n"] or 1), 1),
+                         "base": round(100 * B["pref"] / (B["pref_n"] or 1), 1), "unit": "%", "better": "up"})
+        if iid in TEXTURE_IDS:
+            a, b = cnt(A["tex_bad"], B["tex_bad"])
+            rows.append({"label": "다진찬 부적합 메뉴가 든 끼니 (28일)", "value": a, "base": b, "unit": "끼", "better": "down"})
+        if d.get("avoid"):
+            removed = (pool_log or {}).get("removed") or []
+            used = sum(1 for m in menus if _norm(m.get("menu_name")) in {_norm(x) for x in plan.get("avoid_menus") or []})
+            rows.append({"label": f"잔반 많은 메뉴 사용 (후보에서 {len(removed)}개 제외)", "value": used, "base": None, "unit": "회", "better": "down"})
+        for r in rows:
+            if r["base"] is not None and r["value"] is not None:
+                diff = r["value"] - r["base"]
+                r["diff"] = round(diff, 1)
+                r["good"] = (diff > 0) if r["better"] == "up" else (diff < 0)
+        effects.append({**it, "rows": rows})
+
+    # 식단표 표시용: 이 식단에 쓰인 메뉴 중 개선안으로 선호·제한된 메뉴 → 어떤 개선안 때문인지
+    tags, counts = {}, {}
+    src_kws = {iid: [k for k in (MENU_DIRECTIVES[iid].get("prefer") or []) if k not in limit] for iid in SRC_LABEL}
+    item_ids = {x.get("id") for x in plan.get("items") or []}
+    k_cut = {}
+    if plan.get("potassium"):
+        for cat in ("국", "부찬"):
+            ks = sorted(float(m.get("potassium") or 0) for m in pool.get(cat, []))
+            k_cut[cat] = ks[int(len(ks) * 0.75)] if ks else None
+    for m in menus:
+        if m.get("category") not in SCORED:
+            continue
+        name = m.get("menu_name")
+        t = _menu_text(m, recipes)
+        tg = []
+        if limit and any(y in t for y in limit):
+            tg.append({"kind": "limit", "label": "나트륨 개선안: 제한 메뉴"})
+        else:
+            for iid, kws in src_kws.items():
+                if iid in item_ids and kws and any(x in t for x in kws):
+                    tg.append({"kind": "prefer", "label": f"{SRC_LABEL[iid]} (선호)"})
+            cut = k_cut.get(m.get("category"))
+            if cut is not None and float(m.get("potassium") or 0) >= cut:
+                tg.append({"kind": "prefer", "label": "칼륨 많은 메뉴 (선호)"})
+        if tg:
+            tags[name] = tg
+            counts[name] = counts.get(name, 0) + 1
+    for e in effects:
+        lab = SRC_LABEL.get(e["id"])
+        if lab:
+            e["examples"] = sorted(((n, k) for n, k in counts.items() if any(g["label"].startswith(lab) for g in tags[n])), key=lambda x: -x[1])[:6]
+        elif e["id"] == "F_NUT_SODIUM":
+            e["examples"] = sorted(((n, k) for n, k in counts.items() if any(g["kind"] == "limit" for g in tags[n])), key=lambda x: -x[1])[:6]
+            e["examples_label"] = "그래도 들어간 제한 메뉴"
+
+    na = [sum(float(m.get("sodium") or 0) for m in mm) for mm in meals]
+    out = {   # 이전 화면 호환
+        "끼니": len(meals),
+        "나트륨_끼니평균_mg": round(sum(na) / len(na)) if na else None,
+        "나트륨_기준이내_끼니_%": round(100 * sum(v <= (c.sodium_max or 1e9) for v in na) / len(na), 1) if na else None,
+        "칼륨_끼니평균_mg": round(avg(A, "potassium")),
+        "제한_메뉴_횟수": A["limit"],
         "개선안_부합도_평균": round(sum(m.get("plan_score", 0.5) for m in menus) / len(menus), 3) if menus else None,
     }
     return {"items": plan.get("items") or [], "outside": plan.get("outside") or [],
             "weights": plan.get("nutrient_weight") or {}, "pref_mult": plan.get("pref_mult"),
-            "texture_mult": plan.get("texture_mult"), "pool": pool_log or {}, "result": out}
+            "texture_mult": plan.get("texture_mult"), "pool": pool_log or {}, "result": out,
+            "effects": effects, "menu_tags": tags, "baseline": f"같은 후보 메뉴에서 칸마다 무작위로 고른 {N_BASE}끼(28일로 환산)"}

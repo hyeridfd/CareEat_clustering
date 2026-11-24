@@ -246,23 +246,85 @@ function FacilityPlanBox({ on, setOn, plan, err }) {
   )
 }
 
-/* 설계 결과에 개선안이 얼마나 반영됐는지 */
+/* 설계 결과에 개선안이 얼마나 반영됐는지 — 개선안 항목마다 '이 식단' vs '같은 후보에서 무작위로 고른 식단' */
+const fmtEff = (v) => (v == null ? '–' : Number.isInteger(v) ? v.toLocaleString() : v.toLocaleString(undefined, { maximumFractionDigits: 1 }))
+function EffectRow({ r }) {
+  const tone = r.good == null ? 'text-muted' : r.good ? 'text-emerald-700' : 'text-slate-500'
+  const arrow = r.diff == null || r.diff === 0 ? '' : r.diff > 0 ? '▲' : '▼'
+  return (
+    <tr className="border-b border-navy-50 last:border-0">
+      <td className="py-1 pr-2 text-slate-700">{r.label}</td>
+      <td className="py-1 pr-2 text-right tabular-nums font-semibold text-navy-900 whitespace-nowrap">{fmtEff(r.value)}<span className="ml-0.5 text-[10px] font-normal text-muted">{r.unit}</span></td>
+      <td className="py-1 pr-2 text-right tabular-nums text-muted whitespace-nowrap">{r.base == null ? '–' : `${fmtEff(r.base)}${r.unit}`}</td>
+      <td className={`py-1 text-right tabular-nums whitespace-nowrap ${tone}`}>
+        {r.diff == null ? '' : <>{arrow} {fmtEff(Math.abs(r.diff))}{r.good ? ' ✓' : ''}</>}
+      </td>
+    </tr>
+  )
+}
 function FacilityPlanResult({ fp }) {
   if (!fp) return null
-  const r = fp.result || {}
   const w = Object.entries(fp.weights || {}).map(([k, v]) => `${NUT_KO[k] || k} ×${v}`).join(' · ')
+  // 같은 지표를 쓰는 개선안(예: 섭취율 관련 3건)은 한 카드로 묶는다
+  const groups = []
+  for (const e of fp.effects || []) {
+    const key = JSON.stringify(e.rows)
+    const g = groups.find((x) => x.key === key && e.rows.length)
+    if (g) g.items.push(e)
+    else groups.push({ key, items: [e], rows: e.rows, examples: e.examples, examplesLabel: e.examples_label })
+  }
+  const nGood = (fp.effects || []).filter((e) => e.rows.some((r) => r.good)).length
   return (
     <div className="surface p-5 ring-1 ring-emerald-200">
-      <p className="text-sm font-extrabold text-navy-900">시설 개선안 반영 결과 <span className="ml-1 badge bg-emerald-50 text-emerald-700">{fp.items?.length || 0}건 반영</span></p>
-      <p className="mt-1 text-xs text-muted">{fp.items?.map((x) => x.title).join(' · ')}{w && ` — 영양 위반 가중치 ${w}`}</p>
-      <div className="mt-3 grid grid-cols-2 md:grid-cols-5 gap-3">
-        <Stat label="나트륨 끼니 평균" value={r['나트륨_끼니평균_mg']} unit="mg" sub={`기준 이내 끼니 ${r['나트륨_기준이내_끼니_%'] ?? '–'}%`} />
-        <Stat label="칼륨 끼니 평균" value={r['칼륨_끼니평균_mg']} unit="mg" />
-        <Stat label="선호 메뉴 사용" value={r['선호_메뉴_횟수']} unit="회" sub="칼슘·단백질·식이섬유 급원 등" />
-        <Stat label="제한 메뉴 사용" value={r['제한_메뉴_횟수']} unit="회" sub="장아찌·젓갈·가공육 등" />
-        <Stat label="제외 메뉴 사용" value={r['제외_메뉴_사용']} unit="회" sub={`후보에서 뺀 메뉴 ${fp.pool?.removed?.length ?? 0}개`} />
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="text-sm font-extrabold text-navy-900">시설 개선안이 식단에 어떻게 반영됐나</p>
+        <span className="badge bg-emerald-50 text-emerald-700">{fp.items?.length || 0}건 반영</span>
+        {fp.effects && <span className="badge bg-navy-50 text-navy-700">비교 기준보다 나아진 항목 {nGood}/{fp.effects.length}</span>}
       </div>
-      {fp.outside?.length > 0 && <p className="mt-3 text-[11px] text-muted">식단 외 조치(운영): {fp.outside.map((x) => x.title).join(' · ')}</p>}
+      <p className="mt-1 text-xs text-muted">
+        각 개선안을 식단 최적화의 무게·선호·제한으로 바꿔 설계했습니다{w && ` (영양 위반 가중치 ${w})`}.
+        {' '}비교 기준은 {fp.baseline || '같은 후보 메뉴에서 무작위로 고른 식단'}입니다 — 기준(KDRI·개인 맞춤·식단 규칙)은 그대로 지킵니다.
+      </p>
+      {!fp.effects ? (
+        <p className="mt-3 text-xs text-muted">이 설계는 이전 버전에서 만들어져 항목별 반영 결과가 없습니다. 다시 최적화하면 항목별로 보입니다.</p>
+      ) : (
+        <div className="mt-3 grid lg:grid-cols-2 gap-3">
+          {groups.map((g) => (
+            <div key={g.items[0].id} className="rounded-xl bg-white ring-1 ring-navy-100 p-3">
+              {g.items.map((x) => (
+                <p key={x.id} className="text-[13px] font-bold text-navy-900 leading-5">
+                  {x.title} <span className="text-[11px] font-normal text-muted">{x.severity_label}</span>
+                </p>
+              ))}
+              <ul className="mt-1 mb-2 text-[11px] text-slate-500 list-disc pl-4">
+                {g.items[0].how?.map((h) => <li key={h}>{h}</li>)}
+              </ul>
+              {g.rows.length > 0 && (
+                <table className="w-full text-xs">
+                  <thead><tr className="text-[10px] text-muted border-b border-navy-100">
+                    <th className="py-1 text-left font-normal">지표</th><th className="py-1 text-right font-normal">이 식단</th>
+                    <th className="py-1 text-right font-normal">비교 기준</th><th className="py-1 text-right font-normal">차이</th>
+                  </tr></thead>
+                  <tbody>{g.rows.map((r) => <EffectRow key={r.label} r={r} />)}</tbody>
+                </table>
+              )}
+              {g.examples?.length > 0 && (
+                <div className="mt-2 flex flex-wrap items-center gap-1">
+                  <span className="text-[10px] text-muted mr-1">{g.examplesLabel || '식단에 들어간 메뉴'}</span>
+                  {g.examples.map(([n, k]) => (
+                    <span key={n} className={`rounded-full px-2 py-0.5 text-[11px] ${g.examplesLabel ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-800'}`}>{n}{k > 1 ? ` ×${k}` : ''}</span>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      <p className="mt-3 text-[11px] text-muted">
+        식단표에서 <span className="text-emerald-600">●</span> 개선안으로 더 고른 메뉴, <span className="text-rose-500">●</span> 개선안이 줄이려는 메뉴(제한)입니다. 점에 마우스를 올리면 어떤 개선안 때문인지 보입니다.
+        {' '}▲▼는 비교 기준과의 차이이고, ✓는 개선안이 원하는 방향입니다.
+      </p>
+      {fp.outside?.length > 0 && <p className="mt-1 text-[11px] text-muted">식단 외 조치(운영): {fp.outside.map((x) => x.title).join(' · ')}</p>}
     </div>
   )
 }
@@ -648,6 +710,7 @@ function MenuTab({ run, onApprove, onEdited, onRerun, setErr }) {
   const rows = (run.menu || []).filter((r) => Math.ceil(dayNo(r.일차) / 7) === week)
   const reviewed = useMemo(() => Object.fromEntries((m.review?.accepted || []).map((a) => [`${a.day}일|${a.meal}|${a.slot}`, a])), [run.id])
   const nEdits = Object.keys(edits).length
+  const planTags = m.facility_plan?.menu_tags || {}
 
   const saveEdits = async () => {
     setSaving(true); setErr('')
@@ -789,6 +852,10 @@ function MenuTab({ run, onApprove, onEdited, onRerun, setErr }) {
                           <button disabled={String(r[s]).startsWith('-(')} onClick={() => openEdit({ k })}
                             title={!edits[k] && reviewed[k] ? `AI 검토로 바뀜: ${reviewed[k].current} → ${reviewed[k].replace_with} (${reviewed[k].problem || ''})` : undefined}
                             className={`text-left rounded px-1 -mx-1 hover:bg-navy-50 ${edits[k] ? 'bg-amber-50 text-amber-900 font-semibold' : reviewed[k] ? 'bg-violet-50 text-violet-900' : ''}`}>{v}</button>
+                        )}
+                        {!isEdit && planTags[v] && (
+                          <span className={`ml-0.5 text-[9px] align-top cursor-help ${planTags[v].some((t) => t.kind === 'limit') ? 'text-rose-500' : 'text-emerald-600'}`}
+                            title={`시설 개선안: ${planTags[v].map((t) => t.label).join(', ')}`}>●</span>
                         )}
                       </td>
                     )
