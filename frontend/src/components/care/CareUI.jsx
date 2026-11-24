@@ -338,6 +338,7 @@ export function VerifyPanel({ v, tab = 'staff' }) {
         <span className="text-xs text-gray-700">{v.reason}</span>
         {v.rewrites > 0 && <span className="text-[11px] rounded-full bg-white px-2 py-0.5 ring-1 ring-gray-200 text-gray-600">재작성 {v.rewrites}회</span>}
         {last.verifier && <span className="text-[11px] text-gray-400">검증 {last.verifier}</span>}
+        <span className="text-[10px] text-gray-400" title="서버 검증 버전 — 최신은 2026-11-24-v3">{v.version}</span>
       </div>
       {send && (
         <p className={`mt-1.5 text-[11px] ${send.ok ? 'text-emerald-800' : 'text-gray-600'}`}>
@@ -372,11 +373,11 @@ export function VerifyPanel({ v, tab = 'staff' }) {
               </ul>
             </div>
             <div>
-              <p className="font-bold text-gray-700 mb-1">구체성 (조치마다 무엇·얼마나·언제 중 2가지 이상)</p>
+              <p className="font-bold text-gray-700 mb-1">식사 해결 · 구체성 (식사 조치는 메뉴·양·시점 모두)</p>
               <ul className="space-y-0.5">
                 {(last.rule?.spec_actions || []).map((x) => (
                   <li key={x.index} className={x.ok ? 'text-gray-600' : 'text-amber-800'}>
-                    {x.ok ? '✓' : '✗'} 조치 {x.index} — {Object.entries(x.has).map(([k, on]) => `${k}${on ? '○' : '×'}`).join(' ')}
+                    {x.ok ? '✓' : '✗'} 조치 {x.index} — {x.exempt ? '예외(의료진 확인·재평가)' : <>{x.meal === false ? '관찰 위주 · ' : '식사 · '}{Object.entries(x.has).map(([k, on]) => `${k}${on ? '○' : '×'}`).join(' ')}</>}
                   </li>
                 ))}
               </ul>

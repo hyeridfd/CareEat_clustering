@@ -25,7 +25,7 @@ from . import solution as sol
 
 log = logging.getLogger("uvicorn.error")
 
-VERIFY_VERSION = "2026-11-24-v2"
+VERIFY_VERSION = "2026-11-24-v3"
 STAFF_PASS = 80          # 관리자용 통과 점수
 GUARDIAN_PASS = 85       # 보호자용 통과 점수
 MAX_REWRITE = 2          # 재작성 최대 횟수 (첫 초안 + 2회)
@@ -89,10 +89,13 @@ COMPONENT_MUST = {"밥·죽": r"밥|죽|주식", "국·탕": r"국|탕", "주찬
                   "부찬": r"부찬|반찬|나물|채소", "김치": r"김치"}
 FEAR = re.compile(r"위험합니다|심각합니다|심각한 상태|위독|큰일|매우 걱정|악화될 수|사망|생명")
 DECIMAL = re.compile(r"\d+\.\d{3,}")
-AMOUNT = re.compile(r"\d|반\s?(그릇|공기|컵|개)|한\s?(번|그릇|컵|공기|숟가락|개|조각|팩|가지)|두\s?(번|가지|개|숟가락)|세\s?(번|가지)|하루\s?\S*\s?(번|회)|회\b|컵|그릇|공기|숟가락|팩|조각|kg|g\b|ml|mL|절반|소량|조금씩")
+AMOUNT = re.compile(r"\d|접시|\S씩\b|씩 |배로|반\s?(그릇|공기|컵|개|모)|한\s?(번|그릇|컵|공기|숟가락|개|조각|팩|가지)|두\s?(번|가지|개|숟가락)|세\s?(번|가지)|하루\s?\S*\s?(번|회)|회\b|컵|그릇|공기|숟가락|팩|조각|kg|g\b|ml|mL|절반|소량|조금씩")
 WHEN = re.compile(r"아침|점심|저녁|끼니마다|매\s?끼|식사\s?(전|후|중|때)|식전|식후|간식\s?시간|오전|오후|취침|자기 전|매일|매주|격주|주\s?\d|한 달|월\s?\d|요일|\d\s?시|\d\s?주|\d\s?일마다|정해진 시간")
 WHAT = re.compile(r"두부|달걀|계란|우유|두유|요구르트|요거트|치즈|생선|고등어|조기|고기|닭|소고기|돼지|멸치|콩|나물|채소|과일|바나나|사과|고구마|감자|죽|미음|누룽지|국물|김치|젓갈|장아찌|밥|간식|떡|빵|견과|다져|다진|갈아|간\s|으깨|데쳐|삶|찜|구이|볶|저염|싱겁|걸쭉|점도|자세|턱|숟가락|빨대|컵|체중|섭취율|혈당|기록|사레|기침|식판|손잡이|보조")
-SPEC_MIN = 0.8           # 조치 중 '무엇·얼마나·언제' 2가지 이상을 갖춘 비율이 이보다 낮으면 재작성
+# 식사로 해결하는 조치인가 — 메뉴·음식·조리·식사형태·배식 표현 (체중·기록·혈당 같은 관찰어는 제외)
+MEALFOOD = re.compile(r"두부|달걀|계란|우유|두유|요구르트|요거트|치즈|생선|고등어|가자미|동태|조기|고기|닭|소고기|돼지|멸치|뱅어포|콩|나물|채소|시금치|무청|버섯|미역|과일|바나나|사과|고구마|감자|잡곡|죽|미음|누룽지|숭늉|국물|국을|국은|건더기|김치|백김치|물김치|젓갈|장아찌|가공육|밥|반찬|주찬|부찬|간식|떡|빵|카스텔라|견과|메뉴|배식|담아|제공|드립니다|드리고|다져|다진|갈아|갈은|으깨|데쳐|삶|찜|조림|구이|볶음|저염|싱겁|간장|된장|들기름|참기름|깨|식초|레몬|점도|걸쭉|식사형태|한입|주먹밥|전\b|물\s?\d|물 하루")
+SPEC_MIN = 0.7           # 식사 조치 중 '무엇·얼마나·언제'를 모두 갖춘 비율이 이보다 낮으면 재작성
+MEAL_MIN = 0.8           # 조치 중 식사로 해결하는 조치의 비율이 이보다 낮으면 재작성
 
 
 def _sentences(t: str):
@@ -158,17 +161,25 @@ def rule_checks(content: dict, conds: list, priority: dict, candidates: list, fl
     miss = [n for n in need if not n["ok"]]
     if miss:
         gates.append({"code": "H6", "label": "돌봄 우선순위 요인 누락", "detail": [f"{n['factor']} ({'/'.join(n['rules'])})" for n in miss]})
-    # 구체성: 조치마다 무엇(음식·방법)·얼마나(양·횟수)·언제(끼니·주기) 중 2가지 이상, 식사 지침은 무엇 + (얼마나 또는 언제)
+    # 식사 해결 + 구체성: 식사 조치는 무엇(메뉴·음식·조리)·얼마나(양·횟수)·언제(끼니·주기)를 모두 갖춰야 한다
     spec_items = []
     for i, a in enumerate(acts, 1):
         t = a.get("action", "")
-        has = {"무엇": bool(WHAT.search(t)), "얼마나": bool(AMOUNT.search(t)), "언제": bool(WHEN.search(t))}
-        spec_items.append({"index": i, "rule_id": a.get("rule_id"), "text": t[:60], "has": has, "ok": sum(has.values()) >= 2})
+        exempt = a.get("rule_id") in CR.NON_MEAL_RULES
+        has = {"무엇": bool(MEALFOOD.search(t)) if not exempt else bool(WHAT.search(t)),
+               "얼마나": bool(AMOUNT.search(t)), "언제": bool(WHEN.search(t))}
+        meal = exempt or has["무엇"]
+        ok = True if exempt else all(has.values())   # 의료진 확인·재평가는 식사 조치가 아니라 예외
+        spec_items.append({"index": i, "rule_id": a.get("rule_id"), "text": t[:60], "has": has, "ok": ok, "meal": meal, "exempt": exempt})
     mg = content.get("meal_guidance") or []
-    mg_ok = [bool(WHAT.search(x)) and (bool(AMOUNT.search(x)) or bool(WHEN.search(x))) for x in mg]
+    mg_ok = [bool(MEALFOOD.search(x)) and (bool(AMOUNT.search(x)) or bool(WHEN.search(x))) for x in mg]
     act_ratio = sum(x["ok"] for x in spec_items) / len(spec_items) if spec_items else 0
+    meal_ratio = sum(x["meal"] for x in spec_items) / len(spec_items) if spec_items else 0
     mg_ratio = sum(mg_ok) / len(mg_ok) if mg_ok else 0
-    spec = 0.6 * act_ratio + 0.4 * mg_ratio
+    spec = 0.5 * act_ratio + 0.2 * meal_ratio + 0.3 * mg_ratio
+    if spec_items and meal_ratio < MEAL_MIN:
+        gates.append({"code": "H8", "label": "식사로 해결하는 조치가 부족함",
+                      "detail": [f"조치 {x['index']}: 관찰·확인 위주" for x in spec_items if not x["meal"]]})
     if spec_items and act_ratio < SPEC_MIN:
         gates.append({"code": "H7", "label": "조치가 구체적이지 않음",
                       "detail": [f"조치 {x['index']}: {', '.join(k for k, v in x['has'].items() if not v)} 빠짐" for x in spec_items if not x["ok"]]})
@@ -184,7 +195,7 @@ def rule_checks(content: dict, conds: list, priority: dict, candidates: list, fl
     if replaced:
         fmt_issues.append(f"가드레일이 고친 항목 {len(replaced)}건")
     return {"gates": gates, "must": must_res, "forbid": forbid_hits, "coverage": need,
-            "specificity": round(spec, 3), "spec_actions": spec_items, "spec_meal": round(mg_ratio, 3),
+            "specificity": round(spec, 3), "spec_actions": spec_items, "spec_meal": round(mg_ratio, 3), "meal_ratio": round(meal_ratio, 3),
             "format_issues": fmt_issues, "decimals": dec}
 
 
@@ -220,7 +231,7 @@ NUTRITIONIST_PROMPT = """당신은 요양원 급식을 20년 담당한 임상 �
 """ + _COMMON + """
 
 맡은 항목과 기준
-- actions (입력의 '맡은 조치' 번호만): 이유(why)가 입력 지표와 맞는가, 구체적인 음식·양·시점이 있어 조리실과 배식 담당자가 그대로 따라 할 수 있는가, 영양·질환 식사 지침과 충돌이 없는가.
+- actions (입력의 '맡은 조치' 번호만): 식사(메뉴·음식·조리·배식)로 해결하는 조치인가, 구체적인 메뉴·양·시점이 있어 조리실과 배식 담당자가 그대로 따라 할 수 있는가, 이유(why)가 입력 지표와 맞는가, 영양·질환 식사 지침과 충돌이 없는가. 관찰·기록만 하는 조치는 fix.
 - meal_guidance: 진단 질환에 맞는 식사 조정과 잔반이 많은 음식군 대응이 각각 있는가, 기준 80% 미만 영양소와 나트륨 초과가 반영됐는가, 음식과 양·시점이 구체적인가.
 - disease_alignment: '지침 점검 조건' 중 맡은 조건마다 met / missing / conflict.
 
@@ -453,7 +464,9 @@ def feedback(content: dict, rc: dict, gc: dict, sc: dict, ag: dict | None) -> li
         if not c["ok"]:
             fb.append(f"우선순위 요인 '{c['factor']}'에 대한 조치({'/'.join(c['rules'])})를 포함하세요.")
     for x in rc.get("spec_actions") or []:
-        if not x["ok"]:
+        if not x["meal"]:
+            fb.append(f"조치 {x['index']}({x['rule_id']}) “{x['text']}…”는 관찰·확인 위주입니다. 식사로 해결하는 방법(어떤 메뉴·음식을, 얼마나, 언제)으로 바꾸고 관찰은 monitoring 으로 옮기세요. 후보의 '식사 해결 예시'와 '식사 기록 메뉴'를 쓰세요.")
+        elif not x["ok"]:
             miss = [k for k, v in x["has"].items() if not v]
             fb.append(f"조치 {x['index']}({x['rule_id']}) “{x['text']}…”에 '{'·'.join(miss)}' 내용을 구체적으로 쓰세요 (예: 어떤 음식을, 몇 번·얼마나, 어느 끼니·요일에).")
     if rc.get("spec_meal", 1) < 0.8:

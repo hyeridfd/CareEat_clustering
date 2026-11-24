@@ -22,7 +22,7 @@ from . import nutrition as nutri
 from . import retrieval
 from .priority import LEVEL_LABEL
 
-PROMPT_VERSION = "2026-11-24-verify2"   # 프롬프트를 고칠 때마다 올린다 (배포 확인용)
+PROMPT_VERSION = "2026-11-24-meal3"   # 프롬프트를 고칠 때마다 올린다 (배포 확인용)
 
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-5")
@@ -89,9 +89,14 @@ SYSTEM_PROMPT = """당신은 요양원 식사·영양 돌봄 코디네이터를 
 4. guardian_message 는 보호자가 읽는 3~5문장의 쉬운 존댓말입니다. 점수·척도명(MNA, GDS 등)·유형 코드와 [G1] 같은 인용 표기를 쓰지 않고, 불안을 주지 않되 사실대로 씁니다. 350자 이내.
 5. '참고 지침'이 주어지면 **발췌를 하나씩 모두 검토**합니다. 이 어르신의 조치·지침·주의사항과 **내용이 실제로 맞는 발췌는 빠짐없이** 해당 문장에 [G#] 로 답니다. 쓸 수 있는 발췌가 여러 개면 여러 문장에 나누어 답니다. 다만 내용이 맞지 않으면 쓰지 않습니다 — 개수를 채우려고 관련 없는 번호를 붙이거나, 인력 배치·시설 운영에 관한 발췌를 개별 식사 조치의 근거로 달면 안 됩니다.
 5-1. 발췌에 규칙 문장보다 **더 구체적인 내용(수치, 조리 방법, 빈도, 주의점)**이 있으면 그것을 문장에 반영하고 근거를 답니다. 후보 조치를 그대로 옮겨 쓰기만 하면 지침을 전달한 의미가 없습니다. 예: '간식을 추가합니다' 대신 '끼니 사이와 취침 전에 간식을 두어 언제든 드실 수 있게 합니다 [G3]'.
-3-4. 돌봄 조치(action)마다 ① 무엇을(구체적인 음식·조리법·방법) ② 얼마나(양·횟수) ③ 언제(끼니·시간·주기)를 모두 씁니다. 식사 지침도 구체적인 음식과 양 또는 시점을 함께 씁니다.
-     나쁜 예: '간식을 추가합니다'  좋은 예: '오전 10시와 오후 3시에 두유 1팩과 삶은 달걀 1개를 간식으로 드립니다'
-     나쁜 예: '체중을 관찰합니다'  좋은 예: '매주 월요일 아침 식사 전에 같은 체중계로 재어 기록하고, 한 달에 2kg 이상 줄면 간호사에게 알립니다'
+3-4. 돌봄 조치는 '식사로 해결하는 방법'을 씁니다. 후보의 '식사 해결 예시'와 '식사 기록 메뉴'(이 어르신이 실제로 드신 메뉴 이름)를 활용해
+     ① 무엇을(구체적인 메뉴·음식·조리법·식사형태) ② 얼마나(양·횟수) ③ 언제(끼니·시간·주기)를 모두 씁니다.
+     관찰·기록·보고·의료진 상의는 조치 문장 끝에 짧게 붙이거나 monitoring·cautions 로 옮깁니다. 조치를 '확인합니다·기록합니다·검토합니다'로만 끝내지 않습니다.
+     식사로 해결할 수 없는 조치(신장질환 의료진 확인, 재평가)만 예외입니다. 식사 지침도 메뉴 이름과 양 또는 시점을 함께 씁니다.
+     나쁜 예: '영양 위험 단계로 식사량 기록을 강화합니다'
+     좋은 예: '잘 드시는 두부조림·달걀찜은 1.5배 배식하고, 오후 3시에 두유 1팩과 삶은 달걀 1개를 드립니다. 끼니별 섭취율은 그대로 기록합니다'
+     나쁜 예: '김치를 드시지 않아 대체 반찬을 검토합니다'
+     좋은 예: '배추김치(섭취 40%) 대신 점심·저녁에 백김치나 시금치나물을 반 접시씩 드립니다'
 3-5. 입력의 '반드시 포함할 조치'에 있는 rule_id 는 이 어르신의 돌봄 우선순위 요인이므로 빠짐없이 staff_actions 에 넣고, 앞쪽에 둡니다.
 5-2. 입력에 '검증 피드백'이 있으면 이전 초안을 검수에서 지적한 내용입니다. 지적한 항목을 모두 고쳐 처음부터 다시 작성합니다. 다른 규칙(후보 안에서만 조치, 약·용량 금지, 근거 번호 규칙)은 그대로 지킵니다.
 6. 반드시 아래 JSON 한 개만 출력합니다.
@@ -153,6 +158,36 @@ def nutrition_ctx(features: dict):
     return out
 
 
+def meal_menu_ctx(features: dict, top: int = 6):
+    """식사 기록(meal_log)에서 메뉴별 평균 섭취율·나트륨 → 잘 드신 / 많이 남긴 / 나트륨 많았던 메뉴"""
+    log = features.get("meal_log")
+    if not isinstance(log, list):
+        return None
+    agg = {}
+    for cell in log:
+        for it in cell.get("items") or []:
+            n = it.get("name")
+            if not n or it.get("rate") is None:
+                continue
+            a = agg.setdefault(n, {"rate": [], "na": [], "meal": set()})
+            a["rate"].append(float(it["rate"]))
+            a["meal"].add(cell.get("meal"))
+            if (it.get("nut") or {}).get("na") is not None:
+                a["na"].append(float(it["nut"]["na"]))
+    if not agg:
+        return None
+    rows = [{"메뉴": n, "섭취율%": round(sum(a["rate"]) / len(a["rate"])), "횟수": len(a["rate"]),
+             "끼니": "·".join(sorted(m for m in a["meal"] if m)),
+             "섭취 나트륨mg": round(sum(a["na"]) / len(a["na"])) if a["na"] else None} for n, a in agg.items()]
+    good = sorted([r for r in rows if r["섭취율%"] >= 90], key=lambda r: (-r["횟수"], -r["섭취율%"]))[:top]
+    left = sorted([r for r in rows if r["섭취율%"] < 60], key=lambda r: (r["섭취율%"], -r["횟수"]))[:top]
+    salty = sorted([r for r in rows if r["섭취 나트륨mg"]], key=lambda r: -r["섭취 나트륨mg"])[:5]
+    strip = lambda rs, keys: [{k: r[k] for k in keys} for r in rs]
+    return {"잘 드신 메뉴": strip(good, ("메뉴", "섭취율%", "끼니")), "많이 남긴 메뉴": strip(left, ("메뉴", "섭취율%", "끼니")),
+            "나트륨이 많았던 메뉴(실제 섭취량 기준)": strip(salty, ("메뉴", "섭취 나트륨mg", "끼니")),
+            "_설명": "조사 기간 식사 기록. 메뉴 이름을 조치에 그대로 써도 됩니다."}
+
+
 def build_context(features: dict, type_info: dict, priority: dict, candidates: list, transition: dict,
                   guidelines: list | None = None):
     ind = {FEATURE_LABELS[k]: features.get(k) for k in FEATURE_LABELS if features.get(k) is not None}
@@ -172,7 +207,9 @@ def build_context(features: dict, type_info: dict, priority: dict, candidates: l
         "실제 섭취 영양소(하루 평균)": nutrition_ctx(features),
         "급식 개선 의견": (features.get("improvement_text") or "")[:200],
         "후보 조치 목록": [{"rule_id": c["id"], "category": c["category"], "staff": c["staff"], "meal": c["meal"],
-                       "monitor": c["monitor"]} for c in candidates],
+                       "monitor": c["monitor"], **({"식사 해결 예시": care_rules.MEAL_HINTS[c["id"]]} if c["id"] in care_rules.MEAL_HINTS else {})}
+                      for c in candidates],
+        "식사 기록 메뉴": meal_menu_ctx(features),
     }
     if guidelines:
         ctx["참고 지침"] = {
