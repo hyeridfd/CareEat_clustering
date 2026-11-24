@@ -1000,6 +1000,42 @@ function MenuTab({ run, onApprove, onEdited, onRerun, setErr }) {
 
 /* ─────────────────────────── ② 개인 배식표 ─────────────────────────── */
 
+/* [2026-11-24] ⚠ 끼니에서 어긋난 기준 — 새 설계는 '기준미충족' 목록, 이전 설계는 저장된 OK 표시로 대신 */
+function missLines(x, me) {
+  const fmt = (v) => (v == null ? '–' : Number(v).toLocaleString(undefined, { maximumFractionDigits: 1 }))
+  if (Array.isArray(x.기준미충족)) {
+    return x.기준미충족.map((m) => `${m.항목} ${fmt(m.값)}${m.단위} — ${m.방향 === '초과' ? '상한' : '하한'} ${fmt(m.기준)}${m.단위}보다 ${m.방향 === '초과' ? '많음' : '적음'}`)
+  }
+  const out = []
+  if (x.나트륨OK === '⚠️') out.push(`나트륨 ${fmt(x.예상나트륨)}mg — 상한 ${fmt(me?.sodium_max)}mg 초과`)
+  if (x.열량OK === '⚠️') out.push(`열량 ${fmt(x.예상열량)}kcal — 개인 범위 밖`)
+  if (x.단백질OK === '⚠️') out.push(`단백질 ${fmt(x.예상단백질)}g — 개인 기준 밖`)
+  if (!out.length) out.push('지방·당류·포화지방 중 하나가 상한을 넘었을 수 있음')
+  out.push('(이전 설계라 일부만 표시 — 다시 설계하면 항목별로 보임)')
+  return out
+}
+
+function WarnTip({ lines }) {
+  const [pos, setPos] = useState(null)        // 표가 스크롤 상자 안이라 화면 기준(fixed)으로 띄운다
+  const open = (e) => {
+    const r = e.currentTarget.getBoundingClientRect()
+    const w = 280, up = window.innerHeight - r.bottom < 160
+    setPos({ left: Math.max(8, Math.min(r.right - w, window.innerWidth - w - 8)), w, ...(up ? { bottom: window.innerHeight - r.top + 6 } : { top: r.bottom + 6 }) })
+  }
+  return (
+    <span className="cursor-help" onMouseEnter={open} onMouseLeave={() => setPos(null)} onFocus={open} onBlur={() => setPos(null)} tabIndex={0}>
+      <span className="text-amber-700 text-xs font-semibold">⚠</span>
+      {pos && (
+        <span role="tooltip" style={{ position: 'fixed', left: pos.left, top: pos.top, bottom: pos.bottom, width: pos.w, zIndex: 60 }}
+          className="pointer-events-none rounded-lg bg-gray-900 px-3 py-2 text-left text-[11px] leading-5 text-white shadow-lg">
+          <b className="block mb-0.5">배식량을 조정해도 맞추지 못한 기준</b>
+          {lines.map((l, i) => <span key={i} className={`block ${l.startsWith('(') ? 'text-gray-400' : ''}`}>· {l}</span>)}
+        </span>
+      )}
+    </span>
+  )
+}
+
 function ServingTab({ run }) {
   const residents = run.result?.residents || []
   const [q, setQ] = useState('')
@@ -1116,8 +1152,10 @@ function ServingTab({ run }) {
                           })}
                           <td className="py-1.5 pr-2 text-right tabular-nums">{x.예상열량}</td>
                           <td className="py-1.5 pr-2 text-right tabular-nums">{x.예상나트륨}</td>
-                          <td className="py-1.5 text-center" title={over ? `조정 결과: ${x.조정결과}` : '개인 기준 충족'}>
-                            {over ? <span className="text-amber-700 text-xs font-semibold">⚠</span> : <span className="text-emerald-600 text-xs">✓</span>}
+                          <td className="py-1.5 text-center">
+                            {over ? (
+                              <WarnTip lines={missLines(x, me)} />
+                            ) : <span className="text-emerald-600 text-xs" title="개인 기준 충족">✓</span>}
                           </td>
                         </tr>
                       )
@@ -1126,7 +1164,7 @@ function ServingTab({ run }) {
                 </table>
                 <p className="mt-2 text-[11px] text-muted">
                   <span className="text-emerald-700 font-semibold">초록·대체</span> 고령친화식품 대체(1인분 그대로) · <span className="text-sky-800 font-semibold">파랑</span> 죽·백김치 등 식사형태 변경 ·
-                  배식량은 기본 1인분이고 다를 때만 <span className="text-amber-700 font-semibold">×0.5</span>처럼 표시 · ⚠ 일부 영양 기준 초과(마우스를 올리면 자세히)
+                  배식량은 기본 1인분이고 다를 때만 <span className="text-amber-700 font-semibold">×0.5</span>처럼 표시 · ⚠ 배식량 조정으로도 못 맞춘 기준이 있는 끼니(마우스를 올리면 어떤 영양소인지 보여요)
                 </p>
               </div>
             )}

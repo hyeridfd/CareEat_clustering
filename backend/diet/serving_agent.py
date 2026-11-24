@@ -546,8 +546,24 @@ def serving_agent(state: MealPlanState) -> dict:
             ok_k = k_val >= (c.potassium_min or 0) * 0.999
             ok_c = (c.carb_min or 0) * 0.999 <= c_val <= (c.carb_max or 9999) * 1.001
 
+            # [2026-11-24] 어떤 기준에서 어긋났는지 — 화면 ⚠ 에 마우스를 올리면 보인다
+            #   (조정불가 판정과 같은 기준: 열량 범위 · 단백질 하한(신장질환은 상한) · 나트륨·당류·포화지방·지방 상한)
+            miss = []
+            def _chk(label, val, lo=None, hi=None, unit=""):
+                if hi and val > hi * 1.001:
+                    miss.append({"항목": label, "값": val, "기준": hi, "방향": "초과", "단위": unit})
+                elif lo and val < lo * 0.999:
+                    miss.append({"항목": label, "값": val, "기준": lo, "방향": "부족", "단위": unit})
+            _chk("열량", e_val, c.energy_min, c.energy_max, "kcal")
+            _chk("단백질", p_val, None if c.protein_max else c.protein_min, c.protein_max, "g")
+            _chk("나트륨", s_val, None, c.sodium_max, "mg")
+            _chk("당류", sug_val, None, getattr(c, "sugar_max", None), "g")
+            _chk("포화지방", sat_val, None, getattr(c, "sat_fat_max", None), "g")
+            _chk("지방", fat_val, None, getattr(c, "fat_max", None), "g")
+
             entry = {
                 **srv,
+                "기준미충족": miss,
                 "ratio":          ratio,
                 "밥비율":         r_rice,
                 "반찬비율":       r_side,

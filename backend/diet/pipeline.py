@@ -528,7 +528,7 @@ def ps_assemble(ps: dict, meta: dict, progress=None, inventory=None) -> dict:
                             "대체": [s for s in ch if s not in ("밥", "김치")] , "식사형태변경": [s for s in ch if s in ("밥", "김치")],
                             **{x: v.get(x) for x in ("밥", "국", "주찬", "부찬1", "부찬2", "김치", "ratio", "예상열량", "예상단백질",
                                                     "예상나트륨", "예상탄수화물", "예상지방", "예상당류", "예상포화지방", "예상식이섬유", "예상칼륨",
-                                                    "열량OK", "단백질OK", "나트륨OK", "식이섬유OK", "칼륨OK", "탄수화물OK", "칸별비율", "조정결과")}})
+                                                    "열량OK", "단백질OK", "나트륨OK", "식이섬유OK", "칼륨OK", "탄수화물OK", "칸별비율", "조정결과", "기준미충족")}})
     for eid in by_res:
         by_res[eid].sort(key=lambda x: (int(re.sub(r"\D", "", x["일차"]) or 0), order.get(x["끼니"], 9)))
 
