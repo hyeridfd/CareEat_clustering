@@ -1,0 +1,59 @@
+{
+  "n_train": 72,
+  "facilities": {
+    "NH002": 38,
+    "NH001": 34
+  },
+  "sizes": [
+    31,
+    22,
+    19
+  ],
+  "explained_pct": [
+    39.9,
+    22.7,
+    13.9,
+    9.1,
+    6.6
+  ],
+  "group_weights": {
+    "영양 상태": 0.769,
+    "영양소 섭취": 0.655,
+    "섭식 기능": 0.641
+  },
+  "cluster_means": {
+    "C1": {
+      "mna_sf": 11.32,
+      "bmi": 23.3,
+      "energy_kcal_kg": 14.7,
+      "protein_g_kg": 0.61,
+      "intake_total": 60.8,
+      "chewing_difficulty": 0.16,
+      "swallowing_difficulty": 0.0,
+      "texture_level": 0.13,
+      "eating_dependence": 0.03
+    },
+    "C2": {
+      "mna_sf": 7.55,
+      "bmi": 18.18,
+      "energy_kcal_kg": 17.66,
+      "protein_g_kg": 0.74,
+      "intake_total": 52.74,
+      "chewing_difficulty": 0.09,
+      "swallowing_difficulty": 0.0,
+      "texture_level": 0.23,
+      "eating_dependence": 0.14
+    },
+    "C3": {
+      "mna_sf": 6.79,
+      "bmi": 17.4,
+      "energy_kcal_kg": 17.74,
+      "protein_g_kg": 0.82,
+      "intake_total": 55.59,
+      "chewing_difficulty": 1.0,
+      "swallowing_difficulty": 0.21,
+      "texture_level": 1.89,
+      "eating_dependence": 0.95
+    }
+  }
+}

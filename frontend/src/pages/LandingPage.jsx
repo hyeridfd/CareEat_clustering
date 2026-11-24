@@ -29,9 +29,9 @@ const STEPS = [
 ]
 
 const TYPES = [
-  { code: 'C1', name: '양호 기능·양호 섭취형', label: '안정 관리군', desc: '기능과 식사가 모두 안정적인 어르신. 현재 식사를 유지하며 정기적으로 확인합니다.', tone: 'from-sky-50 to-white ring-sky-200 text-sky-700' },
-  { code: 'C2', name: '섭취 저조·급식 불만족형', name2: '식사 관심군', desc: '식사량이 적고 입맛에 맞지 않는 어르신. 원인을 찾아 선호를 반영하고 소량씩 자주 제공합니다.', tone: 'from-amber-50 to-white ring-amber-200 text-amber-700' },
-  { code: 'C3', name: '저작·연하곤란 고위험형', name2: '집중 돌봄군', desc: '씹기·삼키기가 어렵고 영양 위험이 큰 어르신. 식사 형태와 자세를 조정하고 체중을 자주 확인합니다.', tone: 'from-rose-50 to-white ring-rose-200 text-rose-700' },
+  { code: 'C1', name: '영양 양호형', label: '안정 관리군', desc: '체중·영양 상태가 양호하고 일반식을 스스로 드시는 어르신. 맛·기호를 살려 지금의 식사량을 유지합니다.', tone: 'from-sky-50 to-white ring-sky-200 text-sky-700' },
+  { code: 'C2', name: '저체중·영양위험형', name2: '영양 보충 관심군', desc: '일반식을 드시지만 체중이 적고 영양 위험이 있는 어르신. 간식·고단백 반찬으로 에너지와 단백질을 보충합니다.', tone: 'from-amber-50 to-white ring-amber-200 text-amber-700' },
+  { code: 'C3', name: '저작곤란·조정식·식사보조형', name2: '집중 돌봄군', desc: '씹기가 어려워 조정식을 드시고 식사 도움이 필요한 어르신. 에너지 밀도를 높인 질감 조절식과 식사 보조를 제공합니다.', tone: 'from-rose-50 to-white ring-rose-200 text-rose-700' },
 ]
 
 function Icon({ name, className = 'w-5 h-5' }) {
@@ -307,9 +307,9 @@ function Mock({ step }) {
     return (
       <Frame title="진단 · 돌봄 우선순위">
         <div className="space-y-3">
-          {[['김O순', 'C3 저작·연하곤란 고위험형', 92, 'bg-rose-500', '우선 관리'],
-            ['이O기', 'C2 섭취 저조·급식 불만족형', 46, 'bg-amber-400', '주의 관찰'],
-            ['박O자', 'C1 양호 기능·양호 섭취형', 12, 'bg-emerald-500', '정기 관리']].map(([n, t, v, tone, lv]) => (
+          {[['김O순', 'C3 저작곤란·조정식·식사보조형', 92, 'bg-rose-500', '우선 관리'],
+            ['이O기', 'C2 저체중·영양위험형', 46, 'bg-amber-400', '주의 관찰'],
+            ['박O자', 'C1 영양 양호형', 12, 'bg-emerald-500', '정기 관리']].map(([n, t, v, tone, lv]) => (
             <div key={n} className="rounded-xl border border-navy-100 px-4 py-3">
               <div className="flex items-center justify-between gap-3">
                 <span className="text-sm font-bold text-navy-900">{n}</span>

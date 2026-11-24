@@ -35,7 +35,7 @@ SAT_COLS = ["elderly_id", "nursing_home_id", "updated_at", "overall_satisfaction
             "food_quality", "preferred_food_groups", "improvement_suggestions"]
 
 # 설명·솔루션·추이 비교에 쓰는 지표 (원값 저장)
-KEY_FEATURES = bc.cluster_vars() + ["age", "female", "care_grade", "education_level", "n_diseases", "dx_dementia", "dx_diabetes",
+KEY_FEATURES = bc.cluster_vars() + ["energy_kcal_kg", "protein_g_kg", "age", "female", "care_grade", "education_level", "n_diseases", "dx_dementia", "dx_diabetes",
                                     "dx_depression", "dx_stroke", "dx_parkinson", "dx_hypertension", "mna_risk",
                                     "intake_kimchi", "intake_snack", "intake_g_day", "pref_seafood", "pref_meat",
                                     "pref_fruit", "pref_vegetable", "cmt_seasoning", "cmt_portion", "cmt_variety",
@@ -88,6 +88,7 @@ def build_features(basic_rows, nutrition_rows, satisfaction_rows, meal_forms=Non
     latest = pd.concat(ts, axis=1).max(axis=1) if ts else pd.Series(dtype="datetime64[ns, UTC]")
     df["survey_updated_at"] = latest.reindex(df.index)
     _attach_nutrition(df, meal_forms or {})
+    _attach_intake_per_kg(df)
     return df
 
 
@@ -99,13 +100,26 @@ def _attach_nutrition(df, meal_forms):
         log = row.get("meal_log")
         form = meal_forms.get(eid) or "일반밥/일반찬"
         try:
-            log, summary = nutri.enrich_meal_log(log, form, eid)
+            log, summary = nutri.enrich_meal_log(log, form, eid, row.get("nursing_home_id"))
         except Exception:
             summary = None
         logs.append(log if isinstance(log, list) else None)
         summaries.append(summary)
     df["meal_log"] = pd.Series(logs, index=df.index)
     df["nutrition"] = pd.Series(summaries, index=df.index)
+
+
+def _attach_intake_per_kg(df):
+    """유형 모델 v2 투입 변수: 하루 평균 에너지·단백질 ÷ 체중 (kcal/kg/일, g/kg/일)."""
+    def per_kg(row, key):
+        s, w = row.get("nutrition"), row.get("weight_kg")
+        v = (s or {}).get("avg_day", {}).get(key) if isinstance(s, dict) else None
+        try:
+            return float(v) / float(w) if v is not None and w and float(w) > 0 else np.nan
+        except (TypeError, ValueError):
+            return np.nan
+    df["energy_kcal_kg"] = [per_kg(r, "energy") for _, r in df.iterrows()]
+    df["protein_g_kg"] = [per_kg(r, "protein") for _, r in df.iterrows()]
 
 
 # ─────────────────────────── 모델 로드 ───────────────────────────

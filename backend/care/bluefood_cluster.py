@@ -51,6 +51,7 @@ VAR_LABELS = {
     "bmi": "BMI (kg/m²)", "mna_sf": "MNA-SF (0–14)", "kmbi_pct": "K-MBI (%)",
     "mmse": "K-MMSE-2 (0–30)", "gds": "GDS-SF (0–15)",
     "chewing_difficulty": "저작곤란", "swallowing_difficulty": "연하곤란",
+    "energy_kcal_kg": "체중당 에너지 (kcal/kg/일)", "protein_g_kg": "체중당 단백질 (g/kg/일)",
     "texture_level": "식사형태 (0일반~3유동)", "eating_dependence": "식사 의존도 (0–2)",
     "intake_total": "전체 섭취율 (%)", "intake_rice": "밥/죽 섭취율 (%)", "intake_main": "주찬 섭취율 (%)",
     "intake_side": "부찬 섭취율 (%)", "intake_soup": "국/탕 섭취율 (%)", "intake_kimchi": "김치 섭취율 (%)",
@@ -166,7 +167,7 @@ MMSE_ITEMS = [
     "mmse_naming", "mmse_repetition", "mmse_comprehension", "mmse_reading", "mmse_writing", "mmse_drawing",
 ]
 GDS_REVERSE = {1, 5, 7, 11, 13}
-TEXTURE = {"일반식": 0, "다진식": 1, "갈은식(믹서식)": 2, "유동식": 3}
+TEXTURE = {"일반식": 0, "다진식": 1, "갈은식(믹서식)": 2, "유동식": 3, "기타": 1}  # 기타 = 다진식 수준 (유형 모델 v2 학습과 동일)
 EATING = {"스스로 식사할 수 있음": 0, "요양보호사 등의 부분적인 도움 필요": 1, "요양보호사 등의 전적인 도움 필요": 2}
 CARE = {"1등급": 1, "2등급": 2, "3등급": 3, "4등급 이상": 4}
 EDU = {"무학": 0, "초등학교 졸업": 1, "중학교 졸업": 2, "고등학교 졸업": 3, "대학교(전문대 포함) 졸업 이상": 4}

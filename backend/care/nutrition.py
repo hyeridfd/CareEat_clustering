@@ -9,6 +9,12 @@
 
 메뉴 영양성분은 CAN Pro 산출 결과를, 식단표·배식량은 조사 앱 설정을 그대로 옮겨 둔
 nutrition_data/*.json 에서 읽는다. 간식은 CAN Pro 자료가 없어 제외한다.
+
+시설별 산출(facility_menus.json 에 있는 시설, 2026-11 유형 모델 v2부터)
+    섭취 영양소 = 메뉴 1 g당 영양소(식약처 매핑) × 배식량(g) × 섭취율(%)/100
+    하루 평균   = 아침·점심·저녁 각각의 끼니 평균을 더함
+    → 유형 모델 학습에 쓴 통합 섭취 파일(대상자별_영양섭취량.xlsx)과 같은 계산.
+      영양성분이 없는 메뉴·영양소는 합산에서 뺀다. 표에 없는 시설은 기존 CAN Pro 방식.
 """
 from __future__ import annotations
 import json
@@ -43,6 +49,43 @@ def _plan():
 @lru_cache(maxsize=1)
 def _targets():
     return json.loads((DATA / "nutrition_targets.json").read_text(encoding="utf-8"))
+
+
+@lru_cache(maxsize=1)
+def _facility_menus() -> dict:
+    p = DATA / "facility_menus.json"
+    if not p.exists():
+        return {}
+    return json.loads(p.read_text(encoding="utf-8")).get("facilities", {})
+
+
+FAC_SLOT = {"국/탕": "국", "주찬": "주찬", "부찬1": "부찬1", "부찬2": "부찬2", "김치1": "김치1", "김치2": "김치2"}
+
+
+def has_facility_table(nursing_home_id) -> bool:
+    return str(nursing_home_id or "").strip() in _facility_menus()
+
+
+def _fac_slot(slot, meal_form):
+    if slot == "밥/죽":
+        base = str(meal_form or "").split("/")[0]
+        return "죽" if base.endswith("죽") else "밥"
+    return FAC_SLOT.get(slot, slot)
+
+
+def facility_item_nutrients(nursing_home_id, day, meal, slot, portion_g, rate_pct, meal_form):
+    """시설 식단표·1 g당 영양소로 슬롯 한 칸의 섭취 영양소. (메뉴명, {지표: 값}) 반환."""
+    fac = _facility_menus().get(str(nursing_home_id).strip())
+    if not fac or portion_g is None or rate_pct is None:
+        return None, None
+    name = (fac["plan"].get(str(day), {}).get(meal, {}) or {}).get(_fac_slot(slot, meal_form))
+    if not name:
+        return None, None
+    per_g = fac["per_g"].get(name)
+    if not per_g:
+        return name, None
+    eaten = float(portion_g) * float(rate_pct) / 100
+    return name, {k: v * eaten for k, v in per_g.items() if v is not None}
 
 
 def fields() -> dict:
@@ -133,13 +176,15 @@ def _round(d, digits_of):
     return {k: round(v, 2 if digits_of.get(k, 0) else 1) for k, v in d.items()}
 
 
-def enrich_meal_log(meal_log, meal_form, elderly_id=None):
+def enrich_meal_log(meal_log, meal_form, elderly_id=None, nursing_home_id=None):
     """
     meal_log(일자×끼니 기록)의 각 칸에 메뉴명과 섭취 영양소를 채워 넣고,
     끼니별·일자별 평균 영양소 요약을 함께 돌려준다.
+    nursing_home_id 가 시설 영양표(facility_menus.json)에 있으면 시설별 산출을 쓴다.
     """
     if not isinstance(meal_log, list) or not meal_log:
         return meal_log, None
+    use_fac = has_facility_table(nursing_home_id)
     fld = fields()
     digits = {k: v.get("digits", 1) for k, v in fld.items()}
     per_day, per_meal, cells = {}, {}, 0
@@ -149,8 +194,12 @@ def enrich_meal_log(meal_log, meal_form, elderly_id=None):
             continue
         tot = {}
         for it in cell.get("items") or []:
-            name, nut = item_nutrients(day, meal, it.get("slot"), it.get("g"), it.get("rate"),
-                                       meal_form, elderly_id)
+            if use_fac:
+                name, nut = facility_item_nutrients(nursing_home_id, day, meal, it.get("slot"), it.get("g"),
+                                                    it.get("rate"), meal_form)
+            else:
+                name, nut = item_nutrients(day, meal, it.get("slot"), it.get("g"), it.get("rate"),
+                                           meal_form, elderly_id)
             if name:
                 it["name"] = name.replace("_HS", "")
             if nut:
@@ -166,10 +215,17 @@ def enrich_meal_log(meal_log, meal_form, elderly_id=None):
     days = sorted(per_day)
     meal_counts = {m: sum(1 for c in meal_log if c.get("meal") == m and c.get("nut")) for m in MAIN_MEALS}
     n_meals = sum(meal_counts.values())
-    # 하루 평균은 '기록된 끼니'를 하루 세 끼로 환산해 구한다.
-    # (일부 끼니가 조사되지 않은 날을 그대로 나누면 하루 섭취량이 과소평가된다)
-    total = _sum_all(per_day.values())
-    avg_day = {k: v / n_meals * 3 for k, v in total.items()} if n_meals else {}
+    if use_fac:
+        # 통합 섭취 파일과 같은 규칙: 아침·점심·저녁 각각의 끼니 평균을 더함
+        avg_day = {}
+        for m in MAIN_MEALS:
+            if meal_counts[m]:
+                _add(avg_day, {k: v / meal_counts[m] for k, v in per_meal.get(m, {}).items()})
+    else:
+        # 하루 평균은 '기록된 끼니'를 하루 세 끼로 환산해 구한다.
+        # (일부 끼니가 조사되지 않은 날을 그대로 나누면 하루 섭취량이 과소평가된다)
+        total = _sum_all(per_day.values())
+        avg_day = {k: v / n_meals * 3 for k, v in total.items()} if n_meals else {}
     summary = {
         "days": [{"day": d, **_round(per_day[d], digits)} for d in days],
         "meals": [{"meal": m, **_round({k: v / max(meal_counts[m], 1) for k, v in per_meal[m].items()}, digits)}
@@ -178,6 +234,7 @@ def enrich_meal_log(meal_log, meal_form, elderly_id=None):
         "n_days": len(days),
         "n_meals": n_meals,
         "partial": n_meals < len(days) * 3,
+        "method": "facility" if use_fac else "canpro",
     }
     return meal_log, summary
 
