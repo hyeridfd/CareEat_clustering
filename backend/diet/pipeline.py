@@ -5,7 +5,10 @@ pipeline.py  ─  맞춤 식단 설계 파이프라인 (서버판, Neo4j·LangGr
 에이전트(agent_substitute_1018)와 같은 순서·같은 규칙으로 동작한다.
 
   ① 어르신 프로파일   care_assessments.features(질환·키·체중·나이·식사형태) + 식단 설정(매운 음식)
-  ② 후보 메뉴         data/pool.json(에이전트 후보 풀 스냅샷) → 나트륨 보정·표준 배식 비율
+  ② 후보 메뉴         data/pool.json(build_pool.py: 레시피 DB × 식약처 영양성분 DB, 식품코드 매핑)
+                      ※ 레시피·영양 DB·build_pool.py 가 pool.json 보다 새로우면 읽을 때 자동으로 다시 만든다
+                      ※ 기존 에이전트 스냅샷(605개)은 data/pool_v0.json 으로 보관
+                      → 나트륨 보정·표준 배식 비율
                       → 시설 선호 점수 → 주의 재료 감점 → 한 그릇·다진찬 속성
   ③ 일반식 최적화     NSGA-II(nsga2.py) 28일 × 18칸, f1 영양 · f2 비용(예산+재고) · f3 다양성(반복·편중) · f4 조화(한 끼 내부 조합·선호·규칙)
                       → 균형 해 선택(moo_metrics.select_balanced)
@@ -41,6 +44,22 @@ from .sodium_config import apply_sodium_adjustment
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 POOL_JSON = os.path.join(DATA_DIR, "pool.json")
 LOCK = threading.Lock()          # 한 번에 한 설계만 (메모리·전역 상태 보호)
+_POOL_LOCK = threading.Lock()
+
+
+def ensure_pool() -> str:
+    """pool.json 이 레시피·영양 DB보다 오래됐으면 build_pool 로 다시 만든다. 반환: POOL_JSON 경로"""
+    from . import build_pool as BP
+    with _POOL_LOCK:
+        try:
+            paths = BP.default_paths()
+            if BP.is_stale(POOL_JSON, paths):
+                BP.rebuild(out=POOL_JSON, paths=paths, verbose=False)
+        except Exception as e:                       # 재생성 실패(파일 없음·쓰기 불가 등) → 기존 pool.json 사용
+            if not os.path.exists(POOL_JSON):
+                raise
+            print(f"  [후보 풀] ⚠ pool.json 재생성 실패 → 기존 파일 사용: {e}")
+    return POOL_JSON
 
 PRESETS = {                       # 실행 강도 (개체 수, 세대 수)
     "quick":    (100, 80),
@@ -240,7 +259,7 @@ def _sync_meta(profiles, meta):
 # ② 후보 메뉴
 # ══════════════════════════════════════════════════════════════
 def load_pool(pool_scores: dict | None = None) -> dict:
-    pool = json.load(open(POOL_JSON, encoding="utf-8"))
+    pool = json.load(open(ensure_pool(), encoding="utf-8"))
     pool = apply_sodium_adjustment(pool, verbose=False)
     if pool_scores:
         for ms in pool.values():
@@ -704,7 +723,8 @@ def refresh_preference(assessments: dict, residents: list) -> dict:
         if waste.empty:
             raise ValueError("잔반(섭취율) 기록이 있는 평가가 없습니다. 영양 조사 후 평가를 실행하세요.")
         FP.MIN_RESIDENTS = 3
-        raw = json.load(open(POOL_JSON, encoding="utf-8"))
+        raw = json.load(open(ensure_pool(), encoding="utf-8"))
+        raw = {c: ms for c, ms in raw.items() if c in dict(SLOT_CATS).values()}   # 간식은 식단 칸이 아니므로 제외
         res = FP.fit_scores(raw, waste, load_products(), verbose=False)
         obs = res["obs"].copy()
         obs["시설점수"] = [res["pool"].get(n) for n in obs.index]
@@ -729,5 +749,5 @@ def refresh_preference(assessments: dict, residents: list) -> dict:
 
 def menu_options() -> dict:
     """식단표 수정용 후보 메뉴 목록 {카테고리: [메뉴명…]}"""
-    pool = json.load(open(POOL_JSON, encoding="utf-8"))
+    pool = json.load(open(ensure_pool(), encoding="utf-8"))
     return {cat: sorted(m["menu_name"] for m in ms) for cat, ms in pool.items()}

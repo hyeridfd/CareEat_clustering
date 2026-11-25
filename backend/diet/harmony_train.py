@@ -59,8 +59,8 @@ def load(paths):
     # 재료명 표준화 표: 식단표들의 재료코드 + 레시피 DB(recipes.csv)의 식품코드
     pairs = [(nm, (v or {}).get("id")) for d_ in ings.values() for nm, v in d_.items()]
     try:
-        import pandas as pd
-        r = pd.read_csv(os.path.join(DATA_DIR, "recipes.csv"), usecols=["원재료명", "식품코드"])
+        from .recipes_db import read_recipes
+        r = read_recipes(usecols=["원재료명", "식품코드"]).drop_duplicates()
         pairs += list(zip(r["원재료명"].astype(str), r["식품코드"].astype(str)))
     except Exception:
         pass

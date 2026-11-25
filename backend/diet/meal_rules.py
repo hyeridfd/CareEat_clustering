@@ -19,7 +19,8 @@ TEXTURE_XLSX = os.path.join(DATA_DIR, "meal_policy.json")   # [서버] 영양사
 ONE_DISH_RICE_LABEL   = "-(일품식)"   # 한 그릇 끼니의 밥 칸 표시
 ONE_DISH_MAX_PER_WEEK = 2             # 7일 단위 한 그릇 끼니 상한
 TEXTURE_CAUTION_MAX   = 2             # 한 끼 '주의' 메뉴 허용 개수
-UNKNOWN_TEXTURE       = "주의"        # 엑셀에 없는 새 메뉴의 기본값 (안전 쪽)
+UNKNOWN_TEXTURE       = "주의"        # 영양사 판정도 자동 분류(policy_auto)도 없는 메뉴의 기본값 (안전 쪽)
+# [2026-11-25] 우선순위: 영양사 판정(meal_policy.json) > 자동 분류(pool 메뉴의 policy_auto, meal_policy_auto.py) > UNKNOWN_TEXTURE
 
 # f4 구성 가중치 (합으로 나눠 평균) ─ 0으로 두면 해당 규칙 끔
 F4_WEIGHTS = {
@@ -72,10 +73,13 @@ def load_policy(path: str = TEXTURE_XLSX) -> dict:
 def apply_meal_rules(pool: dict, verbose: bool = True) -> dict:
     """pool 메뉴에 one_dish / texture 속성을 붙입니다."""
     pol = load_policy()
-    unknown, n_one = 0, 0
+    unknown, n_one, n_auto = 0, 0, 0
     for cat, menus in pool.items():
         for m in menus:
             p = pol.get((cat, m["menu_name"]))
+            if p is None and m.get("policy_auto"):
+                n_auto += 1
+                p = m["policy_auto"]
             if p is None:
                 unknown += 1
                 p = {"one_dish": False, "texture": UNKNOWN_TEXTURE}
@@ -87,7 +91,7 @@ def apply_meal_rules(pool: dict, verbose: bool = True) -> dict:
         for ms in pool.values():
             for m in ms:
                 tex[m["texture"]] = tex.get(m["texture"], 0) + 1
-        print(f"  [식단 규칙] 한 그릇 음식 {n_one}개 | 다진찬 적합도 {tex}"
+        print(f"  [식단 규칙] 한 그릇 음식 {n_one}개 | 다진찬 적합도 {tex} | 자동 분류 {n_auto}개"
               + (f" | ⚠ 분류 없는 메뉴 {unknown}개 → '{UNKNOWN_TEXTURE}'" if unknown else ""))
     return pool
 

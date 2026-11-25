@@ -399,8 +399,8 @@ def _code_map() -> dict:
     global _CODES
     if _CODES is None:
         try:
-            import pandas as pd
-            r = pd.read_csv(os.path.join(DATA_DIR, "recipes.csv"), usecols=["음식명", "음식 코드"]).drop_duplicates("음식명")
+            from .recipes_db import read_recipes
+            r = read_recipes(usecols=["음식명", "음식 코드"]).drop_duplicates("음식명")
             _CODES = dict(zip(r["음식명"], r["음식 코드"].astype(str)))
         except Exception:
             _CODES = {}

@@ -26,7 +26,7 @@ import numpy as np
 import pandas as pd
 
 WASTE_XLSX        = os.path.join(DATA_DIR, "잔반기록.xlsx")
-RECIPE_CSV        = os.path.join(DATA_DIR, "recipes.csv")
+from .recipes_db import RECIPE_CSV, read_recipes   # 새 레시피 DB(recipes_v1.csv) 우선, 인코딩 자동
 POOL_SCORES_PATH  = "pool_preference_scores.json"
 PRODUCT_SCORES_PATH = "product_preference_scores.json"
 REPORT_PATH       = "시설선호도_보고서.xlsx"
@@ -74,7 +74,7 @@ def _method_of(text: str) -> str:
 
 def recipe_features(path: str = RECIPE_CSV) -> dict:
     """{메뉴명: {cat, method, main, spicy, soy, doenjang}}"""
-    r = pd.read_csv(path)
+    r = read_recipes(path)
     out = {}
     for name, g in r.groupby("음식명"):
         ings = g[["원재료명", "원재료 중량 (실사용량)"]].fillna(0)

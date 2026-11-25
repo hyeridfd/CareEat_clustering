@@ -22,3 +22,7 @@ Thumbs.db
 frontend/dist/
 backend/models/*/report/
 backend/results/
+
+# 식단 설계 후보 풀 작업 중 백업·중간 산출물 (2026-11-25)
+backend/diet/data/_backup_*/
+backend/diet/data/pool_recipes.json

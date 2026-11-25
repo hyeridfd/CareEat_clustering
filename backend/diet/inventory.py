@@ -23,7 +23,7 @@ import numpy as np
 import pandas as pd
 
 INVENTORY_XLSX = os.path.join(DATA_DIR, "재고.xlsx")
-RECIPE_CSV     = os.path.join(DATA_DIR, "recipes.csv")
+from .recipes_db import RECIPE_CSV, read_recipes   # 새 레시피 DB(recipes_v1.csv) 우선, 인코딩 자동
 INV_WEIGHT     = 1.0      # f2에 더하는 재고 미활용률 가중치 (0이면 재고 무시)
 URGENT_DAYS    = 14       # 유통기한 가중치 기준 일수
 PLAN_DAYS      = 28
@@ -57,7 +57,7 @@ def _match(inv_name: str, recipe_name: str) -> bool:
 
 def recipe_ingredients(path: str = RECIPE_CSV) -> dict:
     """{메뉴명: {원재료명: 실사용량 g}}"""
-    r = pd.read_csv(path)
+    r = read_recipes(path, usecols=["음식명", "원재료명", "원재료 중량 (실사용량)"])
     out = {}
     for (menu, ing), g in r.groupby(["음식명", "원재료명"]):
         out.setdefault(menu, {})[ing] = float(g["원재료 중량 (실사용량)"].fillna(0).sum())
