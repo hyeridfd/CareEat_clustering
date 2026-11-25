@@ -317,8 +317,32 @@ def search(q: str = Query("", max_length=60),
     counts = {s: sum(1 for i in items if i["supplier"] == s) for s in SUPPLIERS}
     page = items[offset: offset + limit]
     _attach_recent_change(sb, page)
+    dist, stats = _distribution(items, terms, pk) if offset == 0 else (None, None)
     return {"items": page, "total": len(items), "counts": counts, "truncated": truncated,
-            "best": best, "terms": terms}
+            "best": best, "terms": terms, "dist": dist, "stats": stats}
+
+
+def _quantile(sorted_vals, q):
+    if not sorted_vals:
+        return None
+    i = (len(sorted_vals) - 1) * q
+    lo, hi = int(i), min(int(i) + 1, len(sorted_vals) - 1)
+    return round(sorted_vals[lo] + (sorted_vals[hi] - sorted_vals[lo]) * (i - lo))
+
+
+def _distribution(items, terms, pk, cap: int = 400):
+    """검색 결과의 kg당 가격 분포 (화면의 점 그래프용). 관련도 상위 cap 개만."""
+    pool = [i for i in sorted(items, key=lambda i: _relevance(i, terms))
+            if i[pk] is not None and i["per_unit_label"] == "kg당"][:cap]
+    dist = [{"s": i["supplier"], "v": i[pk], "cd": i["item_cd"], "nm": i["item_nm"], "spec": i["spec"]}
+            for i in pool]
+    stats = {}
+    for sup in SUPPLIERS:
+        vals = sorted(d["v"] for d in dist if d["s"] == sup)
+        if vals:
+            stats[sup] = {"n": len(vals), "min": vals[0], "max": vals[-1], "p25": _quantile(vals, .25),
+                          "median": _quantile(vals, .5), "p75": _quantile(vals, .75)}
+    return dist, stats
 
 
 def _attach_recent_change(sb, items, days: int = 30):
