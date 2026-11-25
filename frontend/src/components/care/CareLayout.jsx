@@ -9,6 +9,7 @@ const NAV = [
   { to: '/care/records', label: '기록', desc: '어르신·조사 현황', icon: 'record' },
   { to: '/care', label: '진단', desc: '유형·돌봄 우선순위', icon: 'diagnose', exact: true },
   { to: '/care/solutions', label: '솔루션', desc: '돌봄 계획·식단·프로그램', icon: 'solution' },
+  { to: '/care/ingredients', label: '식자재', desc: '공급사 단가 검색·비교', icon: 'ingredients' },
   { to: '/care/news', label: '동향', desc: '노인·돌봄 뉴스 브리핑', icon: 'news' },
   { to: '/care/connect', label: '소통', desc: '보호자 안내·발송 기록', icon: 'connect' },
   { to: '/care/settings', label: '설정', desc: '시설·계정', icon: 'settings' },
@@ -22,6 +23,7 @@ export function NavIcon({ name, className = 'w-[18px] h-[18px]' }) {
     diagnose: <><circle cx="8" cy="9" r="3" {...p} /><circle cx="16" cy="15" r="3" {...p} /><path d="M11 9h3M10 15H7" {...p} /></>,
     solution: <><path d="M12 3a6 6 0 0 0-3 11.2V17h6v-2.8A6 6 0 0 0 12 3z" {...p} /><path d="M10 20h4" {...p} /></>,
     news: <><path d="M4 5h11v14H6a2 2 0 0 1-2-2V5z" {...p} /><path d="M15 9h3a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2" {...p} /><path d="M7 8.5h5M7 12h5M7 15.5h3" {...p} /></>,
+    ingredients: <><path d="M4 6h2l2 10h10l2-7H7.2" {...p} /><circle cx="9.5" cy="19.5" r="1.3" {...p} /><circle cx="16.5" cy="19.5" r="1.3" {...p} /></>,
     connect: <><path d="M4 7a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3H9l-5 4V7z" {...p} /></>,
     settings: <><circle cx="12" cy="12" r="3.2" {...p} /><path d="M12 3v2.2M12 18.8V21M21 12h-2.2M5.2 12H3M18.4 5.6l-1.6 1.6M7.2 16.8l-1.6 1.6M18.4 18.4l-1.6-1.6M7.2 7.2L5.6 5.6" {...p} /></>,
   }
