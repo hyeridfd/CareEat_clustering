@@ -432,7 +432,8 @@ def trends(lcls: Optional[str] = Query(None, description="대분류, 생략하�
     """분류 월 지수: 공급사별 시계열, 전월·전년 대비, 계절 패턴. 분류 목록(groups)도 함께."""
     sb = get_supabase()
     rows = (sb.table("supplier_category_monthly")
-            .select("supplier,lcls_nm,mcls_nm,month,idx,mom_pct,n_items,n_compared,up_share,down_share")
+            .select("supplier,lcls_nm,mcls_nm,month,idx,mom_pct,n_items,n_compared,up_share,down_share,"
+                    "kg_median,kg_p25,kg_p75,kg_n")
             .order("month").limit(20000).execute().data or [])
     if not rows:
         return {"months": 0, "groups": [], "overview": [], "series": {}, "seasonal": {}}
@@ -470,10 +471,24 @@ def trends(lcls: Optional[str] = Query(None, description="대분류, 생략하�
             pairs = [(a, b) for a, b, _ in s]
             series[sup] = [{"month": a, "idx": b, "mom_pct": r["mom_pct"], "n_items": r["n_items"],
                             "n_compared": r["n_compared"], "up_share": r["up_share"], "down_share": r["down_share"],
-                            "yoy_pct": _yoy(pairs, i)} for i, (a, b, r) in enumerate(s)]
+                            "yoy_pct": _yoy(pairs, i), "kg_median": _num(r.get("kg_median")),
+                            "kg_p25": _num(r.get("kg_p25")), "kg_p75": _num(r.get("kg_p75")), "kg_n": r.get("kg_n")}
+                           for i, (a, b, r) in enumerate(s)]
             seasonal[sup] = seasonal_profile(pairs)
+        # 이 분류 안에서 많이 변한 품목 (crawler 의 monthly.movers 가 미리 계산)
+        try:
+            mv = (sb.table("supplier_category_movers").select("*")
+                  .eq("lcls_nm", lcls).eq("mcls_nm", mcls).order("rank").limit(500).execute().data or [])
+        except Exception:  # noqa: BLE001  (테이블이 아직 없을 때)
+            mv = []
+        movers = {}
+        for r in mv:
+            movers.setdefault(r["period"], {}).setdefault(r["kind"], []).append(
+                {**r, "supplier_label": SUPPLIERS.get(r["supplier"], r["supplier"])})
+    else:
+        movers = {}
     return {"months": len(months), "first": months[0], "last": months[-1],
-            "groups": group_list, "overview": overview, "series": series, "seasonal": seasonal}
+            "groups": group_list, "overview": overview, "series": series, "seasonal": seasonal, "movers": movers}
 
 
 def _item_monthly(sb, supplier: str, item_cd: str):

@@ -39,15 +39,17 @@ function fmtTime(iso) {
   const t = new Date(iso)
   return Number.isNaN(t.getTime()) ? '' : `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`
 }
-// '(C)양배추(상품,실온,겉잎제거,국산)' → 이름 '양배추', 속성 '겉잎제거' (보관·원산지는 배지로 따로 보여줌)
+// '(C)양배추(상품,실온,겉잎제거,국산)' → 이름 '양배추', 속성 '겉잎제거'
+// '알타리무(국내산)/상' → 이름 '알타리무', 속성 '상'  (보관·원산지는 배지로 따로 보여줌)
+const SKIP_ATTR = ['냉장', '냉동', '실온', '상온', '국산', '국내산', '국내', '수입', '상품']
 function splitName(nm = '') {
   const prefix = (nm.match(/^(\([^)]*\)|\[[^\]]*\])/) || [''])[0]
   const rest = nm.slice(prefix.length)
-  const i = rest.indexOf('(')
-  if (i <= 0) return { name: rest || nm, attrs: '' }
-  const attrs = rest.slice(i + 1).replace(/\)$/, '').split(',').map((s) => s.trim())
-    .filter((s) => s && !['냉장', '냉동', '실온', '상온', '국산', '수입', '상품'].includes(s)).join(' · ')
-  return { name: rest.slice(0, i), attrs }
+  const m = rest.match(/^([^(]+)\(([^)]*)\)(.*)$/)
+  if (!m) return { name: rest || nm, attrs: '' }
+  const inner = m[2].split(/[,/]/).map((x) => x.trim()).filter((x) => x && !SKIP_ATTR.includes(x))
+  const tail = m[3].replace(/^[\s/_-]+/, '').trim()
+  return { name: m[1].trim(), attrs: [...new Set([...inner, tail].filter(Boolean))].join(' · ') }
 }
 
 function useWidth() {
@@ -395,7 +397,7 @@ function Home({ summary, onCategory, onOpen }) {
         )}
       </section>
     </div>
-    <TrendSection />
+    <TrendSection onOpen={onOpen} />
     </>
   )
 }
@@ -863,20 +865,29 @@ function Spark({ series, w = 96, h = 26 }) {
   )
 }
 
-// 같은 값축(지수) 위에 공급사별 선. 마우스 위치의 달을 세로선과 함께 보여준다.
-function IndexChart({ series }) {
+// 공급사별 선 (field = idx 지수 | kg_median kg당 중앙값 원). 마우스 위치의 달을 세로선과 함께 보여준다.
+function niceStep(range) {
+  const raw = range / 5, p = 10 ** Math.floor(Math.log10(raw || 1)), n = raw / p
+  return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * p
+}
+
+function IndexChart({ series, field = 'idx' }) {
   const [ref, width] = useWidth()
   const [hover, setHover] = useState(null)
-  const sups = SUP_KEYS.filter((s) => series?.[s]?.length)
+  const isIdx = field === 'idx'
+  const sups = SUP_KEYS.filter((s) => series?.[s]?.some((p) => p[field] != null))
   const months = [...new Set(sups.flatMap((s) => series[s].map((p) => p.month)))].sort()
-  const W = Math.max(width, 300), H = 240, L = 40, R = 56, T = 14, B = 26
-  const vals = sups.flatMap((s) => series[s].map((p) => p.idx)).filter((v) => v != null)
-  let lo = Math.min(...vals, 100), hi = Math.max(...vals, 100)
-  const pad = Math.max((hi - lo) * 0.15, 2); lo -= pad; hi += pad
+  const W = Math.max(width, 300), H = 240, L = isIdx ? 40 : 48, R = 64, T = 14, B = 26
+  const vals = sups.flatMap((s) => series[s].map((p) => p[field])).filter((v) => v != null)
+  if (!vals.length) return <p ref={ref} className="py-16 text-center text-sm text-muted">kg 단위로 환산할 수 있는 품목이 부족해 그릴 수 없습니다.</p>
+  let lo = Math.min(...vals, ...(isIdx ? [100] : [])), hi = Math.max(...vals, ...(isIdx ? [100] : []))
+  const pad = Math.max((hi - lo) * 0.15, isIdx ? 2 : hi * 0.03); lo -= pad; hi += pad
+  if (!isIdx) lo = Math.max(0, lo)
   const x = (m) => L + (months.indexOf(m) / Math.max(months.length - 1, 1)) * (W - L - R)
   const y = (v) => T + (1 - (v - lo) / (hi - lo)) * (H - T - B)
-  const step = (hi - lo) > 30 ? 10 : (hi - lo) > 12 ? 5 : 2
+  const step = niceStep(hi - lo)
   const yt = []; for (let v = Math.ceil(lo / step) * step; v <= hi; v += step) yt.push(v)
+  const fmtV = (v) => (isIdx ? `${Math.round(v)}` : short(Math.round(v)))
   const xt = months.filter((m, i) => months.length <= 13 || m.endsWith('-01') || i === months.length - 1)
   const onMove = (e) => {
     const px = e.clientX - e.currentTarget.getBoundingClientRect().left
@@ -885,35 +896,39 @@ function IndexChart({ series }) {
     setHover(best)
   }
   // 오른쪽 끝 이름표가 겹치지 않게 살짝 벌린다
-  const ends = sups.map((s) => { const p = series[s][series[s].length - 1]; return { s, v: p.idx, y: y(p.idx) } }).sort((a, b) => a.y - b.y)
+  const ends = sups.map((s) => { const pts = series[s].filter((p) => p[field] != null); const p = pts[pts.length - 1]; return { s, v: p[field], y: y(p[field]) } })
+    .sort((a, b) => a.y - b.y)
   for (let i = 1; i < ends.length; i++) if (ends[i].y - ends[i - 1].y < 14) ends[i].y = ends[i - 1].y + 14
 
   return (
     <div ref={ref} className="relative">
       {width > 0 && (
-        <svg width={W} height={H} onMouseMove={onMove} onMouseLeave={() => setHover(null)} role="img" aria-label="공급사별 월별 가격 지수">
+        <svg width={W} height={H} onMouseMove={onMove} onMouseLeave={() => setHover(null)} role="img"
+          aria-label={isIdx ? '공급사별 월별 가격 지수' : '공급사별 kg당 중앙값 가격'}>
           {yt.map((v) => (
             <g key={v}>
-              <line x1={L} x2={W - R} y1={y(v)} y2={y(v)} stroke={v === 100 ? '#b0c6ec' : '#eef3fb'} strokeDasharray={v === 100 ? '4 3' : undefined} />
-              <text x={L - 6} y={y(v) + 3.5} fontSize="10" fill="#64748b" textAnchor="end">{v}</text>
+              <line x1={L} x2={W - R} y1={y(v)} y2={y(v)} stroke="#eef3fb" />
+              <text x={L - 6} y={y(v) + 3.5} fontSize="10" fill="#64748b" textAnchor="end">{fmtV(v)}</text>
             </g>
           ))}
+          {isIdx && <line x1={L} x2={W - R} y1={y(100)} y2={y(100)} stroke="#b0c6ec" strokeDasharray="4 3" />}
           {xt.map((m) => <text key={m} x={x(m)} y={H - 7} fontSize="10" fill="#64748b" textAnchor="middle">{m.endsWith('-01') ? `${m.slice(2, 4)}년 1월` : ym(m)}</text>)}
           {hover && <line x1={x(hover)} x2={x(hover)} y1={T} y2={H - B} stroke="#7fa1de" strokeDasharray="3 3" />}
           {sups.map((s) => {
-            const pts = series[s].filter((p) => p.idx != null)
+            const pts = series[s].filter((p) => p[field] != null)
             return (
               <g key={s}>
                 <path fill="none" stroke={SUP[s].color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"
-                  d={pts.map((p, i) => `${i ? 'L' : 'M'}${x(p.month)},${y(p.idx)}`).join(' ')} />
+                  d={pts.map((p, i) => `${i ? 'L' : 'M'}${x(p.month)},${y(p[field])}`).join(' ')} />
+                {!isIdx && pts.length <= 14 && pts.map((p) => <circle key={p.month} cx={x(p.month)} cy={y(p[field])} r="2.5" fill={SUP[s].color} />)}
                 {hover && pts.filter((p) => p.month === hover).map((p) => (
-                  <circle key={p.month} cx={x(p.month)} cy={y(p.idx)} r="4.5" fill={SUP[s].color} stroke="#fff" strokeWidth="2" />
+                  <circle key={p.month} cx={x(p.month)} cy={y(p[field])} r="4.5" fill={SUP[s].color} stroke="#fff" strokeWidth="2" />
                 ))}
               </g>
             )
           })}
           {ends.map((e) => (
-            <text key={e.s} x={W - R + 6} y={e.y + 4} fontSize="11" fontWeight="700" fill="#07204d">{SUP[e.s].short} {Math.round(e.v)}</text>
+            <text key={e.s} x={W - R + 6} y={e.y + 4} fontSize="11" fontWeight="700" fill="#07204d">{SUP[e.s].short} {fmtV(e.v)}</text>
           ))}
         </svg>
       )}
@@ -923,13 +938,17 @@ function IndexChart({ series }) {
           <p className="text-white/65 mb-1">{hover.slice(0, 4)}년 {+hover.slice(5, 7)}월</p>
           {sups.map((s) => {
             const p = series[s].find((q) => q.month === hover)
-            return p ? (
+            if (!p || p[field] == null) return null
+            return (
               <p key={s} className="flex items-center gap-1.5 whitespace-nowrap">
                 <span className="w-2 h-2 rounded-full" style={{ background: SUP[s].color }} />{SUP[s].short}
-                <b className="ml-1">{p.idx?.toFixed(1)}</b>
-                <span className="text-white/65">전월 {pctTxt(p.mom_pct)}</span>
+                {isIdx ? (
+                  <><b className="ml-1">{p.idx?.toFixed(1)}</b><span className="text-white/65">전월 {pctTxt(p.mom_pct)}</span></>
+                ) : (
+                  <><b className="ml-1">{won(p.kg_median)}/kg</b><span className="text-white/65">{p.kg_n}개 품목 · 가운데 50% {short(p.kg_p25)}~{short(p.kg_p75)}</span></>
+                )}
               </p>
-            ) : null
+            )
           })}
         </div>
       )}
@@ -988,8 +1007,9 @@ function SeasonStrip({ rows, compact }) {
   )
 }
 
-function TrendSection() {
+function TrendSection({ onOpen }) {
   const [base, setBase] = useState(null)
+  const [metric, setMetric] = useState('idx')
   const [lcls, setLcls] = useState('농산품')
   const [mcls, setMcls] = useState('전체')
   const [data, setData] = useState(null)
@@ -1063,13 +1083,17 @@ function TrendSection() {
 
           <div className="mt-3 grid gap-5 lg:grid-cols-[1.5fr_1fr]">
             <div>
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                <Seg value={metric} onChange={setMetric} options={[['idx', '변화율 지수'], ['kg', 'kg당 가격(중앙값)']]} />
+                <span className="text-[10.5px] text-muted">{metric === 'idx' ? '같은 품목끼리 비교 · 첫 달 = 100' : '분류 안 품목들의 kg당 월평균 가격 중 가운데 값 · 공급가'}</span>
+              </div>
               <div className="flex items-center gap-4 text-[11px] text-muted mb-1">
                 {SUP_KEYS.filter((s) => data?.series?.[s]).map((s) => (
                   <span key={s} className="inline-flex items-center gap-1.5"><span className="w-4 h-[3px] rounded" style={{ background: SUP[s].color }} />{SUP[s].label}</span>
                 ))}
-                <span className="inline-flex items-center gap-1.5"><span className="w-4 border-t border-dashed border-navy-300" />기준 100</span>
+                {metric === 'idx' && <span className="inline-flex items-center gap-1.5"><span className="w-4 border-t border-dashed border-navy-300" />기준 100</span>}
               </div>
-              {data ? (Object.keys(data.series || {}).length ? <IndexChart series={data.series} /> : <p className="py-16 text-center text-sm text-muted">이 분류의 데이터가 없습니다.</p>)
+              {data ? (Object.keys(data.series || {}).length ? <IndexChart series={data.series} field={metric === 'idx' ? 'idx' : 'kg_median'} /> : <p className="py-16 text-center text-sm text-muted">이 분류의 데이터가 없습니다.</p>)
                 : <div className="h-60 rounded-xl bg-navy-50/50 animate-pulse" />}
             </div>
             <div>
@@ -1088,6 +1112,7 @@ function TrendSection() {
               </p>
             </div>
           </div>
+          {data && <CategoryMovers movers={data.movers} label={mcls === '전체' ? lcls : mcls} onOpen={onOpen} />}
         </>
       )}
     </section>
@@ -1148,7 +1173,7 @@ function MonthlyChart({ rows, color }) {
           <path d={line} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
           {hr && <><line x1={x(hover)} x2={x(hover)} y1={T} y2={H - B} stroke="#7fa1de" strokeDasharray="3 3" />
             <circle cx={x(hover)} cy={y(hr.avg)} r="5" fill="#fff" stroke={color} strokeWidth="2.5" /></>}
-          {rows.map((r, i) => (n <= 12 || (r.month.endsWith('-01') && i > 1 && i < n - 2) || i === n - 1 || i === 0) && (
+          {rows.map((r, i) => (n <= 7 || i === n - 1 || (i % 2 === 0 && i < n - 2) || (n > 12 && r.month.endsWith('-01') && i > 1 && i < n - 2)) && (
             <text key={r.month} x={x(i)} y={H - 7} fontSize="10" fill="#64748b"
               textAnchor={i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle'}>
               {r.month.endsWith('-01') && n > 12 && i !== 0 && i !== n - 1 ? `${r.month.slice(2, 4)}년` : ym(r.month)}
@@ -1205,6 +1230,85 @@ function ItemTrend({ data, it, color }) {
         )
       ) : (
         <PriceChart history={data.history} current={it.unit_price} today={it.last_seen} color={color} />
+      )}
+    </div>
+  )
+}
+
+// 분류 안에서 많이 변한 품목 Top 10 (crawler 가 미리 계산)
+const PERIOD_LABEL = { mom: '전월 대비', '3m': '3개월 전 대비', all: '첫 달부터' }
+const KIND_LABEL = { up: '많이 오른', down: '많이 내린', swing: '많이 출렁인' }
+
+function CategoryMovers({ movers, label, onOpen }) {
+  const periods = ['mom', '3m', 'all'].filter((p) => movers?.[p])
+  const [period, setPeriod] = useState('all')
+  const [kind, setKind] = useState('up')
+  const [sup, setSup] = useState('')
+  const [hover, setHover] = useState(null)
+  if (!periods.length) {
+    return <p className="mt-6 text-[12.5px] text-muted rounded-xl bg-navy-50/50 px-4 py-4">많이 변한 품목은 두 달 이상 쌓이면 보여드려요.</p>
+  }
+  const per = periods.includes(period) ? period : periods[periods.length - 1]
+  const kinds = ['up', 'down', ...(per !== 'mom' ? ['swing'] : [])]
+  const kd = kinds.includes(kind) ? kind : 'up'
+  const list = (movers[per]?.[kd] || []).filter((r) => !sup || r.supplier === sup)
+  // 공급사를 둘 다 보면 각자 Top 10 이 섞이므로 변동 크기 순으로 다시 정렬해 10개만
+  const val = (r) => (kd === 'swing' ? r.swing_pct : r.pct)
+  const rows = [...list].sort((a, b) => Math.abs(val(b)) - Math.abs(val(a))).slice(0, 10)
+  const max = Math.max(...rows.map((r) => Math.abs(val(r))), 1)
+  const any = list[0] || movers[per]?.up?.[0] || movers[per]?.down?.[0]
+  const range = any ? `${ym(any.from_month)} → ${ym(any.to_month)}` : ''
+  const color = kd === 'up' ? UP : kd === 'down' ? DOWN : '#7c3aed'
+
+  return (
+    <div className="mt-6 pt-5 border-t border-navy-100">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[13px] font-bold text-navy-900">{label} 안에서 {KIND_LABEL[kd]} 품목
+          <span className="ml-1.5 text-[11px] font-normal text-muted">{PERIOD_LABEL[per]} · {range} · 월평균 공급가</span></p>
+        <div className="flex flex-wrap gap-1.5">
+          <Seg value={per} onChange={setPeriod} options={periods.map((p) => [p, PERIOD_LABEL[p]])} />
+          <Seg value={kd} onChange={setKind} options={kinds.map((k) => [k, { up: '▲ 오름', down: '▼ 내림', swing: '↕ 출렁임' }[k]])} />
+          <Seg value={sup} onChange={setSup} options={[['', '전체'], ['hgreenfood', '현대'], ['sajo', '사조']]} />
+        </div>
+      </div>
+      {kd === 'swing' && <p className="mt-1 text-[11px] text-muted">기간 안 월평균 최저가 대비 최고가가 얼마나 높았는지 — 시기를 잘 고르면 아낄 수 있는 품목이에요.</p>}
+      {!rows.length ? (
+        <p className="mt-3 text-sm text-muted">해당하는 품목이 없습니다.</p>
+      ) : (
+        <ol className="mt-3 divide-y divide-navy-100">
+          {rows.map((r, i) => {
+            const v = val(r), key = r.supplier + r.item_cd
+            const { name, attrs } = splitName(r.item_nm)
+            return (
+              <li key={key}>
+                <button onClick={() => onOpen?.({ supplier: r.supplier, item_cd: r.item_cd })}
+                  onMouseEnter={() => setHover(key)} onMouseLeave={() => setHover(null)}
+                  className="w-full grid grid-cols-[22px_minmax(0,1.7fr)_minmax(0,0.8fr)_60px] sm:grid-cols-[22px_minmax(0,1.3fr)_170px_minmax(0,1fr)_64px] items-center gap-3 py-2 text-left hover:bg-navy-50/50 rounded-lg px-1">
+                  <span className="text-[11px] font-bold text-muted tabular-nums text-right">{i + 1}</span>
+                  <span className="min-w-0">
+                    <span className="flex items-center gap-1.5 min-w-0">
+                      <span className="w-2 h-2 rounded-full shrink-0" style={{ background: SUP[r.supplier]?.color }} title={SUP[r.supplier]?.label} />
+                      <span className="truncate text-[13px] font-semibold text-navy-900">{name}</span>
+                      {r.n_similar > 0 && <span className="shrink-0 text-[10.5px] text-muted">외 {r.n_similar}개</span>}
+                    </span>
+                    <span className="block truncate text-[10.5px] text-muted pl-3.5">{[attrs, r.spec].filter(Boolean).join(' · ')}</span>
+                  </span>
+                  <span className="hidden sm:block text-[11.5px] tabular-nums text-navy-700 whitespace-nowrap">
+                    {kd === 'swing'
+                      ? <>{ym(r.min_month)} {short(r.p_min)} ↔ {ym(r.max_month)} {short(r.p_max)}</>
+                      : <>{won(r.p_from)} → <b className="text-navy-900">{won(r.p_to)}</b></>}
+                  </span>
+                  <span className="relative h-3 rounded-full bg-navy-50 overflow-hidden" title={kd === 'swing' ? `최저 ${won(r.p_min)} · 최고 ${won(r.p_max)}` : `${won(r.p_from)} → ${won(r.p_to)}`}>
+                    <span className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${Math.max((Math.abs(v) / max) * 100, 3)}%`, background: color, opacity: hover && hover !== key ? 0.35 : 0.85 }} />
+                  </span>
+                  <span className="text-right text-[12.5px] font-bold tabular-nums" style={{ color }}>
+                    {kd === 'up' ? '▲' : kd === 'down' ? '▼' : '↕'}{Math.abs(v).toFixed(Math.abs(v) >= 100 ? 0 : 1)}%
+                  </span>
+                </button>
+              </li>
+            )
+          })}
+        </ol>
       )}
     </div>
   )
