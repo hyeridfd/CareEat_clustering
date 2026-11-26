@@ -104,6 +104,21 @@ def neo4j_configured() -> bool:
     return bool(NEO4J_URI and NEO4J_PASSWORD)
 
 
+def driver_args(uri: str) -> tuple[str, dict]:
+    """[2026-11-26] Aura(neo4j+s://) 인증서를 파이썬 공인 인증서 목록(certifi)으로 검증한다.
+    Windows 의 파이썬은 OS 가 필요할 때 내려받는 루트 인증서(예: SSL.com TLS RSA Root CA 2022)를 모를 수 있어
+    'self-signed certificate in certificate chain' 으로 실패한다. 검증을 끄지 않고 신뢰 목록만 certifi 로 바꾼다.
+    NEO4J_TRUST=system 이면 기존처럼 OS 신뢰 목록, neo4j+ssc:// 처럼 직접 지정한 주소는 그대로 쓴다."""
+    if not uri.startswith(("neo4j+s://", "bolt+s://")) or os.getenv("NEO4J_TRUST", "certifi") == "system":
+        return uri, {}
+    try:
+        import certifi
+        from neo4j import TrustCustomCAs
+    except ImportError:
+        return uri, {}
+    return uri.replace("+s://", "://", 1), {"encrypted": True, "trusted_certificates": TrustCustomCAs(certifi.where())}
+
+
 def _fetch_live() -> dict | None:
     """Aura에서 Care-Eat 서브그래프를 읽어 스냅샷과 같은 형태로 만든다.
 
@@ -120,7 +135,8 @@ def _fetch_live() -> dict | None:
 
     drv = None
     try:
-        drv = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD),
+        uri, extra = driver_args(NEO4J_URI)
+        drv = GraphDatabase.driver(uri, auth=(NEO4J_USER, NEO4J_PASSWORD), **extra,
                                    connection_timeout=NEO4J_TIMEOUT)
         with drv.session(database=NEO4J_DATABASE) as ses:
             run = lambda q: [r.data() for r in ses.run(q)]

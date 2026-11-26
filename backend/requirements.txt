@@ -17,3 +17,4 @@ neo4j>=5.20
 langgraph>=1.0,<2
 # 식자재 단가 엑셀 다운로드 (routers/prices_excel.py)
 openpyxl>=3.1
+certifi
