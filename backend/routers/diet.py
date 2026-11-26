@@ -139,7 +139,7 @@ def _facility_plan(sb, home):
 
 
 def _job(run_id, home, preset, seed, menu=None, selector="llm", reviewer="llm", refiner="llm", agent_mode="rule",
-         facility_plan=None):
+         facility_plan=None, budget_per_meal=None):
     from diet import pipeline as P
     sb = get_supabase()
     try:
@@ -152,7 +152,7 @@ def _job(run_id, home, preset, seed, menu=None, selector="llm", reviewer="llm", 
         if menu is None:
             out = P.run_design(residents, assess, settings, inv, pref, preset=preset, seed=seed, progress=say, ehr=ehr,
                                selector=selector, reviewer=reviewer, refiner=refiner, agent_mode=agent_mode,
-                               facility_plan=facility_plan)
+                               facility_plan=facility_plan, budget_per_meal=budget_per_meal)
         else:
             # 수정본: 원래 설계의 Stage 2 결과(어르신별 AI 종합 판단)를 재사용 — 평가가 같으면 LLM 을 다시 부르지 않음
             me = _one(sb.table("diet_runs").select("parent_run_id").eq("id", run_id).execute())
@@ -161,8 +161,10 @@ def _job(run_id, home, preset, seed, menu=None, selector="llm", reviewer="llm", 
             prev_assess = (parent.get("result") or {}).get("assessments")
             refiner = (parent.get("params") or {}).get("refiner", "off")
             agent_mode = (parent.get("params") or {}).get("agent_mode", "rule")
+            budget_per_meal = (parent.get("params") or {}).get("budget_per_meal")     # 원래 설계의 식단가 유지
             out = P.redo_personalization(menu, residents, assess, settings, inv, pref, progress=say, ehr=ehr,
-                                         refiner=refiner, prev_assessments=prev_assess, agent_mode=agent_mode)
+                                         refiner=refiner, prev_assessments=prev_assess, agent_mode=agent_mode,
+                                         budget_per_meal=budget_per_meal)
         sb.table("diet_runs").update({"progress": "결과 저장 중", "updated_at": get_kst_now()}).eq("id", run_id).execute()
         _check_cancel(sb, run_id, {"checked": 0})
         _save_result(sb, run_id, out)
@@ -201,6 +203,7 @@ class RunRequest(BaseModel):
     refiner: str = "llm"                # llm (Stage 2 AI 임상 영양사 어르신별 종합 판단) | off
     agent_mode: str = "rule"            # llm (Stage 1 AI 영역 전문가 — 근거 검색 후 판단·인용) | rule
     facility_plan: bool = False         # 시설 진단의 관리 우선순위(개선안)를 공통 식단 최적화에 반영
+    budget_per_meal: Optional[int] = None   # [2026-11-26] 시설 끼니당 식단가(1인 식재료비, 원) — 비우면 pipeline.BUDGET_PER_MEAL
 
 
 @router.post("/runs")
@@ -211,18 +214,20 @@ def start_run(req: RunRequest, user: dict = Depends(require_staff)):
     inv = sb.table("diet_inventory").select("nursing_home_id,items,start_date").eq("nursing_home_id", home).execute().data
     pref = sb.table("diet_preferences").select("nursing_home_id,updated_at").eq("nursing_home_id", home).execute().data
     plan = _facility_plan(sb, home) if req.facility_plan else None
+    if req.budget_per_meal is not None and not (300 <= req.budget_per_meal <= 50000):
+        raise HTTPException(status_code=400, detail="끼니당 식단가는 300원 ~ 50,000원 사이로 입력하세요.")
     if req.facility_plan and not (plan and plan.get("items")):
         raise HTTPException(status_code=400, detail="식단에 반영할 시설 개선안이 없습니다. 시설 진단을 먼저 확인하세요.")
     row = _one(sb.table("diet_runs").insert({
         "nursing_home_id": home, "status": "queued", "progress": "대기 중", "created_by": user["actor"],
         "params": {"preset": req.preset, "seed": req.seed, "selector": req.selector, "reviewer": req.reviewer, "refiner": req.refiner,
-                   "agent_mode": req.agent_mode,
+                   "agent_mode": req.agent_mode, "budget_per_meal": req.budget_per_meal,
                    "facility_plan": [x["id"] for x in (plan or {}).get("items") or []] or None,
                    "inventory_used": bool(inv and inv[0].get("items")), "preference_used": bool(pref),
                    "start_date": (inv[0].get("start_date") if inv else None),
                    "preference_updated_at": pref[0]["updated_at"] if pref else None}}).execute())
     threading.Thread(target=_job, args=(row["id"], home, req.preset, req.seed, None, req.selector, req.reviewer, req.refiner, req.agent_mode,
-                                        plan), daemon=True).start()
+                                        plan, req.budget_per_meal), daemon=True).start()
     return {"id": row["id"], "status": "queued"}
 
 

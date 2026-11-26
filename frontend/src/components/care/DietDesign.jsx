@@ -165,6 +165,37 @@ function RunProgress({ run, nResidents, big, onStop }) {
 const dayNo = (d) => parseInt(String(d).replace(/\D/g, ''), 10) || 0
 const pct = (a, b) => (b ? Math.round((100 * a) / b) : null)
 
+// [2026-11-26] 가격 없는 식재료를 먼저 보여 준다 — 값을 채워 넣지 않으므로 이 재료들은 비용 0원으로 계산된다
+function CostCoverage({ c }) {
+  if (!c || c.error || !c.n_missing) return null
+  return (
+    <div className="mb-4 rounded-xl bg-amber-50 px-4 py-3 text-sm">
+      <p className="font-bold text-amber-900">
+        가격 없는 식재료 {c.n_missing.toLocaleString()}개
+        <span className="ml-2 font-normal text-amber-800">
+          메뉴 {c.menus_total}개 중 모든 재료에 가격이 있는 메뉴 {c.menus_priced}개 · 이 재료들은 0원으로 계산되어 끼니 재료비({c.meal_cost?.toLocaleString()}원)가 실제보다 낮습니다
+        </span>
+      </p>
+      <div className="mt-2 max-h-56 overflow-auto">
+        <table className="w-full text-xs">
+          <thead className="text-amber-900"><tr><th className="text-left py-0.5">식재료</th><th className="text-right">나온 끼니</th><th className="text-right">사용량(1인 합)</th><th className="text-left pl-3">쓰인 메뉴</th></tr></thead>
+          <tbody>
+            {c.missing.map((d) => (
+              <tr key={d.재료} className="border-t border-amber-100">
+                <td className="py-0.5 font-semibold text-navy-900">{d.재료}</td>
+                <td className="text-right tabular-nums">{d.끼니수}</td>
+                <td className="text-right tabular-nums">{d.사용량_g.toLocaleString()}g</td>
+                <td className="pl-3 text-muted truncate max-w-[22rem]">{d.메뉴.join(', ')}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {c.n_missing > c.missing.length && <p className="mt-1 text-[11px] text-amber-800">많이 나온 순서로 {c.missing.length}개만 표시 · 가격 출처 {c.price_source}</p>}
+    </div>
+  )
+}
+
 function Stat({ label, value, unit, sub, tone }) {
   return (
     <div className={`rounded-2xl px-4 py-3 ${tone || 'bg-navy-50/70'}`}>
@@ -375,6 +406,7 @@ export default function DietDesign({ facilityPlan = false }) {
   const [run, setRun] = useState(null)
   const [sub, setSub] = useState('menu')
   const [preset, setPreset] = useState('standard')
+  const [budget, setBudget] = useState('')          // 시설 끼니당 식단가(원, 1인 식재료비) — 비우면 서버 기본값
   const [useAi, setUseAi] = useState(true)          // AI 영양사가 파레토 후보 중 선택
   const [useReview, setUseReview] = useState(true)  // AI 식단 검토 (어색한 칸 교체 제안 → 코드 검증 후 반영)
   const [useRefine, setUseRefine] = useState(true)  // Stage 2 AI 임상 영양사 어르신별 종합 판단
@@ -386,6 +418,8 @@ export default function DietDesign({ facilityPlan = false }) {
 
   const loadStatus = () => api.get('/care/diet/status').then((r) => {
     setStatus(r.data)
+    // 마지막으로 입력한 끼니당 식단가를 기본값으로
+    setBudget((b) => (b !== '' ? b : String(r.data.runs?.find((x) => x.params?.budget_per_meal)?.params?.budget_per_meal ?? '')))
     setRunId((cur) => cur || r.data.runs?.find((x) => ['done', 'approved'].includes(x.status))?.id || r.data.runs?.[0]?.id || null)
     return r.data
   }).catch((e) => setErr(errMsg(e)))
@@ -420,7 +454,7 @@ export default function DietDesign({ facilityPlan = false }) {
   const start = async () => {
     setErr(''); setBusy(true)
     try {
-      const r = await api.post('/care/diet/runs', { preset, selector: useAi ? 'llm' : 'rule', reviewer: useReview ? 'llm' : 'off', refiner: useRefine ? 'llm' : 'off', agent_mode: useAgentAi ? 'llm' : 'rule', facility_plan: usePlan }, { timeout: 60000 })
+      const r = await api.post('/care/diet/runs', { preset, selector: useAi ? 'llm' : 'rule', reviewer: useReview ? 'llm' : 'off', refiner: useRefine ? 'llm' : 'off', agent_mode: useAgentAi ? 'llm' : 'rule', facility_plan: usePlan, budget_per_meal: budget === '' ? null : Number(budget) }, { timeout: 60000 })
       setRunId(r.data.id)
       await loadStatus()
     } catch (e) { setErr(errMsg(e)) } finally { setBusy(false) }
@@ -451,6 +485,12 @@ export default function DietDesign({ facilityPlan = false }) {
                 className={`px-3 py-1 rounded-lg text-xs font-semibold ${preset === p.key ? 'bg-white text-navy-900 shadow-sm' : 'text-muted'}`}>{p.label}</button>
             ))}
           </div>
+          <label className="flex items-center gap-1.5 text-xs font-semibold text-navy-700"
+            title="어르신 1인 한 끼 식재료비 예산입니다. 28일 식단의 재료비 합이 (식단가 × 84끼)를 넘으면 f2 비용 점수가 올라가 최적화가 더 싼 메뉴를 찾습니다. 비우면 기본값(10,000원)을 씁니다. 지금은 가격 정보가 없는 식재료가 0원으로 계산되므로, 점수 자세히의 '가격 없는 식재료'를 함께 확인하세요.">
+            끼니당 식단가
+            <input type="number" min="300" max="50000" step="100" value={budget} onChange={(e) => setBudget(e.target.value)}
+              placeholder="10000" className="w-20 rounded-lg border border-navy-100 px-2 py-1 text-xs font-normal tabular-nums" />원
+          </label>
           <label className="flex items-center gap-1.5 text-xs font-semibold text-navy-700"
             title={aiStatus?.ready ? `최적화가 찾은 식단 후보 중 AI 영양사(${aiStatus.model})가 시설 상황을 보고 고릅니다` : 'AI 키가 설정되지 않아 규칙(균형점)으로 고르고, 후보 비교표만 보여 줍니다'}>
             <input type="checkbox" checked={useAi} onChange={(e) => setUseAi(e.target.checked)} />
@@ -505,6 +545,7 @@ export default function DietDesign({ facilityPlan = false }) {
                 {x.params?.facility_plan && <span className="ml-1 text-emerald-700" title={`시설 개선안 ${x.params.facility_plan.length}건 반영`}>개선안</span>}
                 {x.status === 'failed' && x.error && <span className="ml-1 text-rose-600" title={x.error}>ⓘ</span>}
                 {x.params?.preset && !x.parent_run_id && <span className="ml-1 text-muted">{PRESETS.find((p) => p.key === x.params.preset)?.label}</span>}
+                {x.params?.budget_per_meal && <span className="ml-1 text-muted" title="끼니당 식단가">{Number(x.params.budget_per_meal).toLocaleString()}원</span>}
               </button>
             ))}
           </div>
@@ -935,7 +976,8 @@ function MenuTab({ run, onApprove, onEdited, onRerun, setErr }) {
           <ReviewPanel run={run} onEdited={onEdited} setErr={setErr} bare />
         </Fold>
       )}
-      <Fold id="fold-score" title="점수 자세히" summary="목적함수 4개 · 조화 · 파레토 해 품질 · 영양 위반 기여도 · 식단 규칙 · 재고 활용">
+      <Fold id="fold-score" title="점수 자세히" summary="가격 없는 식재료 · 목적함수 4개 · 조화 · 파레토 해 품질 · 영양 위반 기여도 · 식단 규칙 · 재고 활용">
+        <CostCoverage c={m.cost_coverage} />
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {(() => {
             const f2 = sel['f2_비용'] ?? sel['f2_예산·재고']
@@ -943,7 +985,8 @@ function MenuTab({ run, onApprove, onEdited, onRerun, setErr }) {
             const p3 = m.objective_parts?.f3 || {}, p4 = m.objective_parts?.f4 || {}
             return (<>
               <Stat label="f1 영양 위반 ↓" value={f1} sub="낮을수록 좋음 · 0.3 이하 목표" tone={f1 <= 0.3 ? 'bg-emerald-50' : 'bg-amber-50'} />
-              <Stat label="f2 비용 ↓" value={f2} sub={m.inventory_unused != null ? `예산 초과 + 재고 미활용 ${m.inventory_unused}` : '예산 초과 (재고 미입력)'} />
+              <Stat label="f2 비용 ↓" value={f2} sub={(m.cost_coverage?.budget_per_meal ? `식단가 ${m.cost_coverage.budget_per_meal.toLocaleString()}원 · 끼니 재료비 ${m.cost_coverage.meal_cost?.toLocaleString()}원(가격 있는 재료만) · ` : '')
+                + (m.inventory_unused != null ? `재고 미활용 ${m.inventory_unused}` : '재고 미입력')} />
               {isNew ? (<>
                 <Stat label="f3 반복·편중 ↓" value={sel['f3_다양성']} sub={`낮을수록 다양함 · 반복 ${p3['14일 반복'] ?? '–'} · 편중 ${p3['편중(1-Simpson)'] ?? '–'}`} />
                 <Stat label="f4 조화 문제 ↓" value={sel['f4_조화']} sub={`낮을수록 잘 어울림 · 선호 ${p4['시설 선호(섭취율)'] ?? '–'} · 다진찬 ${p4['다진찬 부적합'] ?? '–'}`} />

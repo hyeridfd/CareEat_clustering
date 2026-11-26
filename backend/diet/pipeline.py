@@ -74,7 +74,16 @@ PRESETS = {                       # 실행 강도 (개체 수, 세대 수) — M
 MEAL_NAMES = ["아침", "점심", "저녁"]
 SLOT_CATS = [("밥", "밥"), ("국", "국"), ("주찬", "주찬"), ("부찬1", "부찬"), ("부찬2", "부찬"), ("김치", "김치")]
 SURVEY_SLOT = {"밥/죽": "밥", "국/탕": "국", "주찬": "주찬", "부찬1": "부찬", "부찬2": "부찬", "김치1": "김치", "김치2": "김치"}
-BUDGET_PER_MEAL = 10000
+BUDGET_PER_MEAL = 10000            # 기본 끼니당 식단가 — 시설이 실행할 때 입력하면 그 값을 쓴다 (budget_per_meal)
+
+
+def budget_of(value) -> int:
+    """시설 입력 끼니당 식단가 → 정수(원). 비었으면 기본값"""
+    try:
+        v = int(float(value))
+        return v if v > 0 else BUDGET_PER_MEAL
+    except (TypeError, ValueError):
+        return BUDGET_PER_MEAL
 
 
 # ══════════════════════════════════════════════════════════════
@@ -357,6 +366,51 @@ def _harmony_summary(problem, chrom):
                       "auc": v.get("auc"), "ref_real_mean": m.get("ref_real_mean"), "ref_random_mean": m.get("ref_random_mean")}}
 
 
+_RECIPE_INGS = None
+
+
+def cost_coverage(menus: list, budget_per_meal: float, top: int = 40) -> dict:
+    """[2026-11-26] 식단 비용의 가격 정보 점검 — 가격이 없는 식재료를 먼저 보여 준다.
+    가격이 없는 재료는 지금 0원으로 계산되므로(값을 채워 넣지 않음) 식단 비용이 실제보다 낮게 나온다.
+      · missing      : 이 식단에서 가격을 못 찾은 원재료 (나온 끼니 수 많은 순)
+      · menus_*      : 고유 메뉴 중 모든 재료에 가격이 있는 메뉴 수
+      · meal_cost    : 끼니당 재료비 (가격 있는 재료만 합한 값, 원)"""
+    global _RECIPE_INGS
+    from .build_pool import default_paths, load_prices, price_per_g
+    if _RECIPE_INGS is None:
+        from .inventory import recipe_ingredients
+        _RECIPE_INGS = recipe_ingredients()
+    prices = load_prices(default_paths()["prices"])
+    names = [str(m.get("menu_name") or "") for m in menus if m]
+    names = [n for n in names if n and not n.startswith("-(")]
+    cnt: dict = {}
+    for n in names:
+        cnt[n] = cnt.get(n, 0) + 1
+    miss, no_recipe, priced = {}, [], 0
+    for name, c in cnt.items():
+        rec = _RECIPE_INGS.get(name)
+        if not rec:
+            no_recipe.append(name)
+            continue
+        lack = [ing for ing in rec if price_per_g(prices, ing) is None]
+        priced += not lack
+        for ing in lack:
+            d = miss.setdefault(ing, {"재료": ing, "끼니수": 0, "사용량_g": 0.0, "메뉴": []})
+            d["끼니수"] += c
+            d["사용량_g"] += float(rec[ing] or 0) * c
+            if len(d["메뉴"]) < 5 and name not in d["메뉴"]:
+                d["메뉴"].append(name)
+    rows = sorted(miss.values(), key=lambda d: (-d["끼니수"], -d["사용량_g"]))
+    for d in rows:
+        d["사용량_g"] = round(d["사용량_g"], 1)
+    n_meals = max(1, len(menus) // 6)
+    return {"budget_per_meal": int(budget_per_meal),
+            "meal_cost": round(sum(float(m.get("cost") or 0) for m in menus if m) / n_meals),
+            "menus_total": len(cnt) - len(no_recipe), "menus_priced": priced,
+            "n_missing": len(rows), "missing": rows[:top], "no_recipe": no_recipe[:20],
+            "price_source": os.path.basename(default_paths()["prices"])}
+
+
 def plan_metrics(problem, chrom, F_front=None, F_all=None, inv_model=None) -> dict:
     f = problem._eval_one(chrom)
     menus = problem.effective_menus(chrom)
@@ -371,6 +425,10 @@ def plan_metrics(problem, chrom, F_front=None, F_all=None, inv_model=None) -> di
         "harmony": _harmony_summary(problem, chrom),
         "pattern": problem.pattern_breakdown(chrom),
     }
+    try:
+        out["cost_coverage"] = cost_coverage(menus, problem.budget / (N_DAYS * 3))
+    except Exception as e:                       # 가격 점검이 실패해도 식단 설계는 계속
+        out["cost_coverage"] = {"error": str(e)[:200]}
     if F_front is not None and len(F_front):
         m = evaluate_front(F_front)
         out["front"] = {"hv": m["hv_norm"], "spacing": m["spacing"], "n_nondom": m["n_nondom"],
@@ -642,7 +700,7 @@ def ps_assemble(ps: dict, meta: dict, progress=None, inventory=None) -> dict:
 # ══════════════════════════════════════════════════════════════
 def run_design(residents, assessments, settings, inventory=None, preference=None,
                preset="standard", seed=42, progress=None, ehr=None, selector="llm", reviewer="llm",
-               refiner="llm", agent_mode="rule", facility_plan: dict | None = None) -> dict:
+               refiner="llm", agent_mode="rule", facility_plan: dict | None = None, budget_per_meal=None) -> dict:
     """→ 결과 dict (menu, metrics, personalization…)
     facility_plan = 시설 개선안 반영 지시 (diet/facility_plan.from_priorities) — 공통 식단 최적화에 가중치·선호로 반영
     selector = "llm" (파레토 후보 중 AI 영양사가 선택, 실패·미설정 시 규칙) | "rule" (균형점 규칙)
@@ -654,7 +712,8 @@ def run_design(residents, assessments, settings, inventory=None, preference=None
     from . import workflow as WF
     inp = {"residents": residents, "assessments": assessments, "settings": settings, "inventory": inventory,
            "preference": preference, "preset": preset, "seed": seed, "ehr": ehr, "selector": selector,
-           "reviewer": reviewer, "refiner": refiner, "agent_mode": agent_mode, "facility_plan": facility_plan}
+           "reviewer": reviewer, "refiner": refiner, "agent_mode": agent_mode, "facility_plan": facility_plan,
+           "budget_per_meal": budget_of(budget_per_meal)}
     judge = None
     if agent_mode == "llm":
         from .agents.llm_agent import make_judge
@@ -666,7 +725,8 @@ def run_design(residents, assessments, settings, inventory=None, preference=None
 
 
 def redo_personalization(menu: list, residents, assessments, settings, inventory=None, preference=None, progress=None,
-                         ehr=None, refiner="off", prev_assessments: dict | None = None, agent_mode="rule"):
+                         ehr=None, refiner="off", prev_assessments: dict | None = None, agent_mode="rule",
+                         budget_per_meal=None):
     """영양사가 식단표를 고친 뒤: 지표·개인화·배식만 다시 계산 (최적화는 다시 돌리지 않음)
     prev_assessments = 고치기 전 설계의 assessments → Stage 2 결과를 그대로 재사용 (평가가 같으면 LLM 다시 안 부름)"""
     from .inventory import InventoryModel
@@ -679,7 +739,7 @@ def redo_personalization(menu: list, residents, assessments, settings, inventory
         pool = load_pool(pref.get("pool_scores"))
         inv = inventory_from_rows((inventory or {}).get("items"), (inventory or {}).get("start_date"))
         inv_model = InventoryModel(pool, inv, len(profiles)) if inv else None
-        problem = MealPlanProblem(pool, BaseStandard(), BUDGET_PER_MEAL, inventory=inv_model, harmony=harmony_table(pool))
+        problem = MealPlanProblem(pool, BaseStandard(), budget_of(budget_per_meal), inventory=inv_model, harmony=harmony_table(pool))
         chrom = records_to_chrom(problem, menu)
         records = menu_records(problem, chrom)
         metrics = plan_metrics(problem, chrom, None, None, inv_model)
