@@ -837,7 +837,7 @@ function PriceChart({ history, current, today, color = '#1151b8' }) {
 const LCLS = ['농산품', '축산품', '수산품', '공산품']
 const MONTHS = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월']
 const ym = (s) => `${+s.slice(2, 4)}.${+s.slice(5, 7)}`
-const pctTxt = (v) => (v == null ? '—' : `${v > 0 ? '+' : ''}${v}%`)
+const pctTxt = (v) => (v == null ? '—' : `${v > 0 ? '+' : ''}${Math.round(v * 10) / 10}%`)
 
 function Pct({ v, label }) {
   if (v == null) return <span className="text-muted">{label} —</span>
@@ -865,10 +865,31 @@ function Spark({ series, w = 96, h = 26 }) {
   )
 }
 
-// 공급사별 선 (field = idx 지수 | kg_median kg당 중앙값 원). 마우스 위치의 달을 세로선과 함께 보여준다.
+// 공급사별 선 (field = idx 지수 | kg_median kg당 중앙값 원). 부드러운 곡선 + 옅은 면, 최고·최저 표시, 끝값 배지.
 function niceStep(range) {
   const raw = range / 5, p = 10 ** Math.floor(Math.log10(raw || 1)), n = raw / p
   return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * p
+}
+
+// 단조 3차 보간(Fritsch–Carlson): 점을 지나되 과하게 튀지 않는 곡선
+function smoothPath(pts) {
+  if (pts.length < 3) return pts.map((p, i) => `${i ? 'L' : 'M'}${p[0]},${p[1]}`).join(' ')
+  const n = pts.length, d = [], m = []
+  for (let i = 0; i < n - 1; i++) d.push((pts[i + 1][1] - pts[i][1]) / (pts[i + 1][0] - pts[i][0]))
+  m.push(d[0])
+  for (let i = 1; i < n - 1; i++) m.push(d[i - 1] * d[i] <= 0 ? 0 : (d[i - 1] + d[i]) / 2)
+  m.push(d[n - 2])
+  for (let i = 0; i < n - 1; i++) {
+    if (d[i] === 0) { m[i] = 0; m[i + 1] = 0; continue }
+    const a = m[i] / d[i], b = m[i + 1] / d[i], h = a * a + b * b
+    if (h > 9) { const t = 3 / Math.sqrt(h); m[i] = t * a * d[i]; m[i + 1] = t * b * d[i] }
+  }
+  let path = `M${pts[0][0]},${pts[0][1]}`
+  for (let i = 0; i < n - 1; i++) {
+    const dx = (pts[i + 1][0] - pts[i][0]) / 3
+    path += ` C${pts[i][0] + dx},${pts[i][1] + m[i] * dx} ${pts[i + 1][0] - dx},${pts[i + 1][1] - m[i + 1] * dx} ${pts[i + 1][0]},${pts[i + 1][1]}`
+  }
+  return path
 }
 
 function IndexChart({ series, field = 'idx' }) {
@@ -877,65 +898,116 @@ function IndexChart({ series, field = 'idx' }) {
   const isIdx = field === 'idx'
   const sups = SUP_KEYS.filter((s) => series?.[s]?.some((p) => p[field] != null))
   const months = [...new Set(sups.flatMap((s) => series[s].map((p) => p.month)))].sort()
-  const W = Math.max(width, 300), H = 240, L = isIdx ? 40 : 52, R = isIdx ? 64 : 92, T = 14, B = 26
+  const W = Math.max(width, 300), H = 270, L = isIdx ? 36 : 52, R = isIdx ? 78 : 104, T = 26, B = 30
   const vals = sups.flatMap((s) => series[s].map((p) => p[field])).filter((v) => v != null)
   if (!vals.length) return <p ref={ref} className="py-16 text-center text-sm text-muted">kg 단위로 환산할 수 있는 품목이 부족해 그릴 수 없습니다.</p>
   let lo = Math.min(...vals, ...(isIdx ? [100] : [])), hi = Math.max(...vals, ...(isIdx ? [100] : []))
-  const pad = Math.max((hi - lo) * 0.15, isIdx ? 2 : hi * 0.03); lo -= pad; hi += pad
+  const pad = Math.max((hi - lo) * 0.18, isIdx ? 2 : hi * 0.03); lo -= pad; hi += pad
   if (!isIdx) lo = Math.max(0, lo)
   const x = (m) => L + (months.indexOf(m) / Math.max(months.length - 1, 1)) * (W - L - R)
   const y = (v) => T + (1 - (v - lo) / (hi - lo)) * (H - T - B)
   const step = niceStep(hi - lo)
   const yt = []; for (let v = Math.ceil(lo / step) * step; v <= hi; v += step) yt.push(v)
-  const fmtV = (v) => (isIdx ? `${Math.round(v)}` : Math.round(v).toLocaleString('ko-KR'))
-  const xt = months.filter((m, i) => months.length <= 13 || m.endsWith('-01') || i === months.length - 1)
+  const fmtV = (v) => (isIdx ? (Math.round(v * 10) / 10).toString() : Math.round(v).toLocaleString('ko-KR'))
+  const unit = isIdx ? '' : '원'
+  const xLabel = (m, i) => (i === 0 || m.endsWith('-01') ? `${m.slice(2, 4)}년 ${+m.slice(5, 7)}월` : `${+m.slice(5, 7)}월`)
+  const xt = months.filter((m, i) => months.length <= 13 || m.endsWith('-01') || i === months.length - 1 || i % 2 === 0)
+  const colW = (W - L - R) / Math.max(months.length - 1, 1)
   const onMove = (e) => {
     const px = e.clientX - e.currentTarget.getBoundingClientRect().left
     let best = null, bd = 1e9
     months.forEach((m) => { const d = Math.abs(x(m) - px); if (d < bd) { bd = d; best = m } })
     setHover(best)
   }
-  // 오른쪽 끝 이름표가 겹치지 않게 살짝 벌린다
-  const ends = sups.map((s) => { const pts = series[s].filter((p) => p[field] != null); const p = pts[pts.length - 1]; return { s, v: p[field], y: y(p[field]) } })
-    .sort((a, b) => a.y - b.y)
-  for (let i = 1; i < ends.length; i++) if (ends[i].y - ends[i - 1].y < 14) ends[i].y = ends[i - 1].y + 14
+  const lines = sups.map((s) => {
+    const pts = series[s].filter((p) => p[field] != null)
+    const xy = pts.map((p) => [x(p.month), y(p[field])])
+    const top = pts.reduce((a, p) => (p[field] > a[field] ? p : a), pts[0])
+    const bot = pts.reduce((a, p) => (p[field] < a[field] ? p : a), pts[0])
+    return { s, pts, xy, top, bot, last: pts[pts.length - 1] }
+  })
+  // 끝값 배지가 겹치지 않게 벌린다
+  const ends = lines.map((l) => ({ s: l.s, v: l.last[field], y: y(l.last[field]) })).sort((a, b) => a.y - b.y)
+  for (let i = 1; i < ends.length; i++) if (ends[i].y - ends[i - 1].y < 22) ends[i].y = ends[i - 1].y + 22
+  const single = lines.length === 1
 
   return (
     <div ref={ref} className="relative">
       {width > 0 && (
         <svg width={W} height={H} onMouseMove={onMove} onMouseLeave={() => setHover(null)} role="img"
           aria-label={isIdx ? '공급사별 월별 가격 지수' : '공급사별 kg당 중앙값 가격'}>
+          <defs>
+            {lines.map((l) => (
+              <linearGradient key={l.s} id={`area-${l.s}-${field}`} x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0" stopColor={SUP[l.s].color} stopOpacity={single ? 0.22 : 0.12} />
+                <stop offset="1" stopColor={SUP[l.s].color} stopOpacity="0" />
+              </linearGradient>
+            ))}
+          </defs>
+          {/* 눈금 */}
           {yt.map((v) => (
             <g key={v}>
-              <line x1={L} x2={W - R} y1={y(v)} y2={y(v)} stroke="#eef3fb" />
-              <text x={L - 6} y={y(v) + 3.5} fontSize="10" fill="#64748b" textAnchor="end">{fmtV(v)}</text>
+              <line x1={L} x2={W - R} y1={y(v)} y2={y(v)} stroke="#e8eef8" strokeDasharray="2 4" />
+              <text x={L - 8} y={y(v) + 3.5} fontSize="10" fill="#94a3b8" textAnchor="end">{isIdx ? Math.round(v) : Math.round(v).toLocaleString('ko-KR')}</text>
             </g>
           ))}
-          {isIdx && <line x1={L} x2={W - R} y1={y(100)} y2={y(100)} stroke="#b0c6ec" strokeDasharray="4 3" />}
-          {xt.map((m) => <text key={m} x={x(m)} y={H - 7} fontSize="10" fill="#64748b" textAnchor="middle">{m.endsWith('-01') ? `${m.slice(2, 4)}년 1월` : ym(m)}</text>)}
-          {hover && <line x1={x(hover)} x2={x(hover)} y1={T} y2={H - B} stroke="#7fa1de" strokeDasharray="3 3" />}
-          {sups.map((s) => {
-            const pts = series[s].filter((p) => p[field] != null)
+          {isIdx && (
+            <g>
+              <line x1={L} x2={W - R} y1={y(100)} y2={y(100)} stroke="#94a3b8" strokeWidth="1" strokeDasharray="5 4" />
+              <text x={W - R - 4} y={y(100) + 13} fontSize="9.5" fill="#64748b" textAnchor="end">기준 100 = {ym(months[0])}</text>
+            </g>
+          )}
+          {/* 마우스 위치 띠 */}
+          {hover && <rect x={x(hover) - colW / 2} width={colW} y={T - 8} height={H - T - B + 8} fill="#eef3fb" opacity="0.7" rx="6" />}
+          {/* 면 + 선 */}
+          {lines.map((l) => {
+            const path = smoothPath(l.xy)
+            const area = `${path} L${l.xy[l.xy.length - 1][0]},${H - B} L${l.xy[0][0]},${H - B} Z`
             return (
-              <g key={s}>
-                <path fill="none" stroke={SUP[s].color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"
-                  d={pts.map((p, i) => `${i ? 'L' : 'M'}${x(p.month)},${y(p[field])}`).join(' ')} />
-                {!isIdx && pts.length <= 14 && pts.map((p) => <circle key={p.month} cx={x(p.month)} cy={y(p[field])} r="2.5" fill={SUP[s].color} />)}
-                {hover && pts.filter((p) => p.month === hover).map((p) => (
-                  <circle key={p.month} cx={x(p.month)} cy={y(p[field])} r="4.5" fill={SUP[s].color} stroke="#fff" strokeWidth="2" />
+              <g key={l.s}>
+                <path d={area} fill={`url(#area-${l.s}-${field})`} />
+                <path d={path} fill="none" stroke={SUP[l.s].color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                {l.pts.length <= 14 && l.pts.map((p) => (
+                  <circle key={p.month} cx={x(p.month)} cy={y(p[field])} r={hover === p.month ? 5.5 : 3}
+                    fill={hover === p.month ? SUP[l.s].color : '#fff'} stroke={SUP[l.s].color} strokeWidth="2" />
                 ))}
               </g>
             )
           })}
-          {ends.map((e) => (
-            <text key={e.s} x={W - R + 6} y={e.y + 4} fontSize="11" fontWeight="700" fill="#07204d">{SUP[e.s].short} {fmtV(e.v)}{isIdx ? '' : '원'}</text>
+          {/* 최고·최저 (한 공급사만 보일 때) */}
+          {single && !hover && [['최고', lines[0].top, -12], ['최저', lines[0].bot, 18]].map(([lab, p, dy]) => (
+            p !== lines[0].last && !(isIdx && p === lines[0].pts[0]) && (
+              <g key={lab}>
+                <text x={x(p.month)} y={y(p[field]) + dy} fontSize="10.5" fontWeight="700" textAnchor="middle"
+                  fill={lab === '최고' ? UP : DOWN} stroke="#fff" strokeWidth="3" paintOrder="stroke">
+                  {lab} {fmtV(p[field])}{unit}
+                </text>
+              </g>
+            )
           ))}
+          {/* 아래 달 표시 */}
+          {xt.map((m) => (
+            <text key={m} x={x(m)} y={H - 9} fontSize="10.5" fill={hover === m ? '#07204d' : '#94a3b8'} fontWeight={hover === m ? 700 : 400} textAnchor="middle">
+              {xLabel(m, months.indexOf(m))}
+            </text>
+          ))}
+          {/* 끝값 배지 */}
+          {ends.map((e) => {
+            const label = `${SUP[e.s].short} ${fmtV(e.v)}${unit}`
+            const w = label.length * 7.2 + 14
+            return (
+              <g key={e.s} transform={`translate(${W - R + 8},${e.y - 11})`}>
+                <rect width={w} height="22" rx="11" fill={SUP[e.s].color} />
+                <text x={w / 2} y="15" fontSize="11" fontWeight="700" fill="#fff" textAnchor="middle">{label}</text>
+              </g>
+            )
+          })}
         </svg>
       )}
       {hover && (
-        <div className="absolute top-1 pointer-events-none z-10 rounded-xl bg-navy-900 text-white px-3 py-2 shadow-lift text-[11.5px] tabular-nums"
-          style={{ left: x(hover), transform: `translateX(${x(hover) > W / 2 ? '-108%' : '8%'})` }}>
-          <p className="text-white/65 mb-1">{hover.slice(0, 4)}년 {+hover.slice(5, 7)}월</p>
+        <div className="absolute top-0 pointer-events-none z-10 rounded-xl bg-navy-900/95 text-white px-3 py-2 shadow-lift text-[11.5px] tabular-nums"
+          style={{ left: x(hover), transform: `translateX(${x(hover) > W / 2 ? '-110%' : '10%'})` }}>
+          <p className="text-white/60 mb-1">{hover.slice(0, 4)}년 {+hover.slice(5, 7)}월</p>
           {sups.map((s) => {
             const p = series[s].find((q) => q.month === hover)
             if (!p || p[field] == null) return null
@@ -943,9 +1015,11 @@ function IndexChart({ series, field = 'idx' }) {
               <p key={s} className="flex items-center gap-1.5 whitespace-nowrap">
                 <span className="w-2 h-2 rounded-full" style={{ background: SUP[s].color }} />{SUP[s].short}
                 {isIdx ? (
-                  <><b className="ml-1">{p.idx?.toFixed(1)}</b><span className="text-white/65">전월 {pctTxt(p.mom_pct)}</span></>
+                  <><b className="ml-1 text-[13px]">{p.idx?.toFixed(1)}</b>
+                    <span className="text-white/60">첫 달 대비 {pctTxt(Math.round((p.idx - 100) * 10) / 10)} · 전월 {pctTxt(p.mom_pct)}</span></>
                 ) : (
-                  <><b className="ml-1">{won(p.kg_median)}/kg</b><span className="text-white/65">{p.kg_n}개 품목 · 가운데 50% {short(p.kg_p25)}~{short(p.kg_p75)}</span></>
+                  <><b className="ml-1 text-[13px]">{won(p.kg_median)}/kg</b>
+                    <span className="text-white/60">{p.kg_n}개 품목 · 가운데 50% {short(p.kg_p25)}~{short(p.kg_p75)}</span></>
                 )}
               </p>
             )
