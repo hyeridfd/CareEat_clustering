@@ -993,7 +993,7 @@ function TrendSection() {
   const [lcls, setLcls] = useState('농산품')
   const [mcls, setMcls] = useState('전체')
   const [data, setData] = useState(null)
-  useEffect(() => { api.get('/prices/trends').then((r) => setBase(r.data)).catch(() => setBase({ months: 0 })) }, [])
+  useEffect(() => { api.get('/prices/trends').then((r) => setBase(r.data)).catch((e) => setBase({ months: 0, error: errMsg(e, '서버에서 시세 정보를 불러오지 못했습니다.') })) }, [])
   useEffect(() => {
     if (!base?.months) return
     setData(null)
@@ -1014,6 +1014,10 @@ function TrendSection() {
 
       {!base ? (
         <div className="mt-4 h-40 rounded-xl bg-navy-50/60 animate-pulse" />
+      ) : base.error ? (
+        <div className="mt-4 rounded-xl bg-red-50 text-red-700 px-5 py-4 text-sm leading-6">
+          시세 정보를 불러오지 못했습니다 ({base.error}). 서버가 새 버전으로 배포 중이면 잠시 뒤 새로고침해 주세요.
+        </div>
       ) : !enough ? (
         <div className="mt-4 rounded-xl bg-navy-50/50 px-5 py-6 text-sm text-muted leading-6">
           <p className="font-semibold text-navy-900">월별 추이는 두 달 이상 쌓이면 그려집니다 (현재 {base.months || 0}개월)</p>
