@@ -131,51 +131,242 @@ function Seg({ value, onChange, options }) {
   )
 }
 
+// ─────────────────────────── 엑셀 내려받기 ───────────────────────────
+async function downloadXlsx(url, params, fallback) {
+  try {
+    const r = await api.get(url, { params, responseType: 'blob', timeout: 180000 })
+    const cd = r.headers?.['content-disposition'] || ''
+    const m = cd.match(/filename\*=UTF-8''([^;]+)/i)
+    const name = m ? decodeURIComponent(m[1]) : fallback
+    const href = URL.createObjectURL(r.data)
+    const el = document.createElement('a')
+    el.href = href; el.download = name
+    document.body.appendChild(el); el.click(); el.remove()
+    setTimeout(() => URL.revokeObjectURL(href), 2000)
+  } catch (e) {
+    // 오류 응답도 blob 으로 오므로 글자로 풀어서 보여준다
+    let msg = '엑셀을 만들지 못했습니다.'
+    try { msg = JSON.parse(await e.response.data.text()).detail || msg } catch { /* 그대로 */ }
+    throw new Error(msg)
+  }
+}
+
+function ExcelButton({ onClick, busy, label = '엑셀 다운로드', small }) {
+  return (
+    <button onClick={onClick} disabled={busy}
+      className={`inline-flex items-center gap-1.5 rounded-xl border border-emerald-600/30 bg-white text-emerald-800 font-semibold hover:bg-emerald-50 disabled:opacity-50 transition ${small ? 'px-2.5 py-1.5 text-xs' : 'px-3.5 py-2 text-sm'}`}>
+      <svg viewBox="0 0 24 24" className="w-4 h-4" aria-hidden="true">
+        <rect x="3" y="3" width="18" height="18" rx="3" fill="#107C41" />
+        <path d="M8 8l8 8M16 8l-8 8" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" />
+      </svg>
+      {busy ? '만드는 중…' : label}
+    </button>
+  )
+}
+
+// ─────────────────────────── 조건 검색 폼 (KAMIS 간편가격정보 방식) ───────────────────────────
+const EMPTY = { q: '', category: '', mcls: '', tax: '', supplier: '', storage: '', origin: '', tag: '', from: '', to: '' }
+const RECENT_KEY = 'careeat.ingredients.recent'
+const loadRecent = () => { try { return JSON.parse(localStorage.getItem(RECENT_KEY) || '[]') } catch { return [] } }
+const saveRecent = (list) => { try { localStorage.setItem(RECENT_KEY, JSON.stringify(list.slice(0, 6))) } catch { /* 저장 못 해도 검색은 됨 */ } }
+const hasCond = (c) => !!(c && (c.q.trim() || c.category || c.mcls || c.tag))
+function condLabel(c) {
+  return [c.q.trim() && `'${c.q.trim()}'`, c.category, c.mcls, c.supplier && SUP[c.supplier]?.short, c.storage, c.origin,
+    c.tax, c.tag && TAGS.find((t) => t.id === c.tag)?.label,
+    (c.from || c.to) && `${c.from ? ym(c.from) : '처음'}~${c.to ? ym(c.to) : '최근'}`].filter(Boolean).join(' / ')
+}
+function shiftMonth(m, k) {
+  const [y, mo] = m.split('-').map(Number)
+  const d = new Date(y, mo - 1 + k, 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+function FormRow({ label, children, last, className = 'flex' }) {
+  return (
+    <div className={`${className} flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 px-5 sm:px-7 py-3.5 ${last ? '' : 'border-b border-dashed border-navy-200/80'}`}>
+      <span className="sm:w-20 shrink-0 text-[13px] font-bold text-navy-900">{label}</span>
+      <div className="flex-1 flex flex-wrap items-center gap-2">{children}</div>
+    </div>
+  )
+}
+
+function Field({ label, children }) {
+  return (
+    <label className="inline-flex items-center gap-2">
+      {label && <span className="text-[12.5px] font-semibold text-navy-700 whitespace-nowrap">{label}</span>}
+      {children}
+    </label>
+  )
+}
+
+const SEL = 'rounded-xl border border-navy-200 bg-white px-3 py-2 text-[13px] text-navy-900 focus:outline-none focus:ring-2 focus:ring-navy-300 min-w-[118px]'
+
+function SearchForm({ draft, setDraft, meta, onSearch, onReset, recent, onRecent, onRemoveRecent }) {
+  const [more, setMore] = useState(false)
+  const set = (k) => (e) => setDraft({ ...draft, [k]: e.target.value, ...(k === 'category' ? { mcls: '' } : {}) })
+  const months = meta.months || []
+  const lastM = months[months.length - 1]
+  const firstM = months[0]
+  const mclsList = (meta.groups || []).filter((g) => !draft.category || g.lcls === draft.category)
+  const quick = (n) => {
+    if (!lastM) return
+    if (n === 'all') setDraft({ ...draft, from: firstM, to: lastM })
+    else if (n === 'none') setDraft({ ...draft, from: '', to: '' })
+    else { const f = shiftMonth(lastM, -(n - 1)); setDraft({ ...draft, from: f < firstM ? firstM : f, to: lastM }) }
+  }
+  const onKey = (e) => { if (e.key === 'Enter') onSearch() }
+
+  return (
+    <section className="rounded-2xl border border-navy-200 bg-white shadow-card overflow-hidden mb-5">
+      <FormRow label="기간">
+        <Field>
+          <input type="month" value={draft.from} min={firstM} max={draft.to || lastM} onChange={set('from')}
+            className="rounded-xl border border-navy-200 px-3 py-2 text-[13px] text-navy-900 w-[150px]" />
+        </Field>
+        <span className="text-muted">~</span>
+        <Field>
+          <input type="month" value={draft.to} min={draft.from || firstM} max={lastM} onChange={set('to')}
+            className="rounded-xl border border-navy-200 px-3 py-2 text-[13px] text-navy-900 w-[150px]" />
+        </Field>
+        <div className="inline-flex gap-1 ml-1">
+          {[[3, '최근 3개월'], [6, '최근 6개월'], ['all', '전체 기간'], ['none', '지정 안 함']].map(([k, l]) => (
+            <button key={l} onClick={() => quick(k)}
+              className="px-2.5 py-1.5 rounded-lg text-[12px] font-semibold text-navy-700 bg-navy-50 hover:bg-navy-100">{l}</button>
+          ))}
+        </div>
+        <span className="text-[11px] text-muted w-full sm:w-auto">기간을 정하면 그 기간 월평균 단가와 변동률을 함께 보여드려요{firstM ? ` (${ym(firstM)}~${ym(lastM)} 자료)` : ''}</span>
+      </FormRow>
+      <FormRow label="부류">
+        <Field>
+          <select value={draft.category} onChange={set('category')} className={SEL}>
+            <option value="">전체</option>
+            {LCLS.map((l) => <option key={l} value={l}>{l}</option>)}
+          </select>
+        </Field>
+        <span className="hidden md:block w-px h-6 bg-navy-100 mx-1" />
+        <Field label="품목">
+          <select value={draft.mcls} onChange={set('mcls')} className={SEL}>
+            <option value="">전체</option>
+            {mclsList.map((g) => <option key={g.lcls + g.mcls} value={g.mcls}>{draft.category ? g.mcls : `${g.mcls} (${g.lcls})`}</option>)}
+          </select>
+        </Field>
+        <Field label="과세">
+          <select value={draft.tax} onChange={set('tax')} className={SEL}>
+            <option value="">전체</option><option value="면세">면세</option><option value="과세">과세</option>
+          </select>
+        </Field>
+        <Field label="품목명">
+          <input value={draft.q} onChange={set('q')} onKeyDown={onKey} placeholder="품목명 입력 (예: 애호박)"
+            className="rounded-xl border border-navy-200 px-3 py-2 text-[13px] text-navy-900 w-[220px] placeholder:text-slate-400" />
+        </Field>
+        <button onClick={() => setMore(!more)} className="sm:hidden text-[12.5px] font-semibold text-[#3557d4]">
+          {more ? '상세 조건 접기 ▴' : '상세 조건 (공급사·보관·원산지) ▾'}
+        </button>
+      </FormRow>
+      <FormRow label="공급·보관" className={more ? 'flex' : 'hidden sm:flex'}>
+        <Field>
+          <select value={draft.supplier} onChange={set('supplier')} className={SEL}>
+            <option value="">공급사 전체</option>
+            {SUP_KEYS.map((k) => <option key={k} value={k}>{SUP[k].label}</option>)}
+          </select>
+        </Field>
+        <Field label="보관">
+          <select value={draft.storage} onChange={set('storage')} className={SEL}>
+            <option value="">전체</option>{['냉장', '냉동', '실온'].map((v) => <option key={v}>{v}</option>)}
+          </select>
+        </Field>
+        <Field label="원산지">
+          <select value={draft.origin} onChange={set('origin')} className={SEL}>
+            <option value="">전체</option><option value="국산">국산</option><option value="수입">수입</option>
+          </select>
+        </Field>
+        <Field label="식감·영양">
+          <select value={draft.tag} onChange={set('tag')} className={SEL}>
+            <option value="">전체</option>{TAGS.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+          </select>
+        </Field>
+      </FormRow>
+      <FormRow label="자주 찾는 품목">
+        {QUICK.map((w) => (
+          <button key={w} onClick={() => { const c = { ...draft, q: w, tag: '' }; setDraft(c); onSearch(c) }}
+            className={`px-4 py-1.5 rounded-xl text-[13px] font-semibold transition ${draft.q === w ? 'bg-[#3557d4] text-white' : 'bg-slate-100 text-navy-700 hover:bg-slate-200'}`}>{w}</button>
+        ))}
+      </FormRow>
+      <div className="flex flex-wrap items-center justify-between gap-3 px-5 sm:px-7 py-4 bg-navy-50/40 border-t border-navy-100">
+        <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+          <Icon name="clock" className="w-4 h-4 text-muted shrink-0" />
+          {recent.length ? recent.map((r) => (
+            <span key={r.lab} className="inline-flex items-center gap-1 rounded-full bg-white border border-navy-100 pl-3 pr-1 py-1 text-[12px] text-navy-700 max-w-[280px]">
+              <button onClick={() => onRecent(r.c)} className="truncate hover:underline" title={r.lab}>{r.lab}</button>
+              <button onClick={() => onRemoveRecent(r.lab)} aria-label="최근 검색 지우기" className="w-5 h-5 inline-flex items-center justify-center rounded-full text-muted hover:bg-navy-50"><Icon name="x" className="w-3 h-3" /></button>
+            </span>
+          )) : <span className="text-[12px] text-muted">최근 검색이 여기에 남아요</span>}
+        </div>
+        <div className="flex items-center gap-2 ml-auto">
+          <button onClick={onReset} className="inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-semibold text-navy-700 hover:text-navy-900">
+            <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 12a8 8 0 1 0 2.3-5.6M4 4v4h4" /></svg>
+            선택초기화
+          </button>
+          <button onClick={() => onSearch()} className="px-8 py-2.5 rounded-xl bg-[#3557d4] hover:bg-[#2b48b8] text-white text-[14px] font-bold shadow-sm">검색하기</button>
+        </div>
+      </div>
+    </section>
+  )
+}
+
 // ─────────────────────────── 페이지 ───────────────────────────
 export default function IngredientsPage() {
   const [params, setParams] = useSearchParams()
-  const q = params.get('q') || ''
-  const [input, setInput] = useState(q)
-  const [tag, setTag] = useState(params.get('tag') || '')
-  const [supplier, setSupplier] = useState('')
-  const [storage, setStorage] = useState('')
-  const [origin, setOrigin] = useState('')
-  const [category, setCategory] = useState('')
+  const initial = { ...EMPTY, q: params.get('q') || '', category: params.get('category') || '',
+    mcls: params.get('mcls') || '', tag: params.get('tag') || '' }
+  const [tab, setTab] = useState(params.get('tab') === 'trend' ? 'trend' : 'search')
+  const [draft, setDraft] = useState(initial)
+  const [applied, setApplied] = useState(hasCond(initial) ? initial : null)
   const [sort, setSort] = useState('relevance')
   const [vat, setVat] = useState(true)
   const [summary, setSummary] = useState(null)
+  const [meta, setMeta] = useState({ months: [], groups: [] })
   const [res, setRes] = useState(null)
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState('')
   const [open, setOpen] = useState(null)
+  const [recent, setRecent] = useState(loadRecent)
+  const [xBusy, setXBusy] = useState(false)
   const reqId = useRef(0)
 
   useEffect(() => {
     api.get('/prices/summary').then((r) => setSummary(r.data)).catch((e) => setErr(errMsg(e, '단가 정보를 불러오지 못했습니다.')))
+    Promise.all([
+      api.get('/prices/months').then((r) => r.data.months || []).catch(() => []),
+      api.get('/prices/trends').then((r) => r.data.groups || []).catch(() => []),
+    ]).then(([months, groups]) => setMeta({ months, groups }))
   }, [])
 
-  // 입력이 0.3초 멈추면 검색. 주소(?q=)에 남겨 새로고침·공유해도 그대로 보인다.
-  useEffect(() => {
-    const t = setTimeout(() => {
-      if (input.trim() === q) return
-      const next = new URLSearchParams(params)
-      input.trim() ? next.set('q', input.trim()) : next.delete('q')
-      setParams(next, { replace: true })
-    }, 300)
-    return () => clearTimeout(t)
-  }, [input]) // eslint-disable-line react-hooks/exhaustive-deps
+  const run = (c = draft) => {
+    if (!hasCond(c)) { setErr('품목명을 입력하거나 부류·품목을 하나 이상 골라 주세요.'); return }
+    const cc = { ...c, q: c.q.trim() }
+    setErr(''); setApplied(cc); setTab('search')
+    const lab = condLabel(cc)
+    const next = [{ c: cc, lab }, ...recent.filter((r) => r.lab !== lab)].slice(0, 6)
+    setRecent(next); saveRecent(next)
+    const p = new URLSearchParams()
+    ;['q', 'category', 'mcls', 'tag'].forEach((k) => cc[k] && p.set(k, cc[k]))
+    setParams(p, { replace: true })
+  }
+  const reset = () => { setDraft(EMPTY); setApplied(null); setErr(''); setParams(new URLSearchParams(), { replace: true }) }
+  const removeRecent = (lab) => { const next = recent.filter((r) => r.lab !== lab); setRecent(next); saveRecent(next) }
 
-  const filters = { q, tag, supplier, storage, origin, category, sort, vat }
+  const toParams = (c, extra = {}) => {
+    const p = { sort, vat, ...extra }
+    ;['q', 'category', 'mcls', 'tax', 'supplier', 'storage', 'origin', 'tag'].forEach((k) => { if (c[k]) p[k] = c[k] })
+    if (c.from) p.date_from = c.from
+    if (c.to) p.date_to = c.to
+    return p
+  }
   const fetchPage = (offset) => {
     const id = ++reqId.current
-    const p = { q, sort, vat, limit: PAGE, offset }
-    if (tag) p.tag = tag
-    if (supplier) p.supplier = supplier
-    if (storage) p.storage = storage
-    if (origin) p.origin = origin
-    if (category) p.category = category
     setLoading(true); setErr('')
-    return api.get('/prices/search', { params: p })
+    return api.get('/prices/search', { params: toParams(applied, { limit: PAGE, offset }), timeout: 60000 })
       .then((r) => {
         if (id !== reqId.current) return
         setRes((prev) => (offset && prev ? { ...prev, ...r.data, items: [...prev.items, ...r.data.items], dist: prev.dist, stats: prev.stats } : r.data))
@@ -184,18 +375,20 @@ export default function IngredientsPage() {
       .finally(() => id === reqId.current && setLoading(false))
   }
   useEffect(() => {
-    if (!q && !tag && !category) { setRes(null); return }
+    if (!applied) { setRes(null); return }
     fetchPage(0)
-  }, [JSON.stringify(filters)]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(applied), sort, vat]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const pick = (w) => { setInput(w); setTag('') }
-  const reset = () => { setInput(''); setTag(''); setCategory(''); setSupplier(''); setStorage(''); setOrigin('') }
+  const exportSearch = () => {
+    setXBusy(true); setErr('')
+    downloadXlsx('/prices/export/search', toParams(applied), '식자재단가.xlsx')
+      .catch((e) => setErr(e.message)).finally(() => setXBusy(false))
+  }
+
   const pk = vat ? 'per_kg_tax' : 'per_kg'
   const pp = vat ? 'unit_price_tax' : 'unit_price'
-  const searching = !!(q || tag || category)
   const updated = summary?.suppliers?.map((s) => s.updated_at).filter(Boolean).sort().pop()
-
-  // 결과 목록의 kg당 막대는 분포 그래프와 같은 눈금을 쓴다
+  const showPeriod = !!(applied && (applied.from || applied.to))
   const scaleDomain = useMemo(() => {
     const vs = (res?.dist || []).map((d) => d.v)
     return vs.length ? [Math.min(...vs), Math.max(...vs)] : null
@@ -203,89 +396,49 @@ export default function IngredientsPage() {
 
   return (
     <CareLayout title="식자재" subtitle="두 공급사의 계약 단가를 매일 아침 반영해, 같은 식재료를 kg당 가격으로 맞춰 비교합니다.">
-      {err && <p className="mb-4 text-sm rounded-xl bg-red-50 text-red-700 px-4 py-3">{err}</p>}
-
-      {/* ── 검색 영역 ── */}
-      <section className="relative overflow-hidden rounded-2xl bg-navy-grad text-white px-5 sm:px-7 pt-5 pb-5 mb-5 shadow-card">
+      {/* ── 머리: 공급사 현황 + 탭 ── */}
+      <section className="relative overflow-hidden rounded-2xl bg-navy-grad text-white px-5 sm:px-7 pt-5 pb-0 mb-5 shadow-card">
         <div className="pointer-events-none absolute -right-16 -top-20 w-72 h-72 rounded-full bg-white/[0.06]" />
-        <div className="pointer-events-none absolute right-24 -bottom-24 w-56 h-56 rounded-full bg-sky-300/10" />
         <div className="relative flex flex-wrap items-center gap-x-2 gap-y-2 text-[12px] text-white/80">
+          <span className="text-[15px] font-extrabold text-white mr-2">식자재 가격정보</span>
           {(summary?.suppliers || []).map((s) => (
-            <button key={s.supplier} onClick={() => setSupplier(supplier === s.supplier ? '' : s.supplier)}
-              title="이 공급사만 보기"
-              className={`inline-flex items-center gap-2 rounded-full pl-2 pr-3 py-1 transition ${supplier === s.supplier ? 'bg-white text-navy-900' : 'bg-white/10 hover:bg-white/15'}`}>
+            <span key={s.supplier} className="inline-flex items-center gap-2 rounded-full pl-2 pr-3 py-1 bg-white/10">
               <span className="w-2.5 h-2.5 rounded-full ring-2 ring-white/80" style={{ background: SUP[s.supplier]?.color }} />
               <b className="font-semibold">{s.label}</b>
               <span className="tabular-nums opacity-80">{s.items.toLocaleString('ko-KR')}품목</span>
-            </button>
+            </span>
           ))}
           {updated && (
             <span className="inline-flex items-center gap-1.5 ml-auto"><Icon name="clock" className="w-3.5 h-3.5" />
               {fmtDay(updated)} {fmtTime(updated)} 반영</span>
           )}
         </div>
-
-        <div className="relative mt-4">
-          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-navy-400"><Icon name="search" className="w-5 h-5" /></span>
-          <input value={input} onChange={(e) => setInput(e.target.value)} autoFocus
-            placeholder="찾는 식재료를 입력하세요   예) 애호박 · 닭가슴살 냉장 · 연두부"
-            className="w-full rounded-2xl border-0 bg-white pl-12 pr-12 py-4 text-[16px] text-ink placeholder:text-slate-400 shadow-lift focus:outline-none focus:ring-4 focus:ring-sky-300/40" />
-          {(input || searching) && (
-            <button onClick={reset} aria-label="검색 지우기"
-              className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 inline-flex items-center justify-center rounded-full text-muted hover:bg-navy-50">
-              <Icon name="x" />
-            </button>
-          )}
-        </div>
-
-        <div className="relative mt-3.5 flex flex-wrap items-center gap-1.5">
-          {QUICK.map((w) => (
-            <button key={w} onClick={() => pick(w)}
-              className={`px-3 py-1 rounded-full text-xs font-medium transition ${q === w ? 'bg-white text-navy-900' : 'bg-white/10 text-white/90 hover:bg-white/20'}`}>{w}</button>
-          ))}
-          <span className="w-px h-4 bg-white/25 mx-1.5" />
-          {TAGS.map((t) => (
-            <button key={t.id} onClick={() => setTag(tag === t.id ? '' : t.id)} title={t.hint}
-              className={`px-3 py-1 rounded-full text-xs font-semibold transition ${tag === t.id ? 'bg-teal-300 text-navy-950' : 'bg-teal-300/15 text-teal-100 ring-1 ring-teal-200/40 hover:bg-teal-300/25'}`}>
-              {t.label}
-            </button>
+        <div className="relative mt-4 flex gap-1">
+          {[['search', '단가 검색'], ['trend', '시세 동향 · 계절']].map(([k, l]) => (
+            <button key={k} onClick={() => setTab(k)}
+              className={`px-6 py-2.5 rounded-t-xl text-[14px] font-bold transition ${tab === k ? 'bg-[#f6f8fc] text-navy-900' : 'text-white/80 hover:text-white hover:bg-white/10'}`}>{l}</button>
           ))}
         </div>
       </section>
 
-      {!searching ? (
-        <Home summary={summary} onCategory={(c) => setCategory(c)} onOpen={setOpen} />
+      {err && <p className="mb-4 text-sm rounded-xl bg-red-50 text-red-700 px-4 py-3">{err}</p>}
+
+      {tab === 'trend' ? (
+        <TrendSection onOpen={setOpen} />
       ) : (
         <>
-          {/* ── 필터 ── */}
-          <div className="flex items-center gap-2 mb-4 overflow-x-auto md:flex-wrap md:overflow-visible -mx-5 px-5 md:mx-0 md:px-0 pb-1 [&>*]:shrink-0">
-            <Seg value={supplier} onChange={setSupplier} options={[['', '전체'], ['hgreenfood', '현대그린푸드'], ['sajo', '사조']]} />
-            <Seg value={storage} onChange={setStorage} options={[['', '보관 전체'], ['냉장', '냉장'], ['냉동', '냉동'], ['실온', '실온']]} />
-            <Seg value={origin} onChange={setOrigin} options={[['', '원산지 전체'], ['국산', '국산'], ['수입', '수입']]} />
-            <select value={category} onChange={(e) => setCategory(e.target.value)} className="form-select w-auto py-1.5 text-xs">
-              <option value="">분류 전체</option>
-              {CATS.map((c) => <option key={c.id} value={c.id}>{c.id}</option>)}
-            </select>
-            <div className="ml-auto flex items-center gap-3">
-              <label className="flex items-center gap-1.5 text-xs text-navy-700 cursor-pointer select-none">
-                <input type="checkbox" checked={vat} onChange={(e) => setVat(e.target.checked)} className="accent-navy-600" />부가세 포함
-              </label>
-              <select value={sort} onChange={(e) => setSort(e.target.value)} className="form-select w-auto py-1.5 text-xs">
-                <option value="relevance">정확도순</option>
-                <option value="per_kg">kg당 낮은 가격순</option>
-                <option value="price">단가 낮은순</option>
-                <option value="name">이름순</option>
-              </select>
-            </div>
-          </div>
+          <SearchForm draft={draft} setDraft={setDraft} meta={meta} onSearch={(c) => run(c || draft)} onReset={reset}
+            recent={recent} onRecent={(c) => { setDraft({ ...EMPTY, ...c }); run({ ...EMPTY, ...c }) }} onRemoveRecent={removeRecent} />
 
-          {!res && loading ? (
+          {!applied ? (
+            <Home summary={summary} onCategory={(c) => { const cc = { ...EMPTY, category: c }; setDraft(cc); run(cc) }} onOpen={setOpen} />
+          ) : !res && loading ? (
             <Skeleton />
           ) : res && res.total === 0 ? (
             <div className="surface p-12 text-center">
               <p className="font-bold text-navy-900">조건에 맞는 품목이 없습니다</p>
-              <p className="mt-2 text-sm text-muted leading-6">필터를 줄이거나 다른 이름으로 검색해 보세요.<br />예: 쇠고기 → 우육·소고기</p>
-              <button onClick={reset} className="btn-secondary mt-5">검색 초기화</button>
+              <p className="mt-2 text-sm text-muted leading-6">조건을 줄이거나 다른 이름으로 검색해 보세요.<br />예: 쇠고기 → 우육·소고기</p>
+              <button onClick={reset} className="btn-secondary mt-5">선택초기화</button>
             </div>
           ) : res && (
             <div className={loading ? 'opacity-60 transition-opacity' : 'transition-opacity'}>
@@ -294,23 +447,44 @@ export default function IngredientsPage() {
                 <Compare best={res.best} stats={res.stats} pk={pk} onOpen={setOpen} />
               </div>
 
-              <div className="flex flex-wrap items-baseline justify-between gap-2 mb-2.5">
-                <p className="text-sm text-navy-900">
-                  <b className="tabular-nums text-base">{res.total.toLocaleString('ko-KR')}</b>개 품목
-                  {SUP_KEYS.filter((s) => res.counts?.[s]).map((s) => (
-                    <span key={s} className="ml-3 text-xs text-muted inline-flex items-center gap-1"><SupTag sup={s} short /> <span className="tabular-nums">{res.counts[s]}</span></span>
-                  ))}
-                </p>
-                {res.truncated && <p className="text-xs text-warning">결과가 많아 일부만 보여줍니다. 단어를 더해 좁혀 보세요.</p>}
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
+                <div className="min-w-0">
+                  <p className="text-[15px] font-extrabold text-navy-900">
+                    <span className="inline-block w-1 h-4 rounded bg-[#3557d4] mr-2 align-[-2px]" />
+                    {condLabel(applied)}
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted">
+                    <b className="tabular-nums text-navy-900">{res.total.toLocaleString('ko-KR')}</b>개 품목
+                    {SUP_KEYS.filter((s) => res.counts?.[s]).map((s) => (
+                      <span key={s} className="ml-2.5 inline-flex items-center gap-1"><SupTag sup={s} short /> <span className="tabular-nums">{res.counts[s]}</span></span>
+                    ))}
+                    {res.truncated && <span className="ml-2 text-warning">결과가 많아 일부만 보여줍니다</span>}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="flex items-center gap-1.5 text-xs text-navy-700 cursor-pointer select-none">
+                    <input type="checkbox" checked={vat} onChange={(e) => setVat(e.target.checked)} className="accent-navy-600" />부가세 포함
+                  </label>
+                  <select value={sort} onChange={(e) => setSort(e.target.value)} className="form-select w-auto py-1.5 text-xs">
+                    <option value="relevance">정확도순</option>
+                    <option value="per_kg">kg당 낮은 가격순</option>
+                    <option value="price">단가 낮은순</option>
+                    <option value="name">이름순</option>
+                    {showPeriod && <option value="period_up">기간 상승률 높은순</option>}
+                    {showPeriod && <option value="period_down">기간 하락률 높은순</option>}
+                  </select>
+                  <ExcelButton onClick={exportSearch} busy={xBusy} />
+                </div>
               </div>
 
               <div className="surface overflow-hidden">
-                <div className="hidden md:grid grid-cols-[76px_1fr_150px_104px_170px] gap-3 px-4 py-2.5 bg-navy-50/60 text-[11px] font-semibold text-muted">
+                <div className={`hidden md:grid ${showPeriod ? 'grid-cols-[76px_1fr_130px_100px_150px_132px]' : 'grid-cols-[76px_1fr_150px_104px_170px]'} gap-3 px-4 py-2.5 bg-navy-50/60 text-[11px] font-semibold text-muted`}>
                   <span>공급사</span><span>품목</span><span>규격</span><span className="text-right">단가{vat ? '' : ' (별도)'}</span><span className="text-right">kg당 환산</span>
+                  {showPeriod && <span className="text-right">기간 변동 <span className="font-normal">{applied.from ? ym(applied.from) : '처음'}→{applied.to ? ym(applied.to) : '최근'}</span></span>}
                 </div>
                 <ul className="divide-y divide-navy-100">
                   {res.items.map((it) => (
-                    <ItemRow key={it.supplier + it.item_cd} it={it} pk={pk} pp={pp} domain={scaleDomain}
+                    <ItemRow key={it.supplier + it.item_cd} it={it} pk={pk} pp={pp} domain={scaleDomain} showPeriod={showPeriod}
                       cheapest={SUP_KEYS.some((s) => res.best?.[s]?.item_cd === it.item_cd && res.best?.[s]?.supplier === it.supplier)}
                       onOpen={setOpen} />
                   ))}
@@ -325,7 +499,7 @@ export default function IngredientsPage() {
                 </div>
               )}
               <p className="mt-5 text-[11px] leading-5 text-muted">
-                kg당 환산은 규격 표기(1.56Kg, 380g, 500G*10EA 등)에서 읽은 포장 중량으로 계산한 참고값입니다. 표기를 읽을 수 없는 품목은 '—'로 둡니다.
+                kg당 환산은 규격 표기(1.56Kg, 380g, 500G*10EA 등)에서 읽은 포장 중량으로 계산한 참고값입니다. 기간 변동은 월평균 공급가 기준입니다.
                 사조는 부가세 별도가만 제공돼 과세 품목은 10%를 더해 계산했습니다(≈). 사조의 대·중분류는 현대그린푸드 분류를 학습해 품목명으로 추정한 값입니다.
               </p>
             </div>
@@ -397,7 +571,6 @@ function Home({ summary, onCategory, onOpen }) {
         )}
       </section>
     </div>
-    <TrendSection onOpen={onOpen} />
     </>
   )
 }
@@ -613,13 +786,13 @@ function KgBar({ v, domain, color }) {
   )
 }
 
-function ItemRow({ it, pk, pp, domain, cheapest, onOpen }) {
+function ItemRow({ it, pk, pp, domain, cheapest, onOpen, showPeriod }) {
   const { name, attrs } = splitName(it.item_nm)
   const kg = it[pk]
   return (
     <li>
       <button onClick={() => onOpen(it)}
-        className="relative w-full text-left px-4 py-3 hover:bg-navy-50/40 transition md:grid md:grid-cols-[76px_1fr_150px_104px_170px] md:gap-3 md:items-start">
+        className={`relative w-full text-left px-4 py-3 hover:bg-navy-50/40 transition md:grid ${showPeriod ? 'md:grid-cols-[76px_1fr_130px_100px_150px_132px]' : 'md:grid-cols-[76px_1fr_150px_104px_170px]'} md:gap-3 md:items-start`}>
         <span className="absolute left-0 top-3 bottom-3 w-[3px] rounded-r" style={{ background: SUP[it.supplier]?.color }} />
         <span className="hidden md:block pt-0.5"><SupTag sup={it.supplier} short /></span>
         <span className="block min-w-0">
@@ -650,8 +823,25 @@ function ItemRow({ it, pk, pp, domain, cheapest, onOpen }) {
             </>
           ) : <span className="text-muted text-sm">—</span>}
         </span>
+        {showPeriod && <PeriodCell p={it.period} />}
       </button>
     </li>
+  )
+}
+
+function PeriodCell({ p }) {
+  if (!p) return <span className="block mt-1 md:mt-0 md:text-right text-[11px] text-muted">월별 자료 없음</span>
+  const up = (p.pct || 0) > 0, down = (p.pct || 0) < 0
+  return (
+    <span className="flex md:block items-baseline justify-between mt-1 md:mt-0 md:text-right tabular-nums">
+      <span className="md:hidden text-[11px] text-muted">기간 변동</span>
+      <span>
+        <span className="block text-[13px] font-bold" style={{ color: up ? UP : down ? DOWN : '#64748b' }}>
+          {p.pct == null ? '—' : `${up ? '▲' : down ? '▼' : ''}${Math.abs(p.pct)}%`}
+        </span>
+        <span className="block text-[10.5px] text-muted">{short(p.first)} → {short(p.last)} · 평균 {short(p.avg)}</span>
+      </span>
+    </span>
   )
 }
 
@@ -1084,6 +1274,8 @@ function SeasonStrip({ rows, compact }) {
 function TrendSection({ onOpen }) {
   const [base, setBase] = useState(null)
   const [metric, setMetric] = useState('idx')
+  const [xBusy, setXBusy] = useState(false)
+  const [xErr, setXErr] = useState('')
   const [lcls, setLcls] = useState('농산품')
   const [mcls, setMcls] = useState('전체')
   const [data, setData] = useState(null)
@@ -1098,13 +1290,18 @@ function TrendSection({ onOpen }) {
   const enough = (base?.months || 0) >= 2
 
   return (
-    <section className="surface p-5 mt-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
+    <section className="surface p-5">
+      <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <p className="text-sm font-bold text-navy-900">시세 동향 <span className="text-xs font-normal text-muted ml-1">월별 · 계절별</span></p>
           <p className="text-[11px] text-muted mt-0.5">같은 품목들의 가격 변화를 이어 붙인 지수 · 처음 달 = 100{base?.first && ` · ${ym(base.first)} ~ ${ym(base.last)}`}</p>
         </div>
+        {enough && !base?.error && (
+          <ExcelButton small busy={xBusy} label={`${mcls === '전체' ? lcls : mcls} 엑셀`}
+            onClick={() => { setXBusy(true); setXErr(''); downloadXlsx('/prices/export/trends', { lcls, mcls }, '시세동향.xlsx').catch((e) => setXErr(e.message)).finally(() => setXBusy(false)) }} />
+        )}
       </div>
+      {xErr && <p className="mt-2 text-xs rounded-lg bg-red-50 text-red-700 px-3 py-2">{xErr}</p>}
 
       {!base ? (
         <div className="mt-4 h-40 rounded-xl bg-navy-50/60 animate-pulse" />

@@ -15,7 +15,9 @@ from datetime import date, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query, Security
+from fastapi.responses import Response
 from fastapi.security import HTTPAuthorizationCredentials
+from urllib.parse import quote
 
 from dependencies import decode_token, get_supabase, security
 
@@ -245,25 +247,16 @@ def _categories(sb, day):
     return ["농산품", "축산품", "수산품", "공산품"]
 
 
-@router.get("/search")
-def search(q: str = Query("", max_length=60),
-           supplier: Optional[str] = Query(None),
-           storage: Optional[str] = Query(None, description="냉장|냉동|실온"),
-           origin: Optional[str] = Query(None, description="국산|수입"),
-           category: Optional[str] = Query(None, description="대분류 (사조는 자동 추정 분류)"),
-           tag: Optional[str] = Query(None, description="soft|lowsalt"),
-           food_only: bool = Query(True),
-           include_stale: bool = Query(False),
-           sort: str = Query("relevance", pattern="^(relevance|per_kg|price|name)$"),
-           vat: bool = Query(True),
-           limit: int = Query(40, ge=1, le=200),
-           offset: int = Query(0, ge=0),
-           user: dict = Security(require_viewer)):
-    terms = _clean_terms(q)
-    if not terms and not tag and not category:
-        return {"items": [], "total": 0, "counts": {}, "truncated": False, "best": {}, "terms": []}
+def _ym_ok(v: Optional[str]) -> Optional[str]:
+    return v if v and re.fullmatch(r"\d{4}-\d{2}", v) else None
 
-    sb = get_supabase()
+
+def search_core(sb, q="", supplier=None, storage=None, origin=None, category=None, mcls=None, tax=None,
+                tag=None, food_only=True, include_stale=False, sort="relevance", vat=True):
+    """조건에 맞는 품목 전체(정렬까지). 화면 검색과 엑셀 내보내기가 같이 쓴다."""
+    terms = _clean_terms(q)
+    if not terms and not tag and not category and not mcls:
+        return None
     latest_day = _latest_days(sb)
     # 공급사마다 따로 가져온다 (한 번에 가져오면 상한이 한 공급사 행으로 다 차서 다른 공급사가 빠짐)
     rows, truncated = [], False
@@ -275,6 +268,8 @@ def search(q: str = Query("", max_length=60),
             qry = qry.or_(",".join(f"item_nm.ilike.%{k}%" for k in TAGS[tag]))
         if category:
             qry = qry.eq("lcls_nm", category)
+        if mcls:
+            qry = qry.eq("mcls_nm", mcls)
         part = qry.limit(FETCH_CAP).execute().data or []
         truncated = truncated or len(part) >= FETCH_CAP
         rows += part
@@ -291,6 +286,8 @@ def search(q: str = Query("", max_length=60),
         if origin == "국산" and it["origin"] != "국산":
             continue
         if origin == "수입" and it["origin"] not in ("수입", "원양"):
+            continue
+        if tax and (it["tax_type"] or "") != tax:
             continue
         items.append(it)
 
@@ -316,13 +313,95 @@ def search(q: str = Query("", max_length=60),
         cur = best.get(it["supplier"])
         if cur is None or v < cur[pk]:
             best[it["supplier"]] = it
-
     counts = {s: sum(1 for i in items if i["supplier"] == s) for s in SUPPLIERS}
-    page = items[offset: offset + limit]
+    return {"items": items, "terms": terms, "truncated": truncated, "best": best, "counts": counts, "pk": pk}
+
+
+def attach_period(sb, items, date_from: Optional[str], date_to: Optional[str], chunk: int = 150):
+    """품목마다 기간(월) 월평균 단가 통계를 붙인다: period = {avg, min, max, first, last, pct, months}."""
+    date_from, date_to = _ym_ok(date_from), _ym_ok(date_to)
+    if not items or not (date_from or date_to):
+        return {}
+    by_sup = {}
+    for it in items:
+        by_sup.setdefault(it["supplier"], []).append(it["item_cd"])
+    series = {}
+    for sup, codes in by_sup.items():
+        for i in range(0, len(codes), chunk):
+            qry = (sb.table("supplier_price_monthly").select("item_cd,month,avg_price")
+                   .eq("supplier", sup).in_("item_cd", codes[i:i + chunk]))
+            if date_from:
+                qry = qry.gte("month", f"{date_from}-01")
+            if date_to:
+                qry = qry.lte("month", f"{date_to}-01")
+            for r in qry.order("month").limit(10000).execute().data or []:
+                v = _num(r.get("avg_price"))
+                if v:
+                    series.setdefault((sup, r["item_cd"]), []).append((r["month"][:7], v))
+    for it in items:
+        sr = series.get((it["supplier"], it["item_cd"]))
+        if not sr:
+            it["period"] = None
+            continue
+        vals = [v for _, v in sr]
+        it["period"] = {"avg": round(sum(vals) / len(vals)), "min": round(min(vals)), "max": round(max(vals)),
+                        "first": round(sr[0][1]), "last": round(sr[-1][1]),
+                        "first_month": sr[0][0], "last_month": sr[-1][0],
+                        "pct": round((sr[-1][1] / sr[0][1] - 1) * 100, 1) if len(sr) > 1 else None,
+                        "months": len(sr)}
+    return series
+
+
+@router.get("/search")
+def search(q: str = Query("", max_length=60),
+           supplier: Optional[str] = Query(None),
+           storage: Optional[str] = Query(None, description="냉장|냉동|실온"),
+           origin: Optional[str] = Query(None, description="국산|수입"),
+           category: Optional[str] = Query(None, description="대분류 (사조는 자동 추정 분류)"),
+           mcls: Optional[str] = Query(None, description="중분류"),
+           tax: Optional[str] = Query(None, description="면세|과세"),
+           tag: Optional[str] = Query(None, description="soft|lowsalt"),
+           date_from: Optional[str] = Query(None, description="기간 시작 YYYY-MM"),
+           date_to: Optional[str] = Query(None, description="기간 끝 YYYY-MM"),
+           food_only: bool = Query(True),
+           include_stale: bool = Query(False),
+           sort: str = Query("relevance", pattern="^(relevance|per_kg|price|name|period_up|period_down)$"),
+           vat: bool = Query(True),
+           limit: int = Query(40, ge=1, le=200),
+           offset: int = Query(0, ge=0),
+           user: dict = Security(require_viewer)):
+    sb = get_supabase()
+    base_sort = sort if sort in ("relevance", "per_kg", "price", "name") else "relevance"
+    res = search_core(sb, q, supplier, storage, origin, category, mcls, tax, tag, food_only, include_stale,
+                      base_sort, vat)
+    if res is None:
+        return {"items": [], "total": 0, "counts": {}, "truncated": False, "best": {}, "terms": []}
+    items = res["items"]
+    if sort in ("period_up", "period_down"):
+        # 기간 변동률 순: 전체 품목에 기간 통계가 필요하다 (최대 공급사당 1,000개)
+        attach_period(sb, items, date_from, date_to)
+        sign = -1 if sort == "period_up" else 1
+        items.sort(key=lambda i: (i.get("period") is None or i["period"]["pct"] is None,
+                                  sign * ((i.get("period") or {}).get("pct") or 0)))
+        page = items[offset: offset + limit]
+    else:
+        page = items[offset: offset + limit]
+        attach_period(sb, page, date_from, date_to)
     _attach_recent_change(sb, page)
-    dist, stats = _distribution(items, terms, pk) if offset == 0 else (None, None)
-    return {"items": page, "total": len(items), "counts": counts, "truncated": truncated,
-            "best": best, "terms": terms, "dist": dist, "stats": stats}
+    dist, stats = _distribution(items, res["terms"], res["pk"]) if offset == 0 else (None, None)
+    return {"items": page, "total": len(items), "counts": res["counts"], "truncated": res["truncated"],
+            "best": res["best"], "terms": res["terms"], "dist": dist, "stats": stats,
+            "period": {"from": _ym_ok(date_from), "to": _ym_ok(date_to)}}
+
+
+@router.get("/months")
+def months(user: dict = Security(require_viewer)):
+    """월별 집계가 있는 달 목록 (기간 선택용)."""
+    sb = get_supabase()
+    rows = (sb.table("supplier_category_monthly").select("month").eq("mcls_nm", "전체")
+            .order("month").limit(5000).execute().data or [])
+    ms = sorted({r["month"][:7] for r in rows})
+    return {"months": ms}
 
 
 def _quantile(sorted_vals, q):
@@ -501,3 +580,88 @@ def _item_monthly(sb, supplier: str, item_cd: str):
         r["mom_pct"] = round((r["avg"] / out[i - 1]["avg"] - 1) * 100, 1) if i and out[i - 1]["avg"] else None
         r["yoy_pct"] = _yoy(pairs, i)
     return out, seasonal_profile(pairs)
+
+
+
+# ─────────────────────────── 엑셀 내보내기 ───────────────────────────
+try:
+    from routers.prices_excel import build_search_xlsx, build_trends_xlsx
+except ImportError:  # 테스트에서 routers 폴더를 직접 경로에 넣었을 때
+    from prices_excel import build_search_xlsx, build_trends_xlsx
+
+XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+EXPORT_CAP = 3000
+
+
+def _xlsx_response(data: bytes, filename: str) -> Response:
+    return Response(content=data, media_type=XLSX,
+                    headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"})
+
+
+def _months_between(a: Optional[str], b: Optional[str]):
+    if not (a and b):
+        return []
+    y, m = int(a[:4]), int(a[5:7])
+    out = []
+    while f"{y}-{m:02d}" <= b and len(out) < 120:
+        out.append(f"{y}-{m:02d}")
+        y, m = (y + 1, 1) if m == 12 else (y, m + 1)
+    return out
+
+
+@router.get("/export/search")
+def export_search(q: str = Query("", max_length=60),
+                  supplier: Optional[str] = Query(None), storage: Optional[str] = Query(None),
+                  origin: Optional[str] = Query(None), category: Optional[str] = Query(None),
+                  mcls: Optional[str] = Query(None), tax: Optional[str] = Query(None),
+                  tag: Optional[str] = Query(None),
+                  date_from: Optional[str] = Query(None), date_to: Optional[str] = Query(None),
+                  sort: str = Query("relevance", pattern="^(relevance|per_kg|price|name|period_up|period_down)$"),
+                  vat: bool = Query(True),
+                  user: dict = Security(require_viewer)):
+    """검색 결과 전체(최대 3,000개)를 엑셀로."""
+    sb = get_supabase()
+    base_sort = sort if sort in ("relevance", "per_kg", "price", "name") else "relevance"
+    res = search_core(sb, q, supplier, storage, origin, category, mcls, tax, tag, True, False, base_sort, vat)
+    if res is None:
+        raise HTTPException(status_code=400, detail="검색어나 분류를 하나 이상 정해 주세요.")
+    items = res["items"][:EXPORT_CAP]
+    date_from, date_to = _ym_ok(date_from), _ym_ok(date_to)
+    series = attach_period(sb, items, date_from, date_to)
+    if sort in ("period_up", "period_down"):
+        sign = -1 if sort == "period_up" else 1
+        items.sort(key=lambda i: (i.get("period") is None or i["period"]["pct"] is None,
+                                  sign * ((i.get("period") or {}).get("pct") or 0)))
+    months = _months_between(date_from, date_to) or sorted({m for sr in series.values() for m, _ in sr})
+    sup_lab = SUPPLIERS.get(supplier, "전체")
+    tag_lab = {"soft": "부드러운 식감", "lowsalt": "저염·저당"}.get(tag, "")
+    conditions = [("품목명", q or "—"), ("부류(대분류)", category or "전체"), ("품목(중분류)", mcls or "전체"),
+                  ("공급사", sup_lab), ("보관", storage or "전체"), ("원산지", origin or "전체"),
+                  ("과세", tax or "전체"), ("묶음", tag_lab or "—"),
+                  ("기간", f"{date_from or '처음'} ~ {date_to or '최근'}"),
+                  ("단가 기준", "부가세 포함" if vat else "부가세 별도(공급가)"),
+                  ("품목 수", f"{len(items):,}개" + (" (상한 3,000개)" if len(res["items"]) > EXPORT_CAP else ""))]
+    data = build_search_xlsx(items, series, months, conditions, vat)
+    name = "_".join(x for x in ["식자재단가", q.strip().replace(" ", "-") or category or "", mcls or "",
+                                date_from or "", date_to or ""] if x)
+    return _xlsx_response(data, f"{name}.xlsx")
+
+
+@router.get("/export/trends")
+def export_trends(lcls: str = Query(...), mcls: str = Query("전체"),
+                  date_from: Optional[str] = Query(None), date_to: Optional[str] = Query(None),
+                  user: dict = Security(require_viewer)):
+    """분류 시세 동향(지수·kg당 중앙값·계절·많이 변한 품목)을 엑셀로."""
+    data = trends(lcls=lcls, mcls=mcls, user=user)
+    date_from, date_to = _ym_ok(date_from), _ym_ok(date_to)
+    if date_from or date_to:
+        for s, pts in (data.get("series") or {}).items():
+            data["series"][s] = [p for p in pts if (not date_from or p["month"] >= date_from)
+                                 and (not date_to or p["month"] <= date_to)]
+    conditions = [("분류", lcls if mcls == "전체" else f"{lcls} › {mcls}"),
+                  ("기간", f"{date_from or data.get('first') or '처음'} ~ {date_to or data.get('last') or '최근'}"),
+                  ("공급사", ", ".join(SUPPLIERS[s] for s in (data.get("series") or {}))),
+                  ("기준", "월평균 공급가(부가세 별도)")]
+    xbytes = build_trends_xlsx(data, lcls, mcls, conditions)
+    name = f"시세동향_{lcls}{'' if mcls == '전체' else '_' + mcls.replace('/', '-')}"
+    return _xlsx_response(xbytes, f"{name}.xlsx")

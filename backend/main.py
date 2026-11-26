@@ -32,6 +32,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["Content-Disposition"],   # 엑셀 내려받기 파일 이름
 )
 
 app.include_router(auth.router, prefix="/api/auth", tags=["인증"])
