@@ -877,7 +877,7 @@ function IndexChart({ series, field = 'idx' }) {
   const isIdx = field === 'idx'
   const sups = SUP_KEYS.filter((s) => series?.[s]?.some((p) => p[field] != null))
   const months = [...new Set(sups.flatMap((s) => series[s].map((p) => p.month)))].sort()
-  const W = Math.max(width, 300), H = 240, L = isIdx ? 40 : 48, R = 64, T = 14, B = 26
+  const W = Math.max(width, 300), H = 240, L = isIdx ? 40 : 52, R = isIdx ? 64 : 92, T = 14, B = 26
   const vals = sups.flatMap((s) => series[s].map((p) => p[field])).filter((v) => v != null)
   if (!vals.length) return <p ref={ref} className="py-16 text-center text-sm text-muted">kg 단위로 환산할 수 있는 품목이 부족해 그릴 수 없습니다.</p>
   let lo = Math.min(...vals, ...(isIdx ? [100] : [])), hi = Math.max(...vals, ...(isIdx ? [100] : []))
@@ -887,7 +887,7 @@ function IndexChart({ series, field = 'idx' }) {
   const y = (v) => T + (1 - (v - lo) / (hi - lo)) * (H - T - B)
   const step = niceStep(hi - lo)
   const yt = []; for (let v = Math.ceil(lo / step) * step; v <= hi; v += step) yt.push(v)
-  const fmtV = (v) => (isIdx ? `${Math.round(v)}` : short(Math.round(v)))
+  const fmtV = (v) => (isIdx ? `${Math.round(v)}` : Math.round(v).toLocaleString('ko-KR'))
   const xt = months.filter((m, i) => months.length <= 13 || m.endsWith('-01') || i === months.length - 1)
   const onMove = (e) => {
     const px = e.clientX - e.currentTarget.getBoundingClientRect().left
@@ -928,7 +928,7 @@ function IndexChart({ series, field = 'idx' }) {
             )
           })}
           {ends.map((e) => (
-            <text key={e.s} x={W - R + 6} y={e.y + 4} fontSize="11" fontWeight="700" fill="#07204d">{SUP[e.s].short} {fmtV(e.v)}</text>
+            <text key={e.s} x={W - R + 6} y={e.y + 4} fontSize="11" fontWeight="700" fill="#07204d">{SUP[e.s].short} {fmtV(e.v)}{isIdx ? '' : '원'}</text>
           ))}
         </svg>
       )}
