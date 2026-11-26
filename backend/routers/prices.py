@@ -584,10 +584,15 @@ def _item_monthly(sb, supplier: str, item_cd: str):
 
 
 # ─────────────────────────── 엑셀 내보내기 ───────────────────────────
-try:
-    from routers.prices_excel import build_search_xlsx, build_trends_xlsx
-except ImportError:  # 테스트에서 routers 폴더를 직접 경로에 넣었을 때
-    from prices_excel import build_search_xlsx, build_trends_xlsx
+def _excel():
+    """엑셀 모듈은 버튼을 누를 때만 불러온다 (openpyxl 문제로 단가 검색 전체가 멈추지 않게)."""
+    try:
+        from routers import prices_excel
+    except ModuleNotFoundError as e:
+        if e.name not in ("routers", "routers.prices_excel"):
+            raise HTTPException(status_code=500, detail=f"엑셀 기능에 필요한 모듈이 없습니다: {e.name}")
+        import prices_excel  # 테스트에서 routers 폴더를 직접 경로에 넣었을 때
+    return prices_excel
 
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 EXPORT_CAP = 3000
@@ -641,7 +646,7 @@ def export_search(q: str = Query("", max_length=60),
                   ("기간", f"{date_from or '처음'} ~ {date_to or '최근'}"),
                   ("단가 기준", "부가세 포함" if vat else "부가세 별도(공급가)"),
                   ("품목 수", f"{len(items):,}개" + (" (상한 3,000개)" if len(res["items"]) > EXPORT_CAP else ""))]
-    data = build_search_xlsx(items, series, months, conditions, vat)
+    data = _excel().build_search_xlsx(items, series, months, conditions, vat)
     name = "_".join(x for x in ["식자재단가", q.strip().replace(" ", "-") or category or "", mcls or "",
                                 date_from or "", date_to or ""] if x)
     return _xlsx_response(data, f"{name}.xlsx")
@@ -662,6 +667,6 @@ def export_trends(lcls: str = Query(...), mcls: str = Query("전체"),
                   ("기간", f"{date_from or data.get('first') or '처음'} ~ {date_to or data.get('last') or '최근'}"),
                   ("공급사", ", ".join(SUPPLIERS[s] for s in (data.get("series") or {}))),
                   ("기준", "월평균 공급가(부가세 별도)")]
-    xbytes = build_trends_xlsx(data, lcls, mcls, conditions)
+    xbytes = _excel().build_trends_xlsx(data, lcls, mcls, conditions)
     name = f"시세동향_{lcls}{'' if mcls == '전체' else '_' + mcls.replace('/', '-')}"
     return _xlsx_response(xbytes, f"{name}.xlsx")
