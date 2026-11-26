@@ -134,6 +134,7 @@ def shape(r: dict, latest_day: dict) -> dict:
         "item_cd": r.get("item_cd"),
         "item_nm": r.get("item_nm"),
         "category": " › ".join(x for x in (r.get("lcls_nm"), r.get("mcls_nm"), r.get("dcls_nm")) if x) or None,
+        "category_auto": r.get("scls_nm") == "자동분류",   # 사조: 품목명으로 추정한 분류
         "lcls_nm": r.get("lcls_nm"),
         "mcls_nm": r.get("mcls_nm"),
         "dcls_nm": r.get("dcls_nm"),
@@ -238,7 +239,7 @@ def summary(user: dict = Security(require_viewer)):
 
 
 def _categories(sb, day):
-    """현대그린푸드 대분류 목록 (사조는 분류 정보가 없음)."""
+    """대분류 목록 (사조는 crawler 가 품목명으로 추정해 채운 값)."""
     if not day:
         return []
     return ["농산품", "축산품", "수산품", "공산품"]
@@ -249,7 +250,7 @@ def search(q: str = Query("", max_length=60),
            supplier: Optional[str] = Query(None),
            storage: Optional[str] = Query(None, description="냉장|냉동|실온"),
            origin: Optional[str] = Query(None, description="국산|수입"),
-           category: Optional[str] = Query(None, description="대분류 (현대그린푸드만)"),
+           category: Optional[str] = Query(None, description="대분류 (사조는 자동 추정 분류)"),
            tag: Optional[str] = Query(None, description="soft|lowsalt"),
            food_only: bool = Query(True),
            include_stale: bool = Query(False),
@@ -264,17 +265,19 @@ def search(q: str = Query("", max_length=60),
 
     sb = get_supabase()
     latest_day = _latest_days(sb)
-    qry = sb.table("supplier_prices_latest").select(COLS)
-    for t in terms:                       # 띄어쓰기로 나눈 단어는 모두 포함 (AND)
-        qry = qry.ilike("item_nm", f"%{t}%")
-    if tag in TAGS:
-        qry = qry.or_(",".join(f"item_nm.ilike.%{k}%" for k in TAGS[tag]))
-    if supplier in SUPPLIERS:
-        qry = qry.eq("supplier", supplier)
-    if category:
-        qry = qry.eq("lcls_nm", category)
-    rows = qry.limit(FETCH_CAP).execute().data or []
-    truncated = len(rows) >= FETCH_CAP
+    # 공급사마다 따로 가져온다 (한 번에 가져오면 상한이 한 공급사 행으로 다 차서 다른 공급사가 빠짐)
+    rows, truncated = [], False
+    for sup in ([supplier] if supplier in SUPPLIERS else list(SUPPLIERS)):
+        qry = sb.table("supplier_prices_latest").select(COLS).eq("supplier", sup)
+        for t in terms:                   # 띄어쓰기로 나눈 단어는 모두 포함 (AND)
+            qry = qry.ilike("item_nm", f"%{t}%")
+        if tag in TAGS:
+            qry = qry.or_(",".join(f"item_nm.ilike.%{k}%" for k in TAGS[tag]))
+        if category:
+            qry = qry.eq("lcls_nm", category)
+        part = qry.limit(FETCH_CAP).execute().data or []
+        truncated = truncated or len(part) >= FETCH_CAP
+        rows += part
 
     items = []
     for r in rows:

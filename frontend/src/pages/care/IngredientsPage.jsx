@@ -262,7 +262,7 @@ export default function IngredientsPage() {
             <Seg value={origin} onChange={setOrigin} options={[['', '원산지 전체'], ['국산', '국산'], ['수입', '수입']]} />
             <select value={category} onChange={(e) => setCategory(e.target.value)} className="form-select w-auto py-1.5 text-xs">
               <option value="">분류 전체</option>
-              {CATS.map((c) => <option key={c.id} value={c.id}>{c.id} (현대만)</option>)}
+              {CATS.map((c) => <option key={c.id} value={c.id}>{c.id}</option>)}
             </select>
             <div className="ml-auto flex items-center gap-3">
               <label className="flex items-center gap-1.5 text-xs text-navy-700 cursor-pointer select-none">
@@ -282,7 +282,7 @@ export default function IngredientsPage() {
           ) : res && res.total === 0 ? (
             <div className="surface p-12 text-center">
               <p className="font-bold text-navy-900">조건에 맞는 품목이 없습니다</p>
-              <p className="mt-2 text-sm text-muted leading-6">필터를 줄이거나 다른 이름으로 검색해 보세요. 예: 쇠고기 → 우육·소고기<br />사조는 분류 정보가 없어 분류 필터를 고르면 제외됩니다.</p>
+              <p className="mt-2 text-sm text-muted leading-6">필터를 줄이거나 다른 이름으로 검색해 보세요.<br />예: 쇠고기 → 우육·소고기</p>
               <button onClick={reset} className="btn-secondary mt-5">검색 초기화</button>
             </div>
           ) : res && (
@@ -324,7 +324,7 @@ export default function IngredientsPage() {
               )}
               <p className="mt-5 text-[11px] leading-5 text-muted">
                 kg당 환산은 규격 표기(1.56Kg, 380g, 500G*10EA 등)에서 읽은 포장 중량으로 계산한 참고값입니다. 표기를 읽을 수 없는 품목은 '—'로 둡니다.
-                사조는 부가세 별도가만 제공돼 과세 품목은 10%를 더해 계산했습니다(≈).
+                사조는 부가세 별도가만 제공돼 과세 품목은 10%를 더해 계산했습니다(≈). 사조의 대·중분류는 현대그린푸드 분류를 학습해 품목명으로 추정한 값입니다.
               </p>
             </div>
           )}
@@ -352,7 +352,7 @@ function Home({ summary, onCategory, onOpen }) {
     <div className="grid gap-4 lg:grid-cols-[1fr_1.35fr]">
       <section className="surface p-5">
         <p className="text-sm font-bold text-navy-900">분류로 둘러보기</p>
-        <p className="mt-0.5 text-xs text-muted">현대그린푸드 분류 기준 · 사조는 검색으로 찾아 주세요</p>
+        <p className="mt-0.5 text-xs text-muted">두 공급사 공통 · 사조는 품목명으로 자동 분류했어요</p>
         <div className="mt-4 grid grid-cols-2 gap-2.5">
           {CATS.map((c) => (
             <button key={c.id} onClick={() => onCategory(c.id)}
@@ -691,7 +691,7 @@ function ItemPanel({ ref_, vat, dist, onClose }) {
           <div className="px-5 py-5">
             <h2 className="text-xl font-extrabold text-navy-900 leading-snug">{name}</h2>
             {attrs && <p className="mt-0.5 text-sm text-navy-700">{attrs}</p>}
-            {it.category && <p className="mt-1 text-xs text-muted">{it.category}</p>}
+            {it.category && <p className="mt-1 text-xs text-muted">{it.category}{it.category_auto && <span className="ml-1.5 badge px-1.5 py-0 text-[10px] bg-slate-100 text-slate-500" title="사조는 분류 정보를 주지 않아 품목명으로 추정했어요">자동 분류</span>}</p>}
             <div className="mt-2.5"><Badges it={it} /></div>
 
             <div className="mt-5 grid grid-cols-2 gap-2.5">
