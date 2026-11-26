@@ -10,7 +10,7 @@ pipeline.py  ─  맞춤 식단 설계 파이프라인 (서버판, Neo4j·LangGr
                       ※ 기존 에이전트 스냅샷(605개)은 data/pool_v0.json 으로 보관
                       → 나트륨 보정·표준 배식 비율
                       → 시설 선호 점수 → 주의 재료 감점 → 한 그릇·다진찬 속성
-  ③ 일반식 최적화     NSGA-II(nsga2.py) 28일 × 18칸, f1 영양 · f2 비용(예산+재고) · f3 다양성(반복·편중) · f4 조화(한 끼 내부 조합·선호·규칙)
+  ③ 일반식 최적화     MOEA/D(moead.py, 벤치마크로 튜닝 — 이전: NSGA-II nsga2.py) 28일 × 18칸, f1 영양 · f2 비용(예산+재고) · f3 다양성(반복·편중) · f4 조화(한 끼 내부 조합·선호·규칙)
                       → 균형 해 선택(moo_metrics.select_balanced)
   ④ 개인화           식사형태(죽·백김치, meal_form.py) + 질환 맞춤 대체찬(substitute_agent.py)
   ⑤ 배식량           균형 배식 + 현장 단계(serving_agent.py)
@@ -61,7 +61,12 @@ def ensure_pool() -> str:
             print(f"  [후보 풀] ⚠ pool.json 재생성 실패 → 기존 파일 사용: {e}")
     return POOL_JSON
 
-PRESETS = {                       # 실행 강도 (개체 수, 세대 수)
+# [2026-11-26] 일반식 최적화 알고리즘 — "moead"(기본, 튜닝된 MOEA/D) | "nsga2"(이전 방식)
+#   scripts/moea_benchmark_v2.ipynb: 4종 비교·격자 탐색·검증 결과 MOEA/D(기준 방향 91/120 · T 30 · 변이 1) 채택
+#   실행 강도는 아래 PRESETS 의 평가 횟수(개체 수 × (세대 수 + 1))를 그대로 쓴다 — standard = 22,650회
+OPTIMIZER = "moead"
+
+PRESETS = {                       # 실행 강도 (개체 수, 세대 수) — MOEA/D 는 같은 평가 횟수로 환산
     "quick":    (100, 80),
     "standard": (150, 150),
     "thorough": (200, 250),

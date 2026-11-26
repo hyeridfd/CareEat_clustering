@@ -4,7 +4,7 @@
     START → build_profiles
           ─(Send: 어르신마다)→ personalize_resident      개인화 에이전트 그래프 1회 (agents/graph.py, 29개 노드)
           → apply_profiles                                개인 기준·목표 열량·피할 식재료·우선순위 가중치를 프로필에 반영
-          → optimize                                      공통 식단 NSGA-II (KDRI 공통 기준)
+          → optimize                                      공통 식단 MOEA/D (KDRI 공통 기준, pipeline.OPTIMIZER 로 NSGA-II 선택 가능)
           → select_menu                                   파레토 후보 중 선택 (AI 영양사 또는 균형점 규칙)
           → repair_repeats                                반복 메뉴 보정
           → (route_review: reviewer = "llm") review_menu   AI 식단 검토 → 코드 검증 후 반영
@@ -108,7 +108,7 @@ def optimize(state: FacilityState, config: RunnableConfig) -> dict:
     from . import nsga2
     from .base_standard import BaseStandard
     from .inventory import InventoryModel
-    from .pipeline import BUDGET_PER_MEAL, PRESETS, MealPlanProblem, harmony_table, inventory_from_rows, load_pool
+    from .pipeline import BUDGET_PER_MEAL, OPTIMIZER, PRESETS, MealPlanProblem, harmony_table, inventory_from_rows, load_pool
     i, say = state["inp"], _say(config)
     pref, inventory = i.get("preference") or {}, i.get("inventory") or {}
     pool = load_pool(pref.get("pool_scores"))
@@ -125,10 +125,17 @@ def optimize(state: FacilityState, config: RunnableConfig) -> dict:
         FPL.configure(problem, plan)
         problem.plan_log = plan_log
     pop, gen = PRESETS.get(i.get("preset"), PRESETS["standard"])
-    say(f"일반식 최적화 (개체 {pop} · 세대 {gen})")
+    algo = str(i.get("optimizer") or OPTIMIZER).lower()
     t0 = dt.datetime.now()
-    nsga = nsga2.minimize(problem, pop_size=pop, n_gen=gen, seed=i.get("seed", 42),
-                          progress=lambda g, n, f1: say(f"일반식 최적화 {g}/{n}세대 · f1 {f1:.3f}"))
+    prog = lambda g, n, f1: say(f"일반식 최적화 {g}/{n}세대 · f1 {f1:.3f}")
+    if algo == "nsga2":
+        say(f"일반식 최적화 NSGA-II (개체 {pop} · 세대 {gen})")
+        nsga = nsga2.minimize(problem, pop_size=pop, n_gen=gen, seed=i.get("seed", 42), progress=prog)
+    else:                                       # [2026-11-26] 튜닝된 MOEA/D (diet/moead.py) — 같은 평가 횟수
+        from . import moead
+        budget = moead.budget_of(pop, gen)
+        say(f"일반식 최적화 MOEA/D (평가 {budget:,}회 · 이웃 {moead.N_NEIGHBORS} · 변이 {moead.MUT_GENES:g})")
+        nsga = moead.minimize(problem, budget=budget, seed=i.get("seed", 42), progress=prog)
     return {"pool": pool, "inv": inv, "inv_model": inv_model, "problem": problem, "nsga": nsga, "t0": t0}
 
 
@@ -180,15 +187,17 @@ def build_menu(state: FacilityState) -> dict:
     _, Ff, _, Fa = state["nsga"]
     records = menu_records(problem, chrom)
     metrics = plan_metrics(problem, chrom, Ff, Fa, state.get("inv_model"))
-    from .pipeline import PRESETS
+    from .pipeline import OPTIMIZER, PRESETS
     pop, gen = PRESETS.get(i.get("preset"), PRESETS["standard"])
+    algo = str(i.get("optimizer") or OPTIMIZER).lower()
     metrics["review"] = state.get("review")
     metrics["selection_rule"] = pick["selection"].get("rule")
     metrics["selection"] = pick["selection"]
     metrics["repeat_repair"] = {"changes": state["repairs"],
                                 "before": {k: v for k, v in state["before"].items() if k.startswith("반복")}}
     metrics["optimize_sec"] = round((dt.datetime.now() - state["t0"]).total_seconds(), 1)
-    metrics["preset"] = {"name": i.get("preset"), "pop": pop, "gen": gen}
+    metrics["preset"] = {"name": i.get("preset"), "pop": pop, "gen": gen,
+                         "algorithm": "NSGA-II" if algo == "nsga2" else "MOEA/D", "evaluations": pop * (gen + 1)}
     if i.get("facility_plan"):
         from . import facility_plan as FPL
         metrics["facility_plan"] = FPL.evaluate(problem, chrom, i["facility_plan"], getattr(problem, "plan_log", None))
