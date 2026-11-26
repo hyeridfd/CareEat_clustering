@@ -386,4 +386,103 @@ def item_detail(supplier: str, item_cd: str, user: dict = Security(require_viewe
             .select("changed_on,change_type,prev_price,unit_price,prev_price_tax,unit_price_tax")
             .eq("supplier", supplier).eq("item_cd", item_cd)
             .order("changed_on").limit(400).execute().data or [])
-    return {"item": it, "history": hist}
+    monthly, season = _item_monthly(sb, supplier, item_cd)
+    return {"item": it, "history": hist, "monthly": monthly, "seasonal": season}
+
+
+# ─────────────────────────── 월별 · 계절 ───────────────────────────
+# price-crawler/monthly.py 가 채우는 supplier_price_monthly(품목 월평균), supplier_category_monthly(분류 월 지수)
+
+def seasonal_profile(series):
+    """[(YYYY-MM, 값)] → 달(1~12)별 '그해 평균 대비 %'의 여러 해 평균.
+    10개월 이상 있는 해만 쓴다. 쓸 수 있는 해가 없으면 None."""
+    by_year = {}
+    for ym, v in series:
+        if v:
+            by_year.setdefault(ym[:4], {})[int(ym[5:7])] = float(v)
+    devs = {m: [] for m in range(1, 13)}
+    years = []
+    for y, months in sorted(by_year.items()):
+        if len(months) < 10:
+            continue
+        avg = sum(months.values()) / len(months)
+        years.append(y)
+        for m, v in months.items():
+            devs[m].append((v / avg - 1) * 100)
+    if not years:
+        return None
+    prof = [round(sum(d) / len(d), 1) if d else None for m, d in sorted(devs.items())]
+    return {"years": years, "pct": prof}
+
+
+def _yoy(series, i):
+    """series[i] 의 12개월 전 대비 %."""
+    ym = series[i][0]
+    prev = f"{int(ym[:4]) - 1}{ym[4:]}"
+    for p_ym, p_v in series:
+        if p_ym == prev and p_v:
+            return round((series[i][1] / p_v - 1) * 100, 1)
+    return None
+
+
+@router.get("/trends")
+def trends(lcls: Optional[str] = Query(None, description="대분류, 생략하면 대분류별 요약"),
+           mcls: str = Query("전체"),
+           user: dict = Security(require_viewer)):
+    """분류 월 지수: 공급사별 시계열, 전월·전년 대비, 계절 패턴. 분류 목록(groups)도 함께."""
+    sb = get_supabase()
+    rows = (sb.table("supplier_category_monthly")
+            .select("supplier,lcls_nm,mcls_nm,month,idx,mom_pct,n_items,n_compared,up_share,down_share")
+            .order("month").limit(20000).execute().data or [])
+    if not rows:
+        return {"months": 0, "groups": [], "overview": [], "series": {}, "seasonal": {}}
+
+    months = sorted({r["month"][:7] for r in rows})
+    groups = {}
+    for r in rows:
+        if r["mcls_nm"] != "전체":
+            g = groups.setdefault((r["lcls_nm"], r["mcls_nm"]), 0)
+            groups[(r["lcls_nm"], r["mcls_nm"])] = max(g, r["n_items"] or 0)
+    group_list = [{"lcls": k[0], "mcls": k[1], "n": n} for k, n in sorted(groups.items(), key=lambda x: (x[0][0], -x[1]))]
+
+    def series_of(sup, l, m):
+        return [(r["month"][:7], float(r["idx"]) if r["idx"] is not None else None, r)
+                for r in rows if r["supplier"] == sup and r["lcls_nm"] == l and r["mcls_nm"] == m]
+
+    # 대분류별 요약 카드: 최근 달 지수, 전월·전년 대비
+    overview = []
+    for l in ("농산품", "축산품", "수산품", "공산품"):
+        for sup in SUPPLIERS:
+            s = series_of(sup, l, "전체")
+            if not s:
+                continue
+            last = s[-1]
+            overview.append({"lcls": l, "supplier": sup, "month": last[0], "idx": last[1],
+                             "mom_pct": last[2]["mom_pct"], "yoy_pct": _yoy([(a, b) for a, b, _ in s], len(s) - 1),
+                             "spark": [b for _, b, _ in s[-12:]]})
+
+    series, seasonal = {}, {}
+    if lcls:
+        for sup in SUPPLIERS:
+            s = series_of(sup, lcls, mcls)
+            if not s:
+                continue
+            pairs = [(a, b) for a, b, _ in s]
+            series[sup] = [{"month": a, "idx": b, "mom_pct": r["mom_pct"], "n_items": r["n_items"],
+                            "n_compared": r["n_compared"], "up_share": r["up_share"], "down_share": r["down_share"],
+                            "yoy_pct": _yoy(pairs, i)} for i, (a, b, r) in enumerate(s)]
+            seasonal[sup] = seasonal_profile(pairs)
+    return {"months": len(months), "first": months[0], "last": months[-1],
+            "groups": group_list, "overview": overview, "series": series, "seasonal": seasonal}
+
+
+def _item_monthly(sb, supplier: str, item_cd: str):
+    rows = (sb.table("supplier_price_monthly").select("month,avg_price,min_price,max_price,days")
+            .eq("supplier", supplier).eq("item_cd", item_cd).order("month").limit(60).execute().data or [])
+    out = [{"month": r["month"][:7], "avg": _num(r["avg_price"]), "min": _num(r["min_price"]),
+            "max": _num(r["max_price"]), "days": r["days"]} for r in rows]
+    pairs = [(r["month"], r["avg"]) for r in out]
+    for i, r in enumerate(out):
+        r["mom_pct"] = round((r["avg"] / out[i - 1]["avg"] - 1) * 100, 1) if i and out[i - 1]["avg"] else None
+        r["yoy_pct"] = _yoy(pairs, i)
+    return out, seasonal_profile(pairs)

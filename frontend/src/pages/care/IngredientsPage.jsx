@@ -349,6 +349,7 @@ function Skeleton() {
 function Home({ summary, onCategory, onOpen }) {
   const ch = summary?.changes
   return (
+    <>
     <div className="grid gap-4 lg:grid-cols-[1fr_1.35fr]">
       <section className="surface p-5">
         <p className="text-sm font-bold text-navy-900">분류로 둘러보기</p>
@@ -394,6 +395,8 @@ function Home({ summary, onCategory, onOpen }) {
         )}
       </section>
     </div>
+    <TrendSection />
+    </>
   )
 }
 
@@ -719,8 +722,7 @@ function ItemPanel({ ref_, vat, dist, onClose }) {
               </div>
             )}
 
-            <p className="mt-6 text-sm font-bold text-navy-900">단가 추이 <span className="text-xs font-normal text-muted">공급가 · 부가세 별도</span></p>
-            <PriceChart history={data.history} current={it.unit_price} today={it.last_seen} color={s?.color} />
+            <ItemTrend data={data} it={it} color={s?.color} />
 
             <dl className="mt-6 text-sm divide-y divide-navy-100 border-y border-navy-100">
               {[
@@ -824,6 +826,381 @@ function PriceChart({ history, current, today, color = '#1151b8' }) {
             })}
           </ul>
         </>
+      )}
+    </div>
+  )
+}
+
+// ─────────────────────────── 시세 동향 (월별 · 계절) ───────────────────────────
+const LCLS = ['농산품', '축산품', '수산품', '공산품']
+const MONTHS = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월']
+const ym = (s) => `${+s.slice(2, 4)}.${+s.slice(5, 7)}`
+const pctTxt = (v) => (v == null ? '—' : `${v > 0 ? '+' : ''}${v}%`)
+
+function Pct({ v, label }) {
+  if (v == null) return <span className="text-muted">{label} —</span>
+  const up = v > 0.05, down = v < -0.05
+  return (
+    <span className="tabular-nums" style={{ color: up ? UP : down ? DOWN : '#64748b' }}>
+      {label} <b>{up ? '▲' : down ? '▼' : ''}{Math.abs(v).toFixed(1)}%</b>
+    </span>
+  )
+}
+
+function Spark({ series, w = 96, h = 26 }) {
+  const all = series.flatMap((s) => s.values).filter((v) => v != null)
+  if (all.length < 2) return <svg width={w} height={h} />
+  const lo = Math.min(...all), hi = Math.max(...all), n = Math.max(...series.map((s) => s.values.length))
+  const x = (i) => 2 + (i / Math.max(n - 1, 1)) * (w - 4)
+  const y = (v) => h - 3 - ((v - lo) / (hi - lo || 1)) * (h - 6)
+  return (
+    <svg width={w} height={h} aria-hidden="true">
+      {series.map((s) => (
+        <path key={s.key} fill="none" stroke={s.color} strokeWidth="1.6" strokeLinejoin="round"
+          d={s.values.map((v, i) => (v == null ? '' : `${i ? 'L' : 'M'}${x(i)},${y(v)}`)).join(' ')} />
+      ))}
+    </svg>
+  )
+}
+
+// 같은 값축(지수) 위에 공급사별 선. 마우스 위치의 달을 세로선과 함께 보여준다.
+function IndexChart({ series }) {
+  const [ref, width] = useWidth()
+  const [hover, setHover] = useState(null)
+  const sups = SUP_KEYS.filter((s) => series?.[s]?.length)
+  const months = [...new Set(sups.flatMap((s) => series[s].map((p) => p.month)))].sort()
+  const W = Math.max(width, 300), H = 240, L = 40, R = 56, T = 14, B = 26
+  const vals = sups.flatMap((s) => series[s].map((p) => p.idx)).filter((v) => v != null)
+  let lo = Math.min(...vals, 100), hi = Math.max(...vals, 100)
+  const pad = Math.max((hi - lo) * 0.15, 2); lo -= pad; hi += pad
+  const x = (m) => L + (months.indexOf(m) / Math.max(months.length - 1, 1)) * (W - L - R)
+  const y = (v) => T + (1 - (v - lo) / (hi - lo)) * (H - T - B)
+  const step = (hi - lo) > 30 ? 10 : (hi - lo) > 12 ? 5 : 2
+  const yt = []; for (let v = Math.ceil(lo / step) * step; v <= hi; v += step) yt.push(v)
+  const xt = months.filter((m, i) => months.length <= 13 || m.endsWith('-01') || i === months.length - 1)
+  const onMove = (e) => {
+    const px = e.clientX - e.currentTarget.getBoundingClientRect().left
+    let best = null, bd = 1e9
+    months.forEach((m) => { const d = Math.abs(x(m) - px); if (d < bd) { bd = d; best = m } })
+    setHover(best)
+  }
+  // 오른쪽 끝 이름표가 겹치지 않게 살짝 벌린다
+  const ends = sups.map((s) => { const p = series[s][series[s].length - 1]; return { s, v: p.idx, y: y(p.idx) } }).sort((a, b) => a.y - b.y)
+  for (let i = 1; i < ends.length; i++) if (ends[i].y - ends[i - 1].y < 14) ends[i].y = ends[i - 1].y + 14
+
+  return (
+    <div ref={ref} className="relative">
+      {width > 0 && (
+        <svg width={W} height={H} onMouseMove={onMove} onMouseLeave={() => setHover(null)} role="img" aria-label="공급사별 월별 가격 지수">
+          {yt.map((v) => (
+            <g key={v}>
+              <line x1={L} x2={W - R} y1={y(v)} y2={y(v)} stroke={v === 100 ? '#b0c6ec' : '#eef3fb'} strokeDasharray={v === 100 ? '4 3' : undefined} />
+              <text x={L - 6} y={y(v) + 3.5} fontSize="10" fill="#64748b" textAnchor="end">{v}</text>
+            </g>
+          ))}
+          {xt.map((m) => <text key={m} x={x(m)} y={H - 7} fontSize="10" fill="#64748b" textAnchor="middle">{m.endsWith('-01') ? `${m.slice(2, 4)}년 1월` : ym(m)}</text>)}
+          {hover && <line x1={x(hover)} x2={x(hover)} y1={T} y2={H - B} stroke="#7fa1de" strokeDasharray="3 3" />}
+          {sups.map((s) => {
+            const pts = series[s].filter((p) => p.idx != null)
+            return (
+              <g key={s}>
+                <path fill="none" stroke={SUP[s].color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"
+                  d={pts.map((p, i) => `${i ? 'L' : 'M'}${x(p.month)},${y(p.idx)}`).join(' ')} />
+                {hover && pts.filter((p) => p.month === hover).map((p) => (
+                  <circle key={p.month} cx={x(p.month)} cy={y(p.idx)} r="4.5" fill={SUP[s].color} stroke="#fff" strokeWidth="2" />
+                ))}
+              </g>
+            )
+          })}
+          {ends.map((e) => (
+            <text key={e.s} x={W - R + 6} y={e.y + 4} fontSize="11" fontWeight="700" fill="#07204d">{SUP[e.s].short} {Math.round(e.v)}</text>
+          ))}
+        </svg>
+      )}
+      {hover && (
+        <div className="absolute top-1 pointer-events-none z-10 rounded-xl bg-navy-900 text-white px-3 py-2 shadow-lift text-[11.5px] tabular-nums"
+          style={{ left: x(hover), transform: `translateX(${x(hover) > W / 2 ? '-108%' : '8%'})` }}>
+          <p className="text-white/65 mb-1">{hover.slice(0, 4)}년 {+hover.slice(5, 7)}월</p>
+          {sups.map((s) => {
+            const p = series[s].find((q) => q.month === hover)
+            return p ? (
+              <p key={s} className="flex items-center gap-1.5 whitespace-nowrap">
+                <span className="w-2 h-2 rounded-full" style={{ background: SUP[s].color }} />{SUP[s].short}
+                <b className="ml-1">{p.idx?.toFixed(1)}</b>
+                <span className="text-white/65">전월 {pctTxt(p.mom_pct)}</span>
+              </p>
+            ) : null
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// 계절 띠: 그해 평균 대비 달별 % (파랑 = 싼 달, 빨강 = 비싼 달, 회색 = 평균 근처)
+function seasonColor(v, max) {
+  if (v == null) return { bg: '#f8fafc', fg: '#cbd5e1' }
+  const t = Math.min(Math.abs(v) / Math.max(max, 4), 1)
+  const mix = (a, b) => Math.round(a + (b - a) * t)
+  const [r, g, b] = v >= 0 ? [mix(241, 220), mix(243, 38), mix(246, 38)] : [mix(241, 17), mix(243, 81), mix(246, 184)]
+  return { bg: `rgb(${r},${g},${b})`, fg: t > 0.55 ? '#fff' : '#0f172a' }
+}
+
+function SeasonStrip({ rows, compact }) {
+  const valid = rows.filter((r) => r.data)
+  if (!valid.length) return null
+  const max = Math.max(...valid.flatMap((r) => r.data.pct.filter((v) => v != null).map(Math.abs)), 4)
+  const now = new Date().getMonth()
+  return (
+    <div>
+      <div className={`grid gap-1 ${compact ? 'grid-cols-[repeat(12,minmax(0,1fr))]' : 'grid-cols-[44px_repeat(12,minmax(0,1fr))]'} text-[10px] text-muted mb-1`}>
+        {!compact && <span />}
+        {MONTHS.map((m, i) => (
+          <span key={m} className={`text-center whitespace-nowrap ${i === now ? 'font-bold text-navy-900' : ''}`}>
+            <span className="sm:hidden">{i + 1}</span><span className="hidden sm:inline">{m}</span>
+          </span>
+        ))}
+      </div>
+      {valid.map((r) => (
+        <div key={r.key} className={`grid gap-1 mb-1 ${compact ? 'grid-cols-[repeat(12,minmax(0,1fr))]' : 'grid-cols-[44px_repeat(12,minmax(0,1fr))]'}`}>
+          {!compact && <span className="text-[11px] font-semibold text-navy-900 self-center"><SupTag sup={r.key} short /></span>}
+          {r.data.pct.map((v, i) => {
+            const c = seasonColor(v, max)
+            return (
+              <span key={i} title={`${MONTHS[i]}: 그해 평균 대비 ${pctTxt(v)}`}
+                className={`h-8 rounded-md flex items-center justify-center text-[9.5px] sm:text-[10px] font-semibold tabular-nums tracking-tighter sm:tracking-normal ${i === now ? 'ring-2 ring-navy-900 ring-offset-1' : ''}`}
+                style={{ background: c.bg, color: c.fg }}>
+                {v == null ? '·' : `${v > 0 ? '+' : ''}${Math.round(v)}`}
+              </span>
+            )
+          })}
+        </div>
+      ))}
+      <div className="mt-1.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[10.5px] text-muted whitespace-nowrap">
+        <span className="inline-flex items-center gap-1.5">
+          <span className="w-3 h-3 rounded" style={{ background: seasonColor(-max, max).bg }} />싼 달
+          <span className="w-3 h-3 rounded ml-2" style={{ background: '#f1f3f6' }} />평균
+          <span className="w-3 h-3 rounded ml-2" style={{ background: seasonColor(max, max).bg }} />비싼 달
+        </span>
+        <span>숫자 = 그해 평균 대비 % · {valid[0].data.years.join('·')}년 기준</span>
+      </div>
+    </div>
+  )
+}
+
+function TrendSection() {
+  const [base, setBase] = useState(null)
+  const [lcls, setLcls] = useState('농산품')
+  const [mcls, setMcls] = useState('전체')
+  const [data, setData] = useState(null)
+  useEffect(() => { api.get('/prices/trends').then((r) => setBase(r.data)).catch(() => setBase({ months: 0 })) }, [])
+  useEffect(() => {
+    if (!base?.months) return
+    setData(null)
+    api.get('/prices/trends', { params: { lcls, mcls } }).then((r) => setData(r.data)).catch(() => {})
+  }, [base?.months, lcls, mcls])
+
+  const subs = (base?.groups || []).filter((g) => g.lcls === lcls).slice(0, 8)
+  const enough = (base?.months || 0) >= 2
+
+  return (
+    <section className="surface p-5 mt-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <div>
+          <p className="text-sm font-bold text-navy-900">시세 동향 <span className="text-xs font-normal text-muted ml-1">월별 · 계절별</span></p>
+          <p className="text-[11px] text-muted mt-0.5">같은 품목들의 가격 변화를 이어 붙인 지수 · 처음 달 = 100{base?.first && ` · ${ym(base.first)} ~ ${ym(base.last)}`}</p>
+        </div>
+      </div>
+
+      {!base ? (
+        <div className="mt-4 h-40 rounded-xl bg-navy-50/60 animate-pulse" />
+      ) : !enough ? (
+        <div className="mt-4 rounded-xl bg-navy-50/50 px-5 py-6 text-sm text-muted leading-6">
+          <p className="font-semibold text-navy-900">월별 추이는 두 달 이상 쌓이면 그려집니다 (현재 {base.months || 0}개월)</p>
+          <p className="mt-1">매일 아침 수집하면서 자동으로 쌓이고, 계절 패턴은 한 해(10개월 이상)가 모이면 나타나요.
+            지난 기간 단가표를 채우면 바로 볼 수 있습니다 — <code className="text-[12px] bg-white px-1.5 py-0.5 rounded">backfill.bat hgreenfood 202411 202610</code></p>
+        </div>
+      ) : (
+        <>
+          {/* 대분류 요약 카드 (누르면 아래 그래프가 바뀜) */}
+          <div className="mt-4 grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+            {LCLS.map((l) => {
+              const items = base.overview.filter((o) => o.lcls === l)
+              if (!items.length) return null
+              const on = lcls === l
+              return (
+                <button key={l} onClick={() => { setLcls(l); setMcls('전체') }}
+                  className={`text-left rounded-2xl border px-3.5 py-3 transition ${on ? 'border-navy-600 bg-navy-50/50 ring-1 ring-navy-600' : 'border-navy-100 hover:border-navy-300'}`}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[13px] font-bold text-navy-900 whitespace-nowrap">{l}</span>
+                    <span className="hidden sm:block"><Spark series={items.map((o) => ({ key: o.supplier, color: SUP[o.supplier].color, values: o.spark }))} /></span>
+                  </div>
+                  <div className="mt-1.5 space-y-0.5 text-[11px]">
+                    {items.map((o) => (
+                      <p key={o.supplier} className="flex items-center gap-1.5">
+                        <SupTag sup={o.supplier} short className="w-11" />
+                        <Pct v={o.yoy_pct ?? o.mom_pct} label={o.yoy_pct != null ? '전년' : '전월'} />
+                      </p>
+                    ))}
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center gap-1.5">
+            {['전체', ...subs.map((g) => g.mcls)].map((m) => (
+              <button key={m} onClick={() => setMcls(m)}
+                className={`px-3 py-1 rounded-full text-xs font-semibold border transition ${mcls === m ? 'bg-navy-900 text-white border-navy-900' : 'bg-white text-navy-700 border-navy-100 hover:border-navy-300'}`}>
+                {m === '전체' ? `${lcls} 전체` : m}
+              </button>
+            ))}
+          </div>
+
+          <div className="mt-3 grid gap-5 lg:grid-cols-[1.5fr_1fr]">
+            <div>
+              <div className="flex items-center gap-4 text-[11px] text-muted mb-1">
+                {SUP_KEYS.filter((s) => data?.series?.[s]).map((s) => (
+                  <span key={s} className="inline-flex items-center gap-1.5"><span className="w-4 h-[3px] rounded" style={{ background: SUP[s].color }} />{SUP[s].label}</span>
+                ))}
+                <span className="inline-flex items-center gap-1.5"><span className="w-4 border-t border-dashed border-navy-300" />기준 100</span>
+              </div>
+              {data ? (Object.keys(data.series || {}).length ? <IndexChart series={data.series} /> : <p className="py-16 text-center text-sm text-muted">이 분류의 데이터가 없습니다.</p>)
+                : <div className="h-60 rounded-xl bg-navy-50/50 animate-pulse" />}
+            </div>
+            <div>
+              <p className="text-[12px] font-bold text-navy-900 mb-2">계절 패턴 <span className="font-normal text-muted">어느 달에 싸고 비싼가</span></p>
+              {data && SUP_KEYS.some((s) => data.seasonal?.[s]) ? (
+                <SeasonStrip rows={SUP_KEYS.map((s) => ({ key: s, data: data.seasonal?.[s] }))} />
+              ) : (
+                <div className="rounded-xl bg-navy-50/50 px-4 py-6 text-[12.5px] text-muted leading-6">
+                  한 해에 10개월 이상 쌓이면 달별로 싼 때와 비싼 때를 보여줍니다.
+                </div>
+              )}
+              {data && <LatestNote series={data.series} />}
+              <p className="mt-3 text-[10.5px] leading-4 text-muted">
+                계약·마진 변경처럼 거의 모든 품목이 같은 비율로 한꺼번에 바뀐 시점은 시세 변동이 아니므로 자동 보정했어요
+                (예: 사조 2026년 10→11월 전 품목 ×1.40).
+              </p>
+            </div>
+          </div>
+        </>
+      )}
+    </section>
+  )
+}
+
+function LatestNote({ series }) {
+  const lines = SUP_KEYS.filter((s) => series?.[s]?.length).map((s) => {
+    const p = series[s][series[s].length - 1]
+    return { s, p }
+  })
+  if (!lines.length) return null
+  return (
+    <div className="mt-4 rounded-xl border border-navy-100 divide-y divide-navy-100 text-[12px]">
+      {lines.map(({ s, p }) => (
+        <div key={s} className="px-3 py-2 flex flex-wrap items-center gap-x-3 gap-y-0.5">
+          <SupTag sup={s} short className="w-11" />
+          <span className="text-muted">{ym(p.month)}</span>
+          <Pct v={p.mom_pct} label="전월" />
+          <Pct v={p.yoy_pct} label="전년 같은 달" />
+          {p.up_share != null && <span className="text-muted">오른 품목 {Math.round(p.up_share * 100)}% · 내린 품목 {Math.round(p.down_share * 100)}%</span>}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// 상세 패널: 품목 월평균 (선 = 월평균, 옅은 띠 = 그 달 최저~최고)
+function MonthlyChart({ rows, color }) {
+  const [ref, width] = useWidth()
+  const [hover, setHover] = useState(null)
+  const W = Math.max(width, 260), H = 170, L = 44, R = 10, T = 12, B = 24
+  const vals = rows.flatMap((r) => [r.min, r.max, r.avg]).filter((v) => v != null)
+  let lo = Math.min(...vals), hi = Math.max(...vals)
+  const pad = (hi - lo) * 0.25 || hi * 0.08 || 1; lo = Math.max(0, lo - pad); hi += pad
+  const n = rows.length
+  const x = (i) => L + (n === 1 ? 0.5 : i / (n - 1)) * (W - L - R)
+  const y = (v) => T + (1 - (v - lo) / (hi - lo)) * (H - T - B)
+  const yt = [lo + (hi - lo) * 0.2, lo + (hi - lo) * 0.8]
+  const line = rows.map((r, i) => `${i ? 'L' : 'M'}${x(i)},${y(r.avg)}`).join(' ')
+  const band = rows.map((r, i) => `${i ? 'L' : 'M'}${x(i)},${y(r.max)}`).join(' ') + ' ' +
+    [...rows].reverse().map((r, k) => `L${x(n - 1 - k)},${y(r.min)}`).join(' ') + ' Z'
+  const onMove = (e) => {
+    const px = e.clientX - e.currentTarget.getBoundingClientRect().left
+    setHover(Math.min(Math.max(Math.round(((px - L) / (W - L - R)) * (n - 1)), 0), n - 1))
+  }
+  const hr = hover != null ? rows[hover] : null
+  return (
+    <div ref={ref} className="relative">
+      {width > 0 && (
+        <svg width={W} height={H} onMouseMove={onMove} onMouseLeave={() => setHover(null)} role="img" aria-label="월평균 단가">
+          {yt.map((v) => (
+            <g key={v}><line x1={L} x2={W - R} y1={y(v)} y2={y(v)} stroke="#eef3fb" />
+              <text x={L - 6} y={y(v) + 3.5} fontSize="10" fill="#64748b" textAnchor="end">{short(Math.round(v))}</text></g>
+          ))}
+          <line x1={L} x2={W - R} y1={H - B} y2={H - B} stroke="#d7e3f6" />
+          <path d={band} fill={color} fillOpacity="0.12" />
+          <path d={line} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+          {hr && <><line x1={x(hover)} x2={x(hover)} y1={T} y2={H - B} stroke="#7fa1de" strokeDasharray="3 3" />
+            <circle cx={x(hover)} cy={y(hr.avg)} r="5" fill="#fff" stroke={color} strokeWidth="2.5" /></>}
+          {rows.map((r, i) => (n <= 12 || (r.month.endsWith('-01') && i > 1 && i < n - 2) || i === n - 1 || i === 0) && (
+            <text key={r.month} x={x(i)} y={H - 7} fontSize="10" fill="#64748b"
+              textAnchor={i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle'}>
+              {r.month.endsWith('-01') && n > 12 && i !== 0 && i !== n - 1 ? `${r.month.slice(2, 4)}년` : ym(r.month)}
+            </text>
+          ))}
+        </svg>
+      )}
+      {hr && (
+        <div className="absolute top-0 pointer-events-none rounded-lg bg-navy-900 text-white text-[11px] px-2.5 py-1.5 shadow-lift tabular-nums"
+          style={{ left: x(hover), transform: `translateX(${x(hover) > W / 2 ? '-108%' : '8%'})` }}>
+          <p className="text-white/65">{hr.month.slice(0, 4)}년 {+hr.month.slice(5, 7)}월 · 단가표 {hr.days}회</p>
+          <p className="font-semibold">평균 {won(hr.avg)}</p>
+          {hr.min !== hr.max && <p className="text-white/75">{won(hr.min)} ~ {won(hr.max)}</p>}
+          <p className="text-white/75">전월 {pctTxt(hr.mom_pct)} · 전년 {pctTxt(hr.yoy_pct)}</p>
+        </div>
+      )}
+      <p className="mt-1 text-[10.5px] text-muted">선 = 월평균 · 옅은 띠 = 그 달 최저~최고</p>
+    </div>
+  )
+}
+
+function ItemTrend({ data, it, color }) {
+  const monthly = data.monthly || []
+  const [tab, setTab] = useState(monthly.length >= 2 ? 'month' : 'daily')
+  const last = monthly[monthly.length - 1]
+  return (
+    <div className="mt-6">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm font-bold text-navy-900">단가 추이 <span className="text-xs font-normal text-muted">공급가 · 부가세 별도</span></p>
+        <Seg value={tab} onChange={setTab} options={[['month', '월별'], ['daily', '변동 이력']]} />
+      </div>
+      {tab === 'month' ? (
+        monthly.length >= 2 ? (
+          <>
+            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11.5px]">
+              <span className="text-muted">{ym(last.month)} 평균 <b className="text-navy-900">{won(last.avg)}</b></span>
+              <Pct v={last.mom_pct} label="전월" />
+              <Pct v={last.yoy_pct} label="전년 같은 달" />
+            </div>
+            <div className="mt-2"><MonthlyChart rows={monthly} color={color} /></div>
+            {data.seasonal && Math.max(...data.seasonal.pct.filter((v) => v != null).map(Math.abs)) < 1 ? (
+              <p className="mt-3 text-[11.5px] text-muted">계절 패턴: 달마다 가격 변동이 거의 없는 품목이에요 (±1% 미만).</p>
+            ) : data.seasonal ? (
+              <div className="mt-4">
+                <p className="text-[12px] font-bold text-navy-900 mb-2">계절 패턴</p>
+                <SeasonStrip rows={[{ key: it.supplier, data: data.seasonal }]} compact />
+              </div>
+            ) : <p className="mt-3 text-[11.5px] text-muted">한 해에 10개월 이상 쌓이면 달별 계절 패턴이 나타납니다.</p>}
+          </>
+        ) : (
+          <div className="mt-2 rounded-2xl bg-navy-50/50 px-4 py-5 text-sm text-muted leading-6">
+            월별 추이는 두 달 이상 쌓이면 그려집니다{monthly.length ? ` (현재 ${monthly.length}개월)` : ''}.
+          </div>
+        )
+      ) : (
+        <PriceChart history={data.history} current={it.unit_price} today={it.last_seen} color={color} />
       )}
     </div>
   )
