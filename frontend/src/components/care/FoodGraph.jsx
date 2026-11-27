@@ -87,15 +87,17 @@ export function MenuRadial({ data }) {
   const sp = pts.find((p) => p.id === sel)
   const pd = sel ? prod[sel] : null
   const list = pd && pd.products ? pd.products : []
-  // 상품 노드: 재료 바깥쪽에 세로로 나란히 (위·아래 재료는 오른쪽) — 라벨이 겹치지 않게
+  // 상품 카드: 재료 바깥쪽에 세로로 나란히 (위·아래 재료는 오른쪽) — 선은 재료 원 가장자리에서 카드 가장자리로
+  const CW = 196, CH = 42, CG = 10
   const sats = sp ? (() => {
     const right = Math.cos(sp.a) >= -0.25
-    const x = right ? Math.min(sp.x + 95, W + PAD - 175) : Math.max(sp.x - 95, -PAD + 175)
+    const x0 = right ? Math.min(sp.x + sp.r + 44, W + PAD - CW - 4) : Math.max(sp.x - sp.r - 44 - CW, -PAD + 4)
     const arr = list.slice(0, 3)
-    return arr.map((q, i) => ({
-      ...q, right, x,
-      y: Math.min(Math.max(sp.y + (i - (arr.length - 1) / 2) * 40, -PAD + 18), H + PAD - 28),
-    }))
+    const top0 = sp.y - (arr.length * CH + (arr.length - 1) * CG) / 2
+    return arr.map((q, i) => {
+      const y = Math.min(Math.max(top0 + i * (CH + CG), -PAD + 4), H + PAD - CH - 4)
+      return { ...q, right, x: x0, y, ax: right ? x0 : x0 + CW, ay: y + CH / 2 }
+    })
   })() : []
 
   return (
@@ -106,7 +108,7 @@ export function MenuRadial({ data }) {
         <line key={'e' + p.id} x1={cx} y1={cy} x2={p.x} y2={p.y}
           stroke={C.line} strokeWidth={1 + 5 * Math.sqrt((p.edible_g || 0) / maxG)}
           strokeDasharray={p.broth ? '4 4' : undefined}
-          opacity={hov && hov !== p.id ? 0.25 : 1} />
+          opacity={(hov && hov !== p.id) || (sel && sel !== p.id && !hov) ? 0.25 : 1} />
       ))}
 
       <circle cx={cx} cy={cy} r={52} fill={C.menu} />
@@ -122,12 +124,12 @@ export function MenuRadial({ data }) {
         const dim = hov && hov !== p.id
         const forb = p.forbidden_for?.length > 0
         const cos = Math.cos(p.a), sin = Math.sin(p.a)
-        const side = Math.abs(cos) > 0.25
+        const side = Math.abs(cos) > 0.25 && sel !== p.id      // 선택된 재료는 라벨을 원 아래로 (카드 자리 비움)
         const anchor = side ? (cos > 0 ? 'start' : 'end') : 'middle'
         const blockH = 14 + (forb ? 13 : 0)           // 첫 줄 기준선 → 마지막 줄 기준선
         const lx = side ? p.x + Math.sign(cos) * (p.r + 8) : p.x
         const ly = side ? p.y + 4 - blockH / 2
-          : sin < 0 ? p.y - p.r - 10 - blockH           // 위쪽 노드: 라벨 전체를 원 위로
+          : sin < 0 && sel !== p.id ? p.y - p.r - 10 - blockH   // 위쪽 노드: 라벨 전체를 원 위로
             : p.y + p.r + 16                            // 아래쪽 노드: 원 아래로
         return (
           <g key={p.id} opacity={dim || (sel && sel !== p.id && !hov) ? 0.35 : 1} className="cursor-pointer"
@@ -154,24 +156,46 @@ export function MenuRadial({ data }) {
           </g>
         )
       })}
-      {sats.map((q) => {
-        const right = q.right
+      {sats.map((q, i) => {
         const nm = q.item_nm || q.item_cd
+        const sx = sp.x + (q.right ? 1 : -1) * (sp.r + 4)
+        const mx = (sx + q.ax) / 2
+        const sub = [q.supplier_label, q.spec].filter(Boolean).join(' · ')
         return (
           <g key={q.supplier + q.item_cd}>
-            <path d={`M${sp.x},${sp.y} C${(sp.x + q.x) / 2},${sp.y} ${(sp.x + q.x) / 2},${q.y} ${q.x},${q.y}`} fill="none"
-              stroke={C.product} strokeWidth={1.5} strokeDasharray="4 3" opacity={0.7} />
-            <circle cx={q.x} cy={q.y} r={q.selected ? 10 : 8} fill={q.selected ? C.product : '#fff'}
-              stroke={C.product} strokeWidth={2}>
+            <path d={`M${sx},${sp.y} C${mx},${sp.y} ${mx},${q.ay} ${q.ax},${q.ay}`} fill="none"
+              stroke={C.product} strokeWidth={q.selected ? 2 : 1.25} opacity={q.selected ? 0.8 : 0.45} />
+            <g transform={`translate(${q.x},${q.y})`}>
               <title>{`${q.supplier_label} · ${nm}${q.spec ? ` (${q.spec})` : ''}\nkg당 ${won(q.price_per_kg)}${q.selected ? ' · 오늘 최저가' : ''}${q.on_sale === false ? ' · 오늘 판매 안 함' : ''}`}</title>
-            </circle>
-            <text x={q.x + (right ? 14 : -14)} y={q.y - 2} textAnchor={right ? 'start' : 'end'} fontSize={11} fontWeight={600} fill={C.ink}>
-              {nm.length > 16 ? nm.slice(0, 15) + '…' : nm}</text>
-            <text x={q.x + (right ? 14 : -14)} y={q.y + 11} textAnchor={right ? 'start' : 'end'} fontSize={10} fill={C.sub}>
-              {won(q.price_per_kg)}/kg · {q.supplier_label}</text>
+              <rect width={CW} height={CH} rx={10} fill={q.selected ? '#f5f3ff' : '#fff'}
+                stroke={q.selected ? C.product : '#ddd6fe'} strokeWidth={q.selected ? 1.5 : 1} />
+              <rect x={0} y={8} width={3} height={CH - 16} rx={1.5} fill={q.selected ? C.product : '#c4b5fd'} />
+              <text x={12} y={17} fontSize={11.5} fontWeight={700} fill={C.ink}>
+                {(() => { const k = q.selected || q.on_sale === false ? 12 : 16; return nm.length > k ? nm.slice(0, k - 1) + '…' : nm })()}</text>
+              <text x={12} y={32} fontSize={10.5} fill={C.sub}>
+                <tspan fontWeight={700} fill={q.selected ? C.product : C.ink}>{won(q.price_per_kg)}</tspan>
+                <tspan>/kg · {sub.length > 18 ? sub.slice(0, 17) + '…' : sub}</tspan>
+              </text>
+              {q.selected && (
+                <g transform={`translate(${CW - 34},6)`}>
+                  <rect width={28} height={14} rx={7} fill={C.product} />
+                  <text x={14} y={10.5} textAnchor="middle" fontSize={9} fontWeight={700} fill="#fff">최저</text>
+                </g>
+              )}
+              {q.on_sale === false && !q.selected && (
+                <g transform={`translate(${CW - 54},6)`}>
+                  <rect width={48} height={14} rx={7} fill="#f1f5f9" />
+                  <text x={24} y={10.5} textAnchor="middle" fontSize={9} fontWeight={600} fill={C.sub}>판매 안 함</text>
+                </g>
+              )}
+            </g>
           </g>
         )
       })}
+      {sp && pd === 'loading' && (
+        <text x={sp.x + (Math.cos(sp.a) >= -0.25 ? sp.r + 44 : -sp.r - 44)} y={sp.y + 4}
+          textAnchor={Math.cos(sp.a) >= -0.25 ? 'start' : 'end'} fontSize={11} fill={C.sub}>공급사 상품 불러오는 중…</text>
+      )}
       {rest > 0 && (
         <text x={W + PAD - 10} y={H + PAD - 10} textAnchor="end" fontSize={11} fill={C.sub}>외 재료 {rest}개는 표에서 확인</text>
       )}
