@@ -12,6 +12,7 @@ const C = {
   ingredient: '#1baf7a',
   seasoning: '#94a3b8',
   menu: '#07204d',
+  product: '#7c3aed',
   forb: '#e34948',
   ink: '#0f172a',
   sub: '#64748b',
@@ -54,9 +55,14 @@ function Tip({ x, y, lines, W, H }) {
 }
 
 /* ── ① 메뉴 뜯어보기: 방사형 ─────────────────────────────────── */
+const won = (v) => (v == null ? '–' : `${Number(v).toLocaleString('ko-KR')}원`)
+
 export function MenuRadial({ data }) {
   const [hov, setHov] = useState(null)
+  const [sel, setSel] = useState(null)      // 누른 재료 → 매핑된 공급사 상품 펼치기
+  const [prod, setProd] = useState({})      // 재료 id → 응답 | 'loading' | {error}
   const W = 760, H = 500, cx = W / 2, cy = H / 2, R = 172
+  const PAD = 70                            // 바깥쪽 상품 노드 자리
   const items = (data?.ingredients || []).slice(0, 14)
   const rest = (data?.ingredients || []).length - items.length
   const maxAmt = Math.max(...items.map((i) => i.amount), 0.0001)
@@ -69,8 +75,32 @@ export function MenuRadial({ data }) {
   })
   const h = pts.find((p) => p.id === hov)
 
+  const pick = (id) => {
+    setSel((s) => (s === id ? null : id))
+    if (!prod[id] || prod[id].error) {
+      setProd((m) => ({ ...m, [id]: 'loading' }))
+      api.get('/care/facility/graph/products', { params: { recipe_id: id }, timeout: 30000 })
+        .then((r) => setProd((m) => ({ ...m, [id]: r.data })))
+        .catch((e) => setProd((m) => ({ ...m, [id]: { error: errMsg(e) } })))
+    }
+  }
+  const sp = pts.find((p) => p.id === sel)
+  const pd = sel ? prod[sel] : null
+  const list = pd && pd.products ? pd.products : []
+  // 상품 노드: 재료 바깥쪽에 세로로 나란히 (위·아래 재료는 오른쪽) — 라벨이 겹치지 않게
+  const sats = sp ? (() => {
+    const right = Math.cos(sp.a) >= -0.25
+    const x = right ? Math.min(sp.x + 95, W + PAD - 175) : Math.max(sp.x - 95, -PAD + 175)
+    const arr = list.slice(0, 3)
+    return arr.map((q, i) => ({
+      ...q, right, x,
+      y: Math.min(Math.max(sp.y + (i - (arr.length - 1) / 2) * 40, -PAD + 18), H + PAD - 28),
+    }))
+  })() : []
+
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" role="img"
+    <div>
+    <svg viewBox={`${-PAD} ${-PAD} ${W + PAD * 2} ${H + PAD * 2}`} className="w-full h-auto" role="img"
       aria-label={`${data.menu.title} 재료 구성과 ${data.label} 기여`}>
       {pts.map((p) => (
         <line key={'e' + p.id} x1={cx} y1={cy} x2={p.x} y2={p.y}
@@ -100,9 +130,12 @@ export function MenuRadial({ data }) {
           : sin < 0 ? p.y - p.r - 10 - blockH           // 위쪽 노드: 라벨 전체를 원 위로
             : p.y + p.r + 16                            // 아래쪽 노드: 원 아래로
         return (
-          <g key={p.id} opacity={dim ? 0.35 : 1}
-            onMouseEnter={() => setHov(p.id)} onMouseLeave={() => setHov(null)}
-            onFocus={() => setHov(p.id)} onBlur={() => setHov(null)} tabIndex={0} style={{ outline: 'none' }}>
+          <g key={p.id} opacity={dim || (sel && sel !== p.id && !hov) ? 0.35 : 1} className="cursor-pointer"
+            onMouseEnter={() => setHov(p.id)} onMouseLeave={() => setHov(null)} onClick={() => pick(p.id)}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(p.id) } }}
+            onFocus={() => setHov(p.id)} onBlur={() => setHov(null)} tabIndex={0} role="button"
+            aria-label={`${p.name} 공급사 상품 보기`} style={{ outline: 'none' }}>
+            {sel === p.id && <circle cx={p.x} cy={p.y} r={p.r + 5} fill="none" stroke={C.product} strokeWidth={2} />}
             <circle cx={p.x} cy={p.y} r={Math.max(p.r, 14) + 6} fill="transparent" />
             <circle cx={p.x} cy={p.y} r={p.r}
               fill={p.broth ? '#fff' : (p.seasoning ? C.seasoning : C.ingredient)}
@@ -121,8 +154,26 @@ export function MenuRadial({ data }) {
           </g>
         )
       })}
+      {sats.map((q) => {
+        const right = q.right
+        const nm = q.item_nm || q.item_cd
+        return (
+          <g key={q.supplier + q.item_cd}>
+            <path d={`M${sp.x},${sp.y} C${(sp.x + q.x) / 2},${sp.y} ${(sp.x + q.x) / 2},${q.y} ${q.x},${q.y}`} fill="none"
+              stroke={C.product} strokeWidth={1.5} strokeDasharray="4 3" opacity={0.7} />
+            <circle cx={q.x} cy={q.y} r={q.selected ? 10 : 8} fill={q.selected ? C.product : '#fff'}
+              stroke={C.product} strokeWidth={2}>
+              <title>{`${q.supplier_label} · ${nm}${q.spec ? ` (${q.spec})` : ''}\nkg당 ${won(q.price_per_kg)}${q.selected ? ' · 오늘 최저가' : ''}${q.on_sale === false ? ' · 오늘 판매 안 함' : ''}`}</title>
+            </circle>
+            <text x={q.x + (right ? 14 : -14)} y={q.y - 2} textAnchor={right ? 'start' : 'end'} fontSize={11} fontWeight={600} fill={C.ink}>
+              {nm.length > 16 ? nm.slice(0, 15) + '…' : nm}</text>
+            <text x={q.x + (right ? 14 : -14)} y={q.y + 11} textAnchor={right ? 'start' : 'end'} fontSize={10} fill={C.sub}>
+              {won(q.price_per_kg)}/kg · {q.supplier_label}</text>
+          </g>
+        )
+      })}
       {rest > 0 && (
-        <text x={W - 10} y={H - 10} textAnchor="end" fontSize={11} fill={C.sub}>외 재료 {rest}개는 표에서 확인</text>
+        <text x={W + PAD - 10} y={H + PAD - 10} textAnchor="end" fontSize={11} fill={C.sub}>외 재료 {rest}개는 표에서 확인</text>
       )}
       {h && (
         <Tip x={h.x} y={h.y} W={W} H={H} lines={[
@@ -135,10 +186,70 @@ export function MenuRadial({ data }) {
           ...(h.broth ? ['육수 — 영양 계산에서 제외(건져냄)'] : []),
           ...(h.sodium_missing ? ['⚠ 나트륨 자료 없음 — 실제보다 낮게 계산'] : []),
           ...(h.forbidden_for?.length ? [`⚠ 금기: ${h.forbidden_for.join(', ')}`] : []),
+          sel === h.id ? '다시 누르면 공급사 상품 닫기' : '누르면 공급사 상품 보기',
         ]} />
       )}
     </svg>
+    <ProductPanel ing={sp} pd={pd} onClose={() => setSel(null)} />
+    {!sel && <p className="mt-1 text-[11px] text-muted">재료 노드를 누르면 Neo4j에 매핑된 공급사 상품(상품명·kg당 가격·공급사)이 펼쳐집니다.</p>}
+    </div>
   )
+}
+
+// [2026-11-27] 재료 → 공급사 상품 목록 (오늘 최저가로 뽑힌 상품부터)
+function ProductPanel({ ing, pd, onClose }) {
+  if (!ing) return null
+  const box = (child) => (
+    <div className="mt-2 rounded-xl bg-white px-4 py-3 ring-1 ring-violet-200">
+      <div className="mb-2 flex items-center gap-2">
+        <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: C.product }} />
+        <p className="text-sm font-bold text-navy-900">{ing.name} <span className="font-normal text-muted">— 매핑된 공급사 상품</span></p>
+        <button type="button" onClick={onClose} className="ml-auto text-xs text-muted hover:text-navy-900">닫기 ✕</button>
+      </div>
+      {child}
+    </div>
+  )
+  if (!pd || pd === 'loading') return box(<p className="text-xs text-muted">Neo4j에서 불러오는 중…</p>)
+  if (pd.error) return box(<p className="text-xs text-red-700">{pd.error}</p>)
+  if (!pd.available) return box(<p className="text-xs text-amber-700">{pd.reason}</p>)
+  if (!pd.products?.length) {
+    return box(<p className="text-xs text-muted">{pd.price_status === 'not_product'
+      ? '육수·국물 같은 조리 중간물이라 공급사 상품을 연결하지 않습니다.'
+      : '아직 승인된 공급사 상품이 없습니다. (식자재 매핑 검수에서 확인)'}</p>)
+  }
+  const sup = { hgreenfood: '현대그린푸드', sajo: '사조푸디스트' }
+  return box(<>
+    <p className="mb-2 text-xs text-ink">
+      오늘 최저 <b className="text-navy-900">{won(pd.price_per_kg)}/kg</b>
+      {pd.price_supplier && <span className="text-muted"> · {sup[pd.price_supplier] || pd.price_supplier}</span>}
+      {pd.price_date && <span className="text-muted"> · {pd.price_date} 기준</span>}
+      <span className="text-muted"> · 승인된 상품 {pd.n_products}개{pd.n_products > pd.products.length ? ` 중 ${pd.products.length}개` : ''}</span>
+    </p>
+    <div className="overflow-x-auto">
+      <table className="w-full text-xs">
+        <thead className="text-muted"><tr className="border-b border-navy-50">
+          <th className="py-1 text-left font-semibold">공급사</th><th className="text-left font-semibold">상품명</th>
+          <th className="text-left font-semibold">규격</th><th className="text-right font-semibold">kg당 가격</th><th className="pl-3 text-left font-semibold"></th>
+        </tr></thead>
+        <tbody>
+          {pd.products.map((q) => (
+            <tr key={q.supplier + q.item_cd} className="border-b border-navy-50 last:border-0">
+              <td className="py-1.5 pr-2 whitespace-nowrap">{q.supplier_label}</td>
+              <td className="pr-2 text-navy-900">{q.item_nm || q.item_cd}</td>
+              <td className="pr-2 text-muted">{q.spec}{q.unit ? ` · ${q.unit}` : ''}</td>
+              <td className="text-right tabular-nums font-semibold text-navy-900">{won(q.price_per_kg)}</td>
+              <td className="pl-3 whitespace-nowrap">
+                {q.selected && <span className="badge bg-violet-50 text-violet-700">오늘 최저가</span>}
+                {!q.selected && q.selected_in_supplier && <span className="badge bg-navy-50 text-navy-700">공급사 최저</span>}
+                {q.on_sale === false && <span className="badge bg-slate-100 text-slate-500">오늘 판매 안 함</span>}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+    <p className="mt-1.5 text-[10.5px] text-muted">kg당 가격은 세금 포함 단가를 규격 중량으로 나눈 값이에요. 매핑은 식자재 매핑 파이프라인이 매일 갱신합니다.</p>
+  </>)
 }
 
 function RadialLegend({ unit, label }) {

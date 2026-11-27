@@ -837,6 +837,71 @@ def search_menus(q: str = "", meal_cat: str | None = None, limit: int = 30) -> l
     return rows[:limit]
 
 
+# ── 재료 → 매핑된 공급사 상품 (Neo4j 에서 바로 읽음) ───────────────────────
+# 매핑 파이프라인(backend/mapping/graph_export.py)이 매일 쓰는 구조:
+#   (:Recipe {price_per_kg, price_supplier, price_date, price_status, price_item_<공급사>, price_per_kg_<공급사>})
+#   -[:MAPPED_TO {score, status, method, selected, selected_in_supplier}]->
+#   (:Product {supplier, item_cd, supplier_label, item_nm, spec, unit, pack_g, unit_price_tax, price_per_kg, on_sale})
+# 그래프 캐시(6시간)와 따로, 재료를 누를 때마다 읽고 10분만 기억한다 (가격은 매일 바뀜).
+Q_PRODUCTS = """
+MATCH (r:Recipe {id: $rid})
+OPTIONAL MATCH (r)-[m:MAPPED_TO]->(p:Product)
+WITH r, m, p ORDER BY coalesce(m.selected, false) DESC, coalesce(m.selected_in_supplier, false) DESC,
+                      coalesce(p.on_sale, false) DESC, p.price_per_kg ASC
+RETURN r.title AS title, r.price_per_kg AS price_per_kg, r.price_supplier AS price_supplier,
+       r.price_date AS price_date, r.price_status AS price_status,
+       collect(CASE WHEN p IS NULL THEN NULL ELSE {
+         supplier: p.supplier, supplier_label: p.supplier_label, item_cd: p.item_cd, item_nm: p.item_nm,
+         spec: p.spec, unit: p.unit, price_per_kg: p.price_per_kg, unit_price_tax: p.unit_price_tax,
+         on_sale: p.on_sale, selected: m.selected, selected_in_supplier: m.selected_in_supplier,
+         status: m.status, score: m.score} END) AS products
+"""
+_DRV = None
+_PROD_CACHE: dict = {}
+PROD_TTL = 600
+
+
+def _driver():
+    global _DRV
+    if _DRV is None:
+        from neo4j import GraphDatabase
+        uri, extra = driver_args(NEO4J_URI)
+        _DRV = GraphDatabase.driver(uri, auth=(NEO4J_USER, NEO4J_PASSWORD), connection_timeout=NEO4J_TIMEOUT, **extra)
+    return _DRV
+
+
+def ingredient_products(rid: str, limit: int = 12) -> dict:
+    """재료(Recipe) 하나에 매핑된 공급사 상품 — 오늘 최저가로 뽑힌 상품부터."""
+    global _DRV
+    if not neo4j_configured():
+        return {"available": False, "reason": "Neo4j 가 설정되지 않아 공급사 상품을 볼 수 없습니다."}
+    hit = _PROD_CACHE.get(rid)
+    if hit and time.time() - hit[0] < PROD_TTL:
+        return hit[1]
+    try:
+        with _driver().session(database=NEO4J_DATABASE) as ses:
+            rec = ses.run(Q_PRODUCTS, rid=rid).single()
+    except Exception as e:
+        log.warning("[care] 공급사 상품 읽기 실패: %r", e)
+        try:
+            if _DRV is not None:
+                _DRV.close()
+        except Exception:
+            pass
+        _DRV = None
+        return {"available": False, "reason": "Neo4j 를 읽지 못했습니다. 잠시 뒤 다시 눌러 주세요."}
+    if rec is None:
+        out = {"available": True, "found": False, "products": []}
+    else:
+        d = rec.data()
+        prods = [p for p in (d.pop("products") or []) if p]
+        out = {"available": True, "found": True, **d, "n_products": len(prods), "products": prods[:limit]}
+    if len(_PROD_CACHE) > 2000:
+        _PROD_CACHE.clear()
+    _PROD_CACHE[rid] = (time.time(), out)
+    return out
+
+
 _OVERVIEW: dict = {"at": None, "data": None}
 
 

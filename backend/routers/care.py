@@ -146,6 +146,13 @@ def facility_graph_overview(user: dict = Depends(require_staff)):
     return graph.overview()
 
 
+@router.get("/facility/graph/products")
+def facility_graph_products(recipe_id: str, user: dict = Depends(require_staff)):
+    """재료 노드 → Neo4j 에 매핑된 공급사 상품 (상품명·kg당 가격·공급사)"""
+    from care import graph
+    return graph.ingredient_products(recipe_id)
+
+
 @router.get("/facility/graph/search")
 def facility_graph_search(q: str = "", meal_cat: Optional[str] = None, limit: int = 30,
                           user: dict = Depends(require_staff)):
