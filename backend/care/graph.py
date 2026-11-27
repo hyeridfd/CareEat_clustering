@@ -865,7 +865,7 @@ def overview(top_cats: int = 16, top_ings: int = 8) -> dict:
                 continue
             c = cat_of[rid]
             cat_ings.setdefault(c, set()).add(rid)
-            ing_menus.setdefault(rid, []).append((w, v["t"]))
+            ing_menus.setdefault(rid, []).append((w / (v.get("g") or w or 1), v["t"]))   # (요리 안 비중, 메뉴) — 예시 메뉴 고르기용
             if c not in seen:
                 seen.add(c)
                 cat_menus[c] = cat_menus.get(c, 0) + 1
@@ -895,6 +895,33 @@ def overview(top_cats: int = 16, top_ings: int = 8) -> dict:
                      "menus": [t for _, t in sorted(ing_menus.get(rid, []), key=lambda x: -x[0])[:4]]}
                     for rid in tops],
         })
+    # 질환별 권장·금기 재료 (첫 화면 카드)
+    #   · 순서: 권장 = 근거가 많은 재료부터 · 금기 = 요리에 많이 쓰여 영향이 큰 재료부터
+    #   · 권장에서 조미 재료(소금·간장 등)는 뺀다 (다른 화면과 같은 기준)
+    #   · 같은 질환에서 권장·금기가 함께 걸린 재료(예: 달걀 — 단백질 권장·콜레스테롤 금기)는 카드에서 뺀다
+    ev_n: dict = {}
+    for r in g["ev"]:
+        rid = g["by_name"].get(r["i"])
+        if not rid:
+            continue
+        k = "forbidden" if r["f"] else "recommended"
+        if k == "recommended" and ing.get(rid, {}).get("seasoning"):
+            continue
+        key = (r["d"], k, rid)
+        ev_n[key] = ev_n.get(key, 0) + 1
+    disease_top: dict = {}
+    for (dname, k, rid), n in ev_n.items():
+        disease_top.setdefault(dname, {"recommended": {}, "forbidden": {}})[k][rid] = n
+    for dname, kinds in disease_top.items():
+        both = set(kinds["recommended"]) & set(kinds["forbidden"])
+        for k in ("recommended", "forbidden"):
+            pool = {rid: n for rid, n in kinds[k].items() if rid not in both}
+            if k == "recommended":    # 권장: 근거가 많은 재료부터
+                order = sorted(pool, key=lambda x: (-pool[x], -len(ing_menus.get(x, []))))
+            else:                     # 금기: 요리에 많이 쓰여 영향이 큰 재료부터 (소금·간장 등)
+                order = sorted(pool, key=lambda x: (-len(ing_menus.get(x, [])), -pool[x]))
+            kinds[k] = {"n": len(kinds[k]), "top": [{"ingredient": ing[rid]["t"], "category": cat_of[rid], "evidence": pool[rid],
+                                                     "n_menus": len(ing_menus.get(rid, []))} for rid in order[:6]]}
     lm: dict = {}
     for (m, c), n in link_meal.items():
         lm[(m, group(c))] = lm.get((m, group(c)), 0) + n
@@ -908,6 +935,7 @@ def overview(top_cats: int = 16, top_ings: int = 8) -> dict:
         "diseases": sorted({r["d"] for r in g["ev"]}),
         "links_meal": [{"meal": m, "cat": c, "n": n} for (m, c), n in lm.items()],
         "links_dis": [{"cat": c, "disease": d, "kind": k, "n": len(s)} for (c, d, k), s in dis.items()],
+        "disease_top": disease_top,
     }
     _OVERVIEW.update({"at": _CACHE["at"], "data": out})
     return out

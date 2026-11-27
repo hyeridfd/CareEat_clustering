@@ -488,134 +488,141 @@ export function MenuDetail({ name, nutrient: n0 = 'na', diseases: d0 = [], initi
   )
 }
 
-/* ── 식품 DB 첫 화면: 그래프 전체 요약 (끼니 구분 → 식재료 분류 → 질환) ─────────
-   노드 1.8만·관계 16만 개를 그대로 그리면 읽을 수 없어 식재료를 식품대분류로 묶어 보여 준다.
-   선 굵기: 끼니–분류 = 그 분류 재료가 든 요리 수 · 분류–질환 = 권장(회청)/금기(빨강) 근거가 있는 재료 수 */
+/* ── 식품 DB 첫 화면: 지식그래프 한눈에 ─────────────────────────────
+   위에서 아래로: 숫자 → 끼니 구분 → 많이 쓰는 식재료 분류(막대) → 질환별 권장·주의 재료(카드).
+   막대는 한 가지 색(크기만 표현) · 값은 막대 옆에 글자로 · 권장/주의는 색과 함께 ✓/⚠ 기호와 글자. */
+function OvStat({ label, value, sub }) {
+  return (
+    <div className="rounded-xl bg-navy-50/70 px-4 py-3">
+      <p className="text-[11px] font-semibold text-muted">{label}</p>
+      <p className="mt-0.5 text-xl font-bold text-navy-900 tabular-nums">{value}</p>
+      {sub && <p className="text-[11px] text-muted">{sub}</p>}
+    </div>
+  )
+}
+
 export function GraphOverview({ onPickMenu, onPickCat }) {
   const [d, setD] = useState(null)
   const [err, setErr] = useState('')
-  const [hov, setHov] = useState(null)        // {type, name, x, y}
   const [open, setOpen] = useState(null)      // 펼친 식재료 분류
+  const [showAll, setShowAll] = useState(false)
 
   useEffect(() => {
     api.get('/care/facility/graph/overview', { timeout: 60000 })
       .then((r) => { setD(r.data); setErr('') }).catch((e) => setErr(errMsg(e)))
   }, [])
 
-  const L = useMemo(() => {
-    if (!d) return null
-    const W = 760, top = 34, gap = 30
-    const cats = d.categories, meals = d.meal_cats, dis = d.diseases
-    const H = top + Math.max(cats.length, meals.length, dis.length) * gap + 16
-    const col = (arr, x) => {
-      const off = top + ((Math.max(cats.length, meals.length, dis.length) - arr.length) * gap) / 2
-      return Object.fromEntries(arr.map((n, i) => [n.name ?? n, { x, y: off + i * gap + gap / 2 }]))
-    }
-    const pos = { meal: col(meals, 120), cat: col(cats, 380), dis: col(dis, 640) }
-    const maxM = Math.max(1, ...d.links_meal.map((l) => l.n))
-    const maxD = Math.max(1, ...d.links_dis.map((l) => l.n))
-    return { W, H, pos, maxM, maxD }
-  }, [d])
-
-  if (err) return <p className="text-sm text-red-700">{err}</p>
-  if (!d || !L) return <p className="py-16 text-center text-sm text-muted">그래프 요약을 불러오는 중…</p>
-
-  const { W, H, pos, maxM, maxD } = L
-  const curve = (a, b, dy = 0) => {
-    const mx = (a.x + b.x) / 2
-    return `M${a.x},${a.y} C${mx},${a.y + dy} ${mx},${b.y + dy} ${b.x},${b.y}`
-  }
-  const lit = (l) => !hov || (hov.type === 'meal' && l.meal === hov.name) || (hov.type === 'cat' && l.cat === hov.name)
-    || (hov.type === 'dis' && l.disease === hov.name)
-  const catOf = Object.fromEntries(d.categories.map((c) => [c.name, c]))
-  const mealN = Object.fromEntries(d.meal_cats.map((m) => [m.name, m.n]))
-  const tip = (() => {
-    if (!hov) return null
-    if (hov.type === 'meal') return [`${hov.name} — 요리 ${fmt(mealN[hov.name], 0)}개`, '눌러서 왼쪽 목록을 이 구분으로 거르기']
-    if (hov.type === 'cat') {
-      const c = catOf[hov.name]
-      return [`${hov.name}`, `재료 ${fmt(c.n_ingredients, 0)}개 · 쓰인 요리 ${fmt(c.n_menus, 0)}개`,
-        `예: ${c.top.slice(0, 2).map((t) => t.ingredient).join(', ')}`, '눌러서 재료·메뉴 보기']
-    }
-    const rec = d.links_dis.filter((l) => l.disease === hov.name && l.kind === 'recommended').reduce((a, l) => a + l.n, 0)
-    const forb = d.links_dis.filter((l) => l.disease === hov.name && l.kind === 'forbidden').reduce((a, l) => a + l.n, 0)
-    return [`${hov.name}`, `권장 근거 재료 ${rec}개`, `⚠ 금기 근거 재료 ${forb}개`]
-  })()
+  if (err) return <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{err}</p>
+  if (!d) return <p className="py-16 text-center text-sm text-muted">식품 지식그래프를 불러오는 중…</p>
 
   const st = d.stats || {}
+  const cats = d.categories.filter((c) => c.name !== '기타')
+  const shown = showAll ? cats : cats.slice(0, 8)
+  const maxCat = Math.max(1, ...cats.map((c) => c.n_menus))
+  const maxMeal = Math.max(1, ...d.meal_cats.map((m) => m.n))
+  const diseases = DISEASES.filter((x) => d.disease_top?.[x])
+
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2 text-xs">
+    <div className="space-y-6">
+      {/* 머리 */}
+      <div className="flex flex-wrap items-center gap-2">
+        <h3 className="text-base font-bold text-navy-900">식품 지식그래프 한눈에</h3>
         <span className={`badge ${d.source === 'neo4j' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
-          {d.source === 'neo4j' ? 'Neo4j 지식그래프' : '스냅샷 (Neo4j 연결 안 됨)'}
+          {d.source === 'neo4j' ? '● Neo4j 연결됨' : '● 스냅샷 (Neo4j 연결 안 됨)'}
         </span>
-        <span className="text-muted">요리 <b className="text-navy-900">{fmt(st.foods, 0)}</b> · 식재료 <b className="text-navy-900">{fmt(st.ingredients, 0)}</b>
-          {' '}· 질환 근거 <b className="text-navy-900">{fmt(st.evidence, 0)}</b> (논문 {fmt(st.papers, 0)}편 · 질환 {st.diseases}개)</span>
+        <span className="ml-auto text-[11px] text-muted">왼쪽에서 메뉴를 고르면 재료·영양 상세가 열립니다</span>
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" role="img" aria-label="식품 지식그래프 전체 요약">
-        {[['끼니 구분', 120], ['식재료 분류', 380], ['질환 근거', 640]].map(([t, x]) => (
-          <text key={t} x={x} y={16} textAnchor="middle" fontSize={12} fontWeight={700} fill={C.sub}>{t}</text>
-        ))}
-        {d.links_meal.filter((l) => l.n >= maxM * 0.03).map((l, i) => pos.meal[l.meal] && pos.cat[l.cat] && (
-          <path key={'m' + i} d={curve(pos.meal[l.meal], pos.cat[l.cat])} fill="none" stroke={C.menu}
-            strokeOpacity={lit(l) ? (hov ? 0.45 : 0.12) : 0.03} strokeWidth={0.5 + (l.n / maxM) * 9} />
-        ))}
-        {d.links_dis.filter((l) => l.n >= 2).map((l, i) => pos.cat[l.cat] && pos.dis[l.disease] && (
-          <path key={'d' + i} d={curve(pos.cat[l.cat], pos.dis[l.disease], l.kind === 'forbidden' ? 3 : -3)} fill="none"
-            stroke={l.kind === 'forbidden' ? C.forb : C.rec} strokeOpacity={lit(l) ? (hov ? 0.7 : 0.22) : 0.04}
-            strokeWidth={0.6 + (l.n / maxD) * 6} />
-        ))}
-        {d.meal_cats.map((m) => { const p = pos.meal[m.name]; return (
-          <g key={m.name} transform={`translate(${p.x},${p.y})`} className="cursor-pointer"
-            onMouseEnter={() => setHov({ type: 'meal', name: m.name, ...p })} onMouseLeave={() => setHov(null)}
-            onClick={() => onPickCat?.(m.name)}>
-            <circle r={7} fill={C.menu} />
-            <text x={-12} y={4} textAnchor="end" fontSize={12} fontWeight={600} fill={C.ink}>{m.name}</text>
-            <text x={-12} y={16} textAnchor="end" fontSize={9.5} fill={C.sub}>{fmt(m.n, 0)}</text>
-          </g>) })}
-        {d.categories.map((c) => { const p = pos.cat[c.name]; return (
-          <g key={c.name} transform={`translate(${p.x},${p.y})`} className="cursor-pointer"
-            onMouseEnter={() => setHov({ type: 'cat', name: c.name, ...p })} onMouseLeave={() => setHov(null)}
-            onClick={() => setOpen(open === c.name ? null : c.name)}>
-            <circle r={6} fill={open === c.name ? C.nutrient : C.ingredient} />
-            <text x={0} y={-9} textAnchor="middle" fontSize={11} fontWeight={600} fill={C.ink}>
-              {c.name.length > 14 ? c.name.slice(0, 13) + '…' : c.name}</text>
-          </g>) })}
-        {d.diseases.map((n) => { const p = pos.dis[n]; return (
-          <g key={n} transform={`translate(${p.x},${p.y})`}
-            onMouseEnter={() => setHov({ type: 'dis', name: n, ...p })} onMouseLeave={() => setHov(null)}>
-            <circle r={7} fill={C.disease} />
-            <text x={12} y={4} fontSize={12} fontWeight={600} fill={C.ink}>{n}</text>
-          </g>) })}
-        {hov && <Tip x={hov.x} y={hov.y} lines={tip} W={W} H={H} />}
-      </svg>
-      <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted">
-        <span><span className="inline-block w-4 h-1 align-middle rounded" style={{ background: C.menu, opacity: 0.4 }} /> 그 분류 재료가 든 요리 수</span>
-        <span><span className="inline-block w-4 h-1 align-middle rounded" style={{ background: C.rec }} /> 권장 근거가 있는 재료 수</span>
-        <span><span className="inline-block w-4 h-1 align-middle rounded" style={{ background: C.forb }} /> 금기 근거가 있는 재료 수</span>
-        <span>· 식재료 분류는 요리에 많이 쓰인 {d.categories.length}개 (나머지는 '기타') · 가는 연결은 생략 · 분류를 누르면 재료와 메뉴가 보입니다</span>
+
+      {/* ① 숫자 */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <OvStat label="요리" value={fmt(st.foods, 0)} sub="레시피 DB 메뉴" />
+        <OvStat label="식재료" value={fmt(st.ingredients, 0)} sub="식약처 영양성분 연결" />
+        <OvStat label="질환 근거" value={fmt(st.evidence, 0)} sub={`질환 ${st.diseases}개 · 권장·주의 관계`} />
+        <OvStat label="근거 논문" value={fmt(st.papers, 0)} sub="편" />
       </div>
-      {open && catOf[open] && (
-        <div className="rounded-xl ring-1 ring-navy-100 bg-white p-3">
-          <p className="text-sm font-bold text-navy-900 mb-2">{open}
-            <span className="ml-2 text-xs font-normal text-muted">재료 {fmt(catOf[open].n_ingredients, 0)}개 · 쓰인 요리 {fmt(catOf[open].n_menus, 0)}개 · 많이 쓰인 순
-              {catOf[open].members && ` · 포함 분류: ${catOf[open].members.join(', ')}`}</span></p>
-          <div className="grid sm:grid-cols-2 gap-x-6 gap-y-1.5">
-            {catOf[open].top.map((t) => (
-              <div key={t.ingredient} className="text-xs">
-                <span className="font-semibold text-navy-900">{t.ingredient}</span>
-                <span className="ml-1 text-muted">요리 {fmt(t.n_menus, 0)}개</span>
-                <span className="block">
-                  {t.menus.map((m) => (
-                    <button key={m} type="button" onClick={() => onPickMenu?.(m)}
-                      className="mr-1.5 text-navy-700 underline decoration-navy-200 hover:decoration-navy-700">{m}</button>
-                  ))}
-                </span>
-              </div>
-            ))}
-          </div>
+
+      {/* ② 끼니 구분 */}
+      <section>
+        <p className="mb-2 text-xs font-bold text-navy-800">끼니 구분 <span className="font-normal text-muted">· 누르면 왼쪽 목록이 걸러집니다</span></p>
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+          {d.meal_cats.map((m) => (
+            <button key={m.name} type="button" onClick={() => onPickCat?.(m.name)}
+              className="rounded-xl bg-white px-3 py-2 text-left ring-1 ring-navy-100 hover:ring-navy-300 hover:bg-navy-50/50 transition">
+              <span className="block text-sm font-semibold text-navy-900">{m.name}</span>
+              <span className="block text-[11px] tabular-nums text-muted">{fmt(m.n, 0)}개</span>
+              <span className="mt-1.5 block h-1 rounded-full bg-navy-50">
+                <span className="block h-1 rounded-full bg-navy-500" style={{ width: `${(m.n / maxMeal) * 100}%` }} />
+              </span>
+            </button>
+          ))}
         </div>
-      )}
+      </section>
+
+      <div className="grid xl:grid-cols-2 gap-6">
+        {/* ③ 많이 쓰는 식재료 분류 */}
+        <section>
+          <p className="mb-2 text-xs font-bold text-navy-800">많이 쓰는 식재료 분류 <span className="font-normal text-muted">· 그 분류 재료가 든 요리 수 · 누르면 재료</span></p>
+          <ul className="space-y-1">
+            {shown.map((c) => (
+              <li key={c.name}>
+                <button type="button" onClick={() => setOpen(open === c.name ? null : c.name)}
+                  title={`${c.name} · 재료 ${fmt(c.n_ingredients, 0)}개 · 요리 ${fmt(c.n_menus, 0)}개`}
+                  className={`w-full grid grid-cols-[7.5rem_1fr_4.5rem] items-center gap-2 rounded-lg px-2 py-1.5 text-left transition ${open === c.name ? 'bg-navy-50' : 'hover:bg-navy-50/60'}`}>
+                  <span className="truncate text-xs font-semibold text-navy-900">{c.name}</span>
+                  <span className="h-2 rounded-full bg-navy-50">
+                    <span className="block h-2 rounded-full bg-navy-500" style={{ width: `${(c.n_menus / maxCat) * 100}%` }} />
+                  </span>
+                  <span className="text-right text-[11px] tabular-nums text-muted">{fmt(c.n_menus, 0)}</span>
+                </button>
+                {open === c.name && (
+                  <div className="mx-2 mb-2 mt-1 rounded-lg bg-white px-3 py-2 ring-1 ring-navy-100">
+                    <p className="mb-1.5 text-[11px] text-muted">재료 {fmt(c.n_ingredients, 0)}개 중 많이 쓰는 순 · 메뉴를 누르면 상세가 열립니다</p>
+                    <div className="space-y-1.5">
+                      {c.top.slice(0, 6).map((t) => (
+                        <div key={t.ingredient} className="text-xs">
+                          <span className="font-semibold text-navy-900">{t.ingredient}</span>
+                          <span className="ml-1 text-[11px] text-muted">요리 {fmt(t.n_menus, 0)}</span>
+                          <span className="ml-2">
+                            {t.menus.slice(0, 3).map((mn) => (
+                              <button key={mn} type="button" onClick={() => onPickMenu?.(mn)}
+                                className="mr-1 mb-0.5 rounded-md bg-navy-50 px-1.5 py-0.5 text-[11px] text-navy-700 hover:bg-navy-100">{mn}</button>
+                            ))}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+          {cats.length > 8 && (
+            <button type="button" onClick={() => setShowAll(!showAll)} className="mt-1 px-2 text-[11px] font-semibold text-navy-700 hover:underline">
+              {showAll ? '접기' : `분류 ${cats.length - 8}개 더 보기`}
+            </button>
+          )}
+        </section>
+
+        {/* ④ 질환별 근거 재료 */}
+        <section>
+          <p className="mb-2 text-xs font-bold text-navy-800">질환별 근거 재료 <span className="font-normal text-muted">· 논문 근거로 연결된 권장·주의 재료</span></p>
+          <div className="grid sm:grid-cols-2 gap-2">
+            {diseases.map((name) => {
+              const v = d.disease_top[name]
+              return (
+                <div key={name} className="rounded-xl bg-white px-3 py-2.5 ring-1 ring-navy-100">
+                  <p className="text-sm font-bold text-navy-900">{name}</p>
+                  <p className="mt-1.5 text-[11px] font-semibold text-emerald-700">✓ 권장 {v.recommended.n}개</p>
+                  <p className="text-[11.5px] leading-relaxed text-ink">{v.recommended.top.slice(0, 4).map((t) => t.ingredient).join(' · ') || '–'}</p>
+                  <p className="mt-1 text-[11px] font-semibold text-red-700">⚠ 주의 {v.forbidden.n}개</p>
+                  <p className="text-[11.5px] leading-relaxed text-ink">{v.forbidden.top.slice(0, 4).map((t) => t.ingredient).join(' · ') || '–'}</p>
+                </div>
+              )
+            })}
+          </div>
+          <p className="mt-2 text-[10.5px] text-muted">권장은 근거가 많은 재료, 주의는 요리에 많이 쓰이는 재료부터. 같은 질환에서 권장·주의가 함께 걸린 재료(예: 단백질 권장·콜레스테롤 주의)와 조미 재료의 권장은 뺐습니다.</p>
+        </section>
+      </div>
     </div>
   )
 }
