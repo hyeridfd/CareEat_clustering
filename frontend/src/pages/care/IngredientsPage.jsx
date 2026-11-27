@@ -549,7 +549,9 @@ function Home({ summary, onCategory, onOpen }) {
       </section>
 
       <section className="surface p-5">
-        <p className="text-sm font-bold text-navy-900">단가 변동 {ch?.day && <span className="font-normal text-muted text-xs ml-1">{fmtDay(ch.day)} 반영분</span>}</p>
+        <p className="text-sm font-bold text-navy-900">단가 변동 {ch?.day && <span className="font-normal text-muted text-xs ml-1">
+          {ch.basis === 'monthly' ? `전월 대비 · ${ym(ch.from_month)} → ${ym(ch.to_month)} 월평균` : `${fmtDay(ch.day)} 반영분 · 전날 대비`}</span>}</p>
+        {ch?.basis === 'monthly' && <p className="mt-0.5 text-[11px] text-muted">매일 단가표가 이틀 이상 쌓이면 전날 대비 변동으로 바뀌어요</p>}
         {!summary ? (
           <div className="mt-4 h-48 rounded-xl bg-navy-50/60 animate-pulse" />
         ) : !ch?.day ? (
@@ -558,15 +560,15 @@ function Home({ summary, onCategory, onOpen }) {
           </div>
         ) : (
           <>
-            <div className="mt-3 grid grid-cols-3 gap-2">
-              {[['▲ 인상', ch.up, UP], ['▼ 인하', ch.down, DOWN], ['신규', ch.new, '#07204d']].map(([k, n, c]) => (
+            <div className={`mt-3 grid ${ch.basis === 'monthly' ? 'grid-cols-2' : 'grid-cols-3'} gap-2`}>
+              {[['▲ 인상', ch.up, UP], ['▼ 인하', ch.down, DOWN], ...(ch.basis === 'monthly' ? [] : [['신규', ch.new, '#07204d']])].map(([k, n, c]) => (
                 <div key={k} className="rounded-xl bg-navy-50/50 px-3 py-2.5">
                   <p className="text-[11px] font-semibold" style={{ color: c }}>{k}</p>
                   <p className="text-2xl font-extrabold tabular-nums text-navy-900">{n}<span className="text-xs font-semibold text-muted ml-0.5">건</span></p>
                 </div>
               ))}
             </div>
-            <Movers movers={ch.movers} onOpen={onOpen} />
+            <Movers movers={ch.movers} onOpen={onOpen} basis={ch.basis} />
           </>
         )}
       </section>
@@ -576,13 +578,13 @@ function Home({ summary, onCategory, onOpen }) {
 }
 
 // 변동률 막대: 가운데 0을 기준으로 인하는 왼쪽(파랑 ▼), 인상은 오른쪽(빨강 ▲)
-function Movers({ movers = [], onOpen }) {
+function Movers({ movers = [], onOpen, basis }) {
   const [hover, setHover] = useState(null)
   if (!movers.length) return <p className="mt-4 text-sm text-muted">변동 폭이 큰 품목이 없습니다.</p>
   const max = Math.max(...movers.map((m) => Math.abs(m.pct)), 1)
   return (
     <div className="mt-4">
-      <p className="text-[11px] text-muted mb-1.5">변동 폭이 큰 품목 · 공급가 전날 대비</p>
+      <p className="text-[11px] text-muted mb-1.5">변동 폭이 큰 품목 · {basis === 'monthly' ? '농·축·수산 월평균 공급가 전월 대비' : '공급가 전날 대비'}</p>
       <ul className="space-y-0.5">
         {movers.slice(0, 10).map((m) => {
           const up = m.pct > 0
@@ -1378,8 +1380,8 @@ function TrendSection({ onOpen }) {
               )}
               {data && <LatestNote series={data.series} />}
               <p className="mt-3 text-[10.5px] leading-4 text-muted">
-                계약·마진 변경처럼 거의 모든 품목이 같은 비율로 한꺼번에 바뀐 시점은 시세 변동이 아니므로 자동 보정했어요
-                (예: 사조 2026년 10→11월 전 품목 ×1.40).
+                공급사 단가표 금액을 보정 없이 그대로 보여 줍니다. 2026년 10→11월에는 대부분 품목이 한꺼번에 올랐어요
+                (현대그린푸드 ×1.30 · 사조 ×1.40).
               </p>
             </div>
           </div>
