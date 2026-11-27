@@ -54,6 +54,35 @@ NUT_COLS = {
 }
 R = BP.R_COL
 
+# 식품대분류가 없는 영양 DB(통합식품영양성분_PD: 가공식품 P·음식 D)는 식품코드 앞자리로 분류한다
+#   P1NN = 식품공전 가공식품 대분류 번호 (예전 그래프의 분류와 대조: P112 장류, P113 조미식품 …)
+P_CATS = {
+    "01": "과자류·빵류 또는 떡류", "02": "빙과류", "03": "코코아가공품류 또는 초콜릿류", "04": "당류", "05": "잼류",
+    "06": "두부류 또는 묵류", "07": "식용유지류", "08": "면류", "09": "음료류", "10": "특수영양식품",
+    "11": "특수의료용도식품", "12": "장류", "13": "조미식품", "14": "절임류 또는 조림류", "15": "주류",
+    "16": "농산가공식품류", "17": "식육가공품 및 포장육", "18": "알가공품류", "19": "유가공품류",
+    "20": "수산가공식품류", "21": "동물성가공식품류", "22": "벌꿀 및 화분가공품류", "23": "즉석식품류", "24": "기타식품류",
+}
+#   DxNN = 음식 분류 번호 (예전 그래프와 대조: 03 면 및 만두류, 05 국 및 탕류, 15 김치류 …)
+D_CATS = {
+    "01": "밥류", "02": "빵 및 과자류", "03": "면 및 만두류", "04": "죽 및 스프류", "05": "국 및 탕류",
+    "06": "찌개 및 전골류", "07": "찜류", "08": "구이류", "09": "전·적 및 부침류", "10": "볶음류", "11": "조림류",
+    "12": "튀김류", "13": "나물·숙채류", "14": "생채·무침류", "15": "김치류", "16": "젓갈류", "17": "장아찌·절임류",
+}
+BROTH = ("육수", "국물", "스톡", "다시", "쌀뜨물")
+
+
+def category_of(code, db_cat, name):
+    if isinstance(db_cat, str) and db_cat.strip() and db_cat != "nan":
+        return db_cat.strip()
+    if code and code[:1] == "P" and code[2:4] in P_CATS:
+        return P_CATS[code[2:4]]
+    if code and code[:1] == "D":
+        return D_CATS.get(code[2:4], "조리식품(기타)")
+    if any(k in name for k in BROTH):
+        return "육수·국물 (식품코드 없음)"
+    return "식품코드 없음"
+
 
 # ══════════════════════════════════════════════════════════════════
 # ① 원자료 → 그래프 (메모리)
@@ -111,7 +140,7 @@ def build_graph():
         recipes[rid] = {
             "id": rid, "title": cnt[0][0], "food_code": code,
             "names": [n for n, _ in cnt][:30], "db_name": (str(row["식품명"]) if row is not None else None),
-            "category": (str(row["식품대분류명"]) if row is not None and pd.notna(row["식품대분류명"]) else "미분류"),
+            "category": category_of(code, (row["식품대분류명"] if row is not None else None), cnt[0][0]),
             "nutrition": ({k: round(float(row[c]), 4) for k, c in NUT_COLS.items()} | {"discard_pct": float(row["폐기율(%)"])}
                           if row is not None else None),
         }

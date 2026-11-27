@@ -488,6 +488,138 @@ export function MenuDetail({ name, nutrient: n0 = 'na', diseases: d0 = [], initi
   )
 }
 
+/* ── 식품 DB 첫 화면: 그래프 전체 요약 (끼니 구분 → 식재료 분류 → 질환) ─────────
+   노드 1.8만·관계 16만 개를 그대로 그리면 읽을 수 없어 식재료를 식품대분류로 묶어 보여 준다.
+   선 굵기: 끼니–분류 = 그 분류 재료가 든 요리 수 · 분류–질환 = 권장(회청)/금기(빨강) 근거가 있는 재료 수 */
+export function GraphOverview({ onPickMenu, onPickCat }) {
+  const [d, setD] = useState(null)
+  const [err, setErr] = useState('')
+  const [hov, setHov] = useState(null)        // {type, name, x, y}
+  const [open, setOpen] = useState(null)      // 펼친 식재료 분류
+
+  useEffect(() => {
+    api.get('/care/facility/graph/overview', { timeout: 60000 })
+      .then((r) => { setD(r.data); setErr('') }).catch((e) => setErr(errMsg(e)))
+  }, [])
+
+  const L = useMemo(() => {
+    if (!d) return null
+    const W = 760, top = 34, gap = 30
+    const cats = d.categories, meals = d.meal_cats, dis = d.diseases
+    const H = top + Math.max(cats.length, meals.length, dis.length) * gap + 16
+    const col = (arr, x) => {
+      const off = top + ((Math.max(cats.length, meals.length, dis.length) - arr.length) * gap) / 2
+      return Object.fromEntries(arr.map((n, i) => [n.name ?? n, { x, y: off + i * gap + gap / 2 }]))
+    }
+    const pos = { meal: col(meals, 120), cat: col(cats, 380), dis: col(dis, 640) }
+    const maxM = Math.max(1, ...d.links_meal.map((l) => l.n))
+    const maxD = Math.max(1, ...d.links_dis.map((l) => l.n))
+    return { W, H, pos, maxM, maxD }
+  }, [d])
+
+  if (err) return <p className="text-sm text-red-700">{err}</p>
+  if (!d || !L) return <p className="py-16 text-center text-sm text-muted">그래프 요약을 불러오는 중…</p>
+
+  const { W, H, pos, maxM, maxD } = L
+  const curve = (a, b, dy = 0) => {
+    const mx = (a.x + b.x) / 2
+    return `M${a.x},${a.y} C${mx},${a.y + dy} ${mx},${b.y + dy} ${b.x},${b.y}`
+  }
+  const lit = (l) => !hov || (hov.type === 'meal' && l.meal === hov.name) || (hov.type === 'cat' && l.cat === hov.name)
+    || (hov.type === 'dis' && l.disease === hov.name)
+  const catOf = Object.fromEntries(d.categories.map((c) => [c.name, c]))
+  const mealN = Object.fromEntries(d.meal_cats.map((m) => [m.name, m.n]))
+  const tip = (() => {
+    if (!hov) return null
+    if (hov.type === 'meal') return [`${hov.name} — 요리 ${fmt(mealN[hov.name], 0)}개`, '눌러서 왼쪽 목록을 이 구분으로 거르기']
+    if (hov.type === 'cat') {
+      const c = catOf[hov.name]
+      return [`${hov.name}`, `재료 ${fmt(c.n_ingredients, 0)}개 · 쓰인 요리 ${fmt(c.n_menus, 0)}개`,
+        `예: ${c.top.slice(0, 2).map((t) => t.ingredient).join(', ')}`, '눌러서 재료·메뉴 보기']
+    }
+    const rec = d.links_dis.filter((l) => l.disease === hov.name && l.kind === 'recommended').reduce((a, l) => a + l.n, 0)
+    const forb = d.links_dis.filter((l) => l.disease === hov.name && l.kind === 'forbidden').reduce((a, l) => a + l.n, 0)
+    return [`${hov.name}`, `권장 근거 재료 ${rec}개`, `⚠ 금기 근거 재료 ${forb}개`]
+  })()
+
+  const st = d.stats || {}
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <span className={`badge ${d.source === 'neo4j' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+          {d.source === 'neo4j' ? 'Neo4j 지식그래프' : '스냅샷 (Neo4j 연결 안 됨)'}
+        </span>
+        <span className="text-muted">요리 <b className="text-navy-900">{fmt(st.foods, 0)}</b> · 식재료 <b className="text-navy-900">{fmt(st.ingredients, 0)}</b>
+          {' '}· 질환 근거 <b className="text-navy-900">{fmt(st.evidence, 0)}</b> (논문 {fmt(st.papers, 0)}편 · 질환 {st.diseases}개)</span>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" role="img" aria-label="식품 지식그래프 전체 요약">
+        {[['끼니 구분', 120], ['식재료 분류', 380], ['질환 근거', 640]].map(([t, x]) => (
+          <text key={t} x={x} y={16} textAnchor="middle" fontSize={12} fontWeight={700} fill={C.sub}>{t}</text>
+        ))}
+        {d.links_meal.filter((l) => l.n >= maxM * 0.03).map((l, i) => pos.meal[l.meal] && pos.cat[l.cat] && (
+          <path key={'m' + i} d={curve(pos.meal[l.meal], pos.cat[l.cat])} fill="none" stroke={C.menu}
+            strokeOpacity={lit(l) ? (hov ? 0.45 : 0.12) : 0.03} strokeWidth={0.5 + (l.n / maxM) * 9} />
+        ))}
+        {d.links_dis.filter((l) => l.n >= 2).map((l, i) => pos.cat[l.cat] && pos.dis[l.disease] && (
+          <path key={'d' + i} d={curve(pos.cat[l.cat], pos.dis[l.disease], l.kind === 'forbidden' ? 3 : -3)} fill="none"
+            stroke={l.kind === 'forbidden' ? C.forb : C.rec} strokeOpacity={lit(l) ? (hov ? 0.7 : 0.22) : 0.04}
+            strokeWidth={0.6 + (l.n / maxD) * 6} />
+        ))}
+        {d.meal_cats.map((m) => { const p = pos.meal[m.name]; return (
+          <g key={m.name} transform={`translate(${p.x},${p.y})`} className="cursor-pointer"
+            onMouseEnter={() => setHov({ type: 'meal', name: m.name, ...p })} onMouseLeave={() => setHov(null)}
+            onClick={() => onPickCat?.(m.name)}>
+            <circle r={7} fill={C.menu} />
+            <text x={-12} y={4} textAnchor="end" fontSize={12} fontWeight={600} fill={C.ink}>{m.name}</text>
+            <text x={-12} y={16} textAnchor="end" fontSize={9.5} fill={C.sub}>{fmt(m.n, 0)}</text>
+          </g>) })}
+        {d.categories.map((c) => { const p = pos.cat[c.name]; return (
+          <g key={c.name} transform={`translate(${p.x},${p.y})`} className="cursor-pointer"
+            onMouseEnter={() => setHov({ type: 'cat', name: c.name, ...p })} onMouseLeave={() => setHov(null)}
+            onClick={() => setOpen(open === c.name ? null : c.name)}>
+            <circle r={6} fill={open === c.name ? C.nutrient : C.ingredient} />
+            <text x={0} y={-9} textAnchor="middle" fontSize={11} fontWeight={600} fill={C.ink}>
+              {c.name.length > 14 ? c.name.slice(0, 13) + '…' : c.name}</text>
+          </g>) })}
+        {d.diseases.map((n) => { const p = pos.dis[n]; return (
+          <g key={n} transform={`translate(${p.x},${p.y})`}
+            onMouseEnter={() => setHov({ type: 'dis', name: n, ...p })} onMouseLeave={() => setHov(null)}>
+            <circle r={7} fill={C.disease} />
+            <text x={12} y={4} fontSize={12} fontWeight={600} fill={C.ink}>{n}</text>
+          </g>) })}
+        {hov && <Tip x={hov.x} y={hov.y} lines={tip} W={W} H={H} />}
+      </svg>
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted">
+        <span><span className="inline-block w-4 h-1 align-middle rounded" style={{ background: C.menu, opacity: 0.4 }} /> 그 분류 재료가 든 요리 수</span>
+        <span><span className="inline-block w-4 h-1 align-middle rounded" style={{ background: C.rec }} /> 권장 근거가 있는 재료 수</span>
+        <span><span className="inline-block w-4 h-1 align-middle rounded" style={{ background: C.forb }} /> 금기 근거가 있는 재료 수</span>
+        <span>· 식재료 분류는 요리에 많이 쓰인 {d.categories.length}개 (나머지는 '기타') · 가는 연결은 생략 · 분류를 누르면 재료와 메뉴가 보입니다</span>
+      </div>
+      {open && catOf[open] && (
+        <div className="rounded-xl ring-1 ring-navy-100 bg-white p-3">
+          <p className="text-sm font-bold text-navy-900 mb-2">{open}
+            <span className="ml-2 text-xs font-normal text-muted">재료 {fmt(catOf[open].n_ingredients, 0)}개 · 쓰인 요리 {fmt(catOf[open].n_menus, 0)}개 · 많이 쓰인 순
+              {catOf[open].members && ` · 포함 분류: ${catOf[open].members.join(', ')}`}</span></p>
+          <div className="grid sm:grid-cols-2 gap-x-6 gap-y-1.5">
+            {catOf[open].top.map((t) => (
+              <div key={t.ingredient} className="text-xs">
+                <span className="font-semibold text-navy-900">{t.ingredient}</span>
+                <span className="ml-1 text-muted">요리 {fmt(t.n_menus, 0)}개</span>
+                <span className="block">
+                  {t.menus.map((m) => (
+                    <button key={m} type="button" onClick={() => onPickMenu?.(m)}
+                      className="mr-1.5 text-navy-700 underline decoration-navy-200 hover:decoration-navy-700">{m}</button>
+                  ))}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 /* ── 식품 DB 탭 ─────────────────────────────────────────────── */
 export function MenuExplorer({ diseases = [] }) {
   const [q, setQ] = useState('')
@@ -535,7 +667,12 @@ export function MenuExplorer({ diseases = [] }) {
         <p className="text-[10.5px] text-muted">나트륨 뒤 ↑ 표시는 자료가 빠져 실제보다 낮게 계산된 메뉴입니다.</p>
       </div>
       <div className="min-w-0">
-        <MenuDetail key={sel} name={sel} diseases={diseases} />
+        {sel ? (<>
+          <button type="button" onClick={() => setSel('')} className="mb-2 text-xs font-semibold text-navy-700 hover:underline">← 전체 그래프</button>
+          <MenuDetail key={sel} name={sel} diseases={diseases} />
+        </>) : (
+          <GraphOverview onPickMenu={setSel} onPickCat={setCat} />
+        )}
       </div>
     </div>
   )

@@ -139,6 +139,13 @@ def _disease_list(diseases: Optional[str]) -> list:
     return [d.strip() for d in (diseases or "").split(",") if d.strip()]
 
 
+@router.get("/facility/graph/overview")
+def facility_graph_overview(user: dict = Depends(require_staff)):
+    """식품 DB 첫 화면 — 그래프 전체 요약 (끼니 구분 → 식재료 분류 → 질환)"""
+    from care import graph
+    return graph.overview()
+
+
 @router.get("/facility/graph/search")
 def facility_graph_search(q: str = "", meal_cat: Optional[str] = None, limit: int = 30,
                           user: dict = Depends(require_staff)):

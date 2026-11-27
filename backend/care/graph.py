@@ -837,6 +837,82 @@ def search_menus(q: str = "", meal_cat: str | None = None, limit: int = 30) -> l
     return rows[:limit]
 
 
+_OVERVIEW: dict = {"at": None, "data": None}
+
+
+def overview(top_cats: int = 16, top_ings: int = 8) -> dict:
+    """[2026-11-27] 식품 DB 첫 화면 — 그래프 전체 요약 (끼니 구분 → 식재료 분류 → 질환).
+    노드 1.8만·관계 16만 개를 그대로 그리면 읽을 수 없어 식재료를 식품대분류로 묶는다.
+      · meal_cats   : 끼니 구분별 요리 수
+      · categories  : 식재료 분류별 재료 수·쓰인 요리 수 (많이 쓰인 순 top_cats 개, 나머지는 '기타')
+      · links_meal  : 끼니 구분 × 식재료 분류 — 그 분류 재료가 하나라도 든 요리 수
+      · links_dis   : 식재료 분류 × 질환 — 권장·금기 근거가 있는 재료 수
+      · top         : 분류별 많이 쓰인 재료와 대표 메뉴 (눌러서 메뉴로 내려가기)
+    그래프를 다시 읽을 때만 새로 계산한다."""
+    g = _load()
+    if _OVERVIEW["at"] == _CACHE["at"] and _OVERVIEW["data"]:
+        return _OVERVIEW["data"]
+    ing, foods = g["ing"], g["foods"]
+    cat_of = {rid: (v.get("c") or "미분류") for rid, v in ing.items()}
+    meal_n, cat_menus, cat_ings, link_meal = {}, {}, {}, {}
+    ing_menus: dict = {}
+    for fid, v in foods.items():
+        m = v.get("m") or "기타"
+        meal_n[m] = meal_n.get(m, 0) + 1
+        seen = set()
+        for rid, w, _nw in v.get("i") or []:
+            if rid not in ing:
+                continue
+            c = cat_of[rid]
+            cat_ings.setdefault(c, set()).add(rid)
+            ing_menus.setdefault(rid, []).append((w, v["t"]))
+            if c not in seen:
+                seen.add(c)
+                cat_menus[c] = cat_menus.get(c, 0) + 1
+                link_meal[(m, c)] = link_meal.get((m, c), 0) + 1
+    order = sorted(cat_menus, key=lambda c: -cat_menus[c])
+    keep = order[:top_cats]
+    group = lambda c: c if c in keep else "기타"
+    # 질환 근거: 재료 이름 → 식재료 노드 → 분류
+    dis: dict = {}
+    for r in g["ev"]:
+        rid = g["by_name"].get(r["i"])
+        if not rid:
+            continue
+        key = (group(cat_of.get(rid, "미분류")), r["d"], "forbidden" if r["f"] else "recommended")
+        dis.setdefault(key, set()).add(rid)
+    cats = []
+    for c in keep + (["기타"] if len(order) > top_cats else []):
+        members = [x for x in order if group(x) == c]
+        rids = set().union(*[cat_ings.get(x, set()) for x in members])
+        tops = sorted(rids, key=lambda rid: -len(ing_menus.get(rid, [])))[:top_ings]
+        cats.append({
+            "name": c, "n_ingredients": len(rids),
+            "n_menus": sum(cat_menus.get(x, 0) for x in members) if c != "기타" else len(
+                {t for rid in rids for _, t in ing_menus.get(rid, [])}),
+            "members": members if c == "기타" else None,
+            "top": [{"ingredient": ing[rid]["t"], "n_menus": len(ing_menus.get(rid, [])),
+                     "menus": [t for _, t in sorted(ing_menus.get(rid, []), key=lambda x: -x[0])[:4]]}
+                    for rid in tops],
+        })
+    lm: dict = {}
+    for (m, c), n in link_meal.items():
+        lm[(m, group(c))] = lm.get((m, group(c)), 0) + n
+    out = {
+        "source": _CACHE["source"],
+        "stats": {"foods": len(foods), "ingredients": len(ing), "evidence": len(g["ev"]),
+                  "papers": len(g["papers"]), "diseases": len({r["d"] for r in g["ev"]})},
+        "meal_cats": [{"name": k, "n": meal_n[k]} for k in MEAL_CATS if k in meal_n]
+                     + [{"name": k, "n": n} for k, n in meal_n.items() if k not in MEAL_CATS],
+        "categories": cats,
+        "diseases": sorted({r["d"] for r in g["ev"]}),
+        "links_meal": [{"meal": m, "cat": c, "n": n} for (m, c), n in lm.items()],
+        "links_dis": [{"cat": c, "disease": d, "kind": k, "n": len(s)} for (c, d, k), s in dis.items()],
+    }
+    _OVERVIEW.update({"at": _CACHE["at"], "data": out})
+    return out
+
+
 def _verified_forbidden(g, disease: str, name: str) -> list[dict]:
     """① 검증 가능한 NUT: 근거가 있는 금기 관계만."""
     return [r for r in g["forbidden"].get(disease, {}).get(name, [])
