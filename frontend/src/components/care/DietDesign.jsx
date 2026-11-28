@@ -191,7 +191,9 @@ function CostCoverage({ c }) {
           </tbody>
         </table>
       </div>
-      {c.n_missing > c.missing.length && <p className="mt-1 text-[11px] text-amber-800">많이 나온 순서로 {c.missing.length}개만 표시 · 가격 출처 {c.price_source}</p>}
+      <p className="mt-1 text-[11px] text-amber-800">
+        {c.n_missing > c.missing.length ? `많이 나온 순서로 ${c.missing.length}개만 표시 · ` : ''}가격 출처: {c.price_label || c.price_source}
+      </p>
     </div>
   )
 }
@@ -985,7 +987,7 @@ function MenuTab({ run, onApprove, onEdited, onRerun, setErr }) {
             const p3 = m.objective_parts?.f3 || {}, p4 = m.objective_parts?.f4 || {}
             return (<>
               <Stat label="f1 영양 위반 ↓" value={f1} sub="낮을수록 좋음 · 0.3 이하 목표" tone={f1 <= 0.3 ? 'bg-emerald-50' : 'bg-amber-50'} />
-              <Stat label="f2 비용 ↓" value={f2} sub={(m.cost_coverage?.budget_per_meal ? `식단가 ${m.cost_coverage.budget_per_meal.toLocaleString()}원 · 끼니 재료비 ${m.cost_coverage.meal_cost?.toLocaleString()}원(가격 있는 재료만) · ` : '')
+              <Stat label="f2 비용 ↓" value={f2} sub={(m.cost_coverage?.budget_per_meal ? `식단가 ${m.cost_coverage.budget_per_meal.toLocaleString()}원 · 끼니 재료비 ${m.cost_coverage.meal_cost?.toLocaleString()}원(가격 있는 재료만${m.cost_coverage.price_source === 'supplier' ? ' · 공급사 최저가' : ' · 예전 소매 시세'}) · ` : '')
                 + (m.inventory_unused != null ? `재고 미활용 ${m.inventory_unused}` : '재고 미입력')} />
               {isNew ? (<>
                 <Stat label="f3 반복·편중 ↓" value={sel['f3_다양성']} sub={`낮을수록 다양함 · 반복 ${p3['14일 반복'] ?? '–'} · 편중 ${p3['편중(1-Simpson)'] ?? '–'}`} />

@@ -272,8 +272,87 @@ def _sync_meta(profiles, meta):
 # ══════════════════════════════════════════════════════════════
 # ② 후보 메뉴
 # ══════════════════════════════════════════════════════════════
+# ── [2026-11-28] 공급사 가격 (발주 시스템 식재료 ↔ 우리 식재료 매핑 결과) ─────────────────
+#   매핑 파이프라인(backend/mapping)이 매일 Supabase ingredient_price_daily 에 쓰는 식재료별 g당 가격
+#   (두 공급사 중 오늘 최저가, mapping.config.OPTIMIZE_COL) 으로 메뉴 재료비를 다시 계산한다.
+#     메뉴 재료비(1인분, 배식 비율 적용 전) = Σ 원재료 실사용량(g) × g당 가격
+#     · 실사용량은 손질 전 쓰는 양(예: 고등어 60 g, 먹는 부분 35 g)이라 폐기율로 다시 나누지 않는다
+#     · 가격이 없는 재료는 0원(값을 채워 넣지 않음) → cost_missing 에 남겨 '가격 없는 식재료'로 보여 준다
+#   가격을 못 읽으면(로컬 실행·Supabase 장애) pool.json 의 예전 비용(소매 시세)을 그대로 쓰고 출처를 표시한다.
+#   DIET_PRICE_SOURCE=legacy 면 항상 예전 비용.
+PRICE_TTL = 600
+_PRICE_CACHE: dict = {"at": 0.0, "prices": None, "date": None, "error": None}
+PRICE_INFO: dict = {"source": "legacy", "date": None, "n_prices": 0, "error": None}
+
+
+def supplier_prices(force: bool = False) -> tuple[dict | None, str | None, str | None]:
+    """{식재료ID: g당 가격}, 가격 기준일, 오류 — 10분 동안 기억"""
+    import time as _t
+    if not force and _PRICE_CACHE["prices"] is not None and _t.time() - _PRICE_CACHE["at"] < PRICE_TTL:
+        return _PRICE_CACHE["prices"], _PRICE_CACHE["date"], None
+    try:
+        from dependencies import get_supabase
+        try:
+            from mapping.config import OPTIMIZE_COL as col
+        except Exception:
+            col = "price_per_g"
+        sb = get_supabase()
+        out, dates, start = {}, [], 0
+        while True:
+            rows = (sb.table("ingredient_price_latest").select(f"ingredient_id,{col},price_date")
+                    .range(start, start + 999).execute().data or [])
+            for r in rows:
+                if r.get(col) is not None:
+                    out[r["ingredient_id"]] = float(r[col])
+                    dates.append(str(r.get("price_date") or ""))
+            if len(rows) < 1000:
+                break
+            start += 1000
+        if not out:
+            raise RuntimeError("ingredient_price_latest 가 비어 있습니다")
+        day = max(dates) if dates else None
+        _PRICE_CACHE.update({"at": _t.time(), "prices": out, "date": day, "error": None})
+        return out, day, None
+    except Exception as e:                       # 가격을 못 읽어도 식단 설계는 계속 (예전 비용)
+        return None, None, str(e)[:200]
+
+
+def apply_supplier_prices(pool: dict) -> dict:
+    """pool.json 메뉴의 cost(·_raw.cost)를 공급사 가격으로 바꾼다 — apply_sodium_adjustment(배식 비율) 전에 부른다."""
+    if os.getenv("DIET_PRICE_SOURCE", "supplier") == "legacy":
+        PRICE_INFO.update({"source": "legacy", "date": None, "n_prices": 0, "error": "DIET_PRICE_SOURCE=legacy"})
+        return pool
+    prices, day, err = supplier_prices()
+    if prices is None:
+        PRICE_INFO.update({"source": "legacy", "date": None, "n_prices": 0, "error": err})
+        return pool
+    n_menu = n_full = 0
+    for ms in pool.values():
+        for m in ms:
+            ings, ids = m.get("ingredients") or {}, m.get("ingredient_ids") or {}
+            if not ings:
+                continue
+            cost, lack = 0.0, []
+            for name, g in ings.items():
+                p = prices.get(ids.get(name, ""))
+                if p is None:
+                    lack.append(name)
+                else:
+                    cost += float(g or 0) * p
+            m["cost"] = round(cost)
+            if isinstance(m.get("_raw"), dict):
+                m["_raw"]["cost"] = round(cost)
+            m["cost_complete"], m["cost_missing"] = not lack, lack
+            n_menu += 1
+            n_full += not lack
+    PRICE_INFO.update({"source": "supplier", "date": day, "n_prices": len(prices), "error": None,
+                       "menus": n_menu, "menus_full": n_full})
+    return pool
+
+
 def load_pool(pool_scores: dict | None = None) -> dict:
     pool = json.load(open(ensure_pool(), encoding="utf-8"))
+    pool = apply_supplier_prices(pool)          # [2026-11-28] 공급사 가격으로 재료비 (배식 비율 전)
     pool = apply_sodium_adjustment(pool, verbose=False)
     if pool_scores:
         for ms in pool.values():
@@ -370,11 +449,47 @@ _RECIPE_INGS = None
 
 
 def cost_coverage(menus: list, budget_per_meal: float, top: int = 40) -> dict:
-    """[2026-11-26] 식단 비용의 가격 정보 점검 — 가격이 없는 식재료를 먼저 보여 준다.
-    가격이 없는 재료는 지금 0원으로 계산되므로(값을 채워 넣지 않음) 식단 비용이 실제보다 낮게 나온다.
+    """[2026-11-26 · 11-28 공급사 가격] 식단 비용의 가격 정보 점검 — 가격이 없는 식재료를 먼저 보여 준다.
+    가격이 없는 재료는 0원으로 계산되므로(값을 채워 넣지 않음) 식단 비용이 실제보다 낮게 나온다.
       · missing      : 이 식단에서 가격을 못 찾은 원재료 (나온 끼니 수 많은 순)
       · menus_*      : 고유 메뉴 중 모든 재료에 가격이 있는 메뉴 수
-      · meal_cost    : 끼니당 재료비 (가격 있는 재료만 합한 값, 원)"""
+      · meal_cost    : 끼니당 재료비 (가격 있는 재료만 합한 값, 배식 비율 적용, 원)
+      · price_source : supplier(공급사 최저가, price_date 기준) | legacy(예전 소매 시세)"""
+    if PRICE_INFO.get("source") != "supplier":
+        return _cost_coverage_legacy(menus, budget_per_meal, top)
+    seen: dict = {}
+    for m in menus:
+        n = str((m or {}).get("menu_name") or "")
+        if not n or n.startswith("-("):
+            continue
+        d = seen.setdefault(n, {"m": m, "c": 0})
+        d["c"] += 1
+    miss, priced = {}, 0
+    for name, d in seen.items():
+        m, c = d["m"], d["c"]
+        lack = m.get("cost_missing") or []
+        priced += not lack
+        ings = m.get("ingredients") or {}
+        for ing in lack:
+            x = miss.setdefault(ing, {"재료": ing, "끼니수": 0, "사용량_g": 0.0, "메뉴": []})
+            x["끼니수"] += c
+            x["사용량_g"] += float(ings.get(ing) or 0) * c
+            if len(x["메뉴"]) < 5 and name not in x["메뉴"]:
+                x["메뉴"].append(name)
+    rows = sorted(miss.values(), key=lambda d: (-d["끼니수"], -d["사용량_g"]))
+    for d in rows:
+        d["사용량_g"] = round(d["사용량_g"], 1)
+    n_meals = max(1, len(menus) // 6)
+    return {"budget_per_meal": int(budget_per_meal),
+            "meal_cost": round(sum(float((m or {}).get("cost") or 0) for m in menus) / n_meals),
+            "menus_total": len(seen), "menus_priced": priced,
+            "n_missing": len(rows), "missing": rows[:top], "no_recipe": [],
+            "price_source": "supplier", "price_date": PRICE_INFO.get("date"),
+            "price_label": f"공급사 최저가 (현대그린푸드·사조푸디스트, {PRICE_INFO.get('date') or '날짜 미상'} 기준)"}
+
+
+def _cost_coverage_legacy(menus: list, budget_per_meal: float, top: int = 40) -> dict:
+    """공급사 가격을 못 읽었을 때 — 예전 소매 시세(ingredient_prices.json) 기준 점검"""
     global _RECIPE_INGS
     from .build_pool import default_paths, load_prices, price_per_g
     if _RECIPE_INGS is None:
@@ -404,11 +519,13 @@ def cost_coverage(menus: list, budget_per_meal: float, top: int = 40) -> dict:
     for d in rows:
         d["사용량_g"] = round(d["사용량_g"], 1)
     n_meals = max(1, len(menus) // 6)
+    why = PRICE_INFO.get("error")
     return {"budget_per_meal": int(budget_per_meal),
             "meal_cost": round(sum(float(m.get("cost") or 0) for m in menus if m) / n_meals),
             "menus_total": len(cnt) - len(no_recipe), "menus_priced": priced,
             "n_missing": len(rows), "missing": rows[:top], "no_recipe": no_recipe[:20],
-            "price_source": os.path.basename(default_paths()["prices"])}
+            "price_source": "legacy", "price_date": None,
+            "price_label": "예전 소매 시세 (ingredient_prices.json)" + (f" — 공급사 가격을 읽지 못함: {why}" if why else "")}
 
 
 def plan_metrics(problem, chrom, F_front=None, F_all=None, inv_model=None) -> dict:

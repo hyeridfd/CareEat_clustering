@@ -204,13 +204,15 @@ def build(recipes_path: str, nutrient_paths: list[str], price_path: str,
             drop = next((why for why, pat in UNSUITABLE_RULES if re.search(pat, name)), "")
         tot = {k: 0.0 for k in NUTRIENT_COLS}
         na_season, cost, priced_all = 0.0, 0.0, True
-        weight, missing, nodb, ings = 0.0, [], [], {}
+        weight, missing, nodb, ings, ids = 0.0, [], [], {}, {}
         for _, row in g.iterrows():
             ing, fc, wn, wu = row[R_COL["ing"]], row[R_COL["fcode"]], row[R_COL["w_nut"]], row[R_COL["w_use"]]
             if ing in WATER:
                 continue
             if wu > 0:
                 ings[ing] = ings.get(ing, 0.0) + float(wu)
+                # 식재료ID — 지식그래프(scripts/load_graph.py)·공급사 매핑(mapping/)과 같은 규칙: 식품코드 단위, 없으면 원재료명
+                ids.setdefault(ing, f"Recipe_{fc}" if (fc not in NO_DB and fc in db.index) else f"Recipe_NAME:{ing}")
                 ppg = price_per_g(prices, ing)
                 if ppg is None:
                     priced_all = False
@@ -252,6 +254,7 @@ def build(recipes_path: str, nutrient_paths: list[str], price_path: str,
             "caution_ingredients": sorted({i for i in ings if i in CAUTION_INGREDIENTS}),
             "_raw": dict(vals), "sodium_raw": vals["sodium"], "portion": 1.0,
             "ingredients": {k: round(x, 2) for k, x in ings.items()},
+            "ingredient_ids": ids,
             "cost_complete": priced_all,
             # 한 그릇 음식·다진찬 적합도 자동 분류 (meal_policy.json 영양사 판정이 있으면 그쪽이 우선)
             "policy_auto": meal_policy_auto.classify(cat, name, first[R_COL["method"]], first[R_COL["mid"]]),
