@@ -112,6 +112,14 @@ def optimize(state: FacilityState, config: RunnableConfig) -> dict:
     i, say = state["inp"], _say(config)
     pref, inventory = i.get("preference") or {}, i.get("inventory") or {}
     pool = load_pool(pref.get("pool_scores"))
+    from .pipeline import PRICE_INFO
+    if PRICE_INFO.get("source") == "supplier":
+        ex = PRICE_INFO.get("excluded") or {}
+        left = " · ".join(f"{k} {v['after']}" for k, v in ex.items() if k != "간식")
+        say(f"공급사 가격 {PRICE_INFO.get('date')} 기준 — 가격 없는 재료가 든 메뉴 {sum(v['before'] - v['after'] for v in ex.values()):,}개 제외"
+            f" (남은 후보: {left})" if ex else f"공급사 가격 {PRICE_INFO.get('date')} 기준")
+    else:
+        say("공급사 가격을 읽지 못해 예전 소매 시세로 비용을 계산합니다")
     inv = inventory_from_rows(inventory.get("items"), inventory.get("start_date"))
     inv_model = InventoryModel(pool, inv, len(state["profiles"])) if inv else None
     plan, plan_log = i.get("facility_plan"), None

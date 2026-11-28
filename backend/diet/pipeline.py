@@ -284,6 +284,27 @@ PRICE_TTL = 600
 _PRICE_CACHE: dict = {"at": 0.0, "prices": None, "date": None, "error": None}
 PRICE_INFO: dict = {"source": "legacy", "date": None, "n_prices": 0, "error": None}
 
+# [2026-11-28] 가격 없는 재료가 든 메뉴는 후보에서 뺀다 (DIET_EXCLUDE_UNPRICED=0 이면 끔)
+#   · '상품 아님' 재료(육수·국물·쌀뜨물·소금물·반죽 등 조리 중간물)는 가격이 없어도 된다 — 매핑과 같은 규칙
+#   · 쌀밥·배추김치(화이트리스트)는 식단 구조상 항상 남긴다
+#   · 한 칸의 후보가 MIN_KEEP 보다 적어지면 최적화가 돌지 않으므로, 가격 없는 재료 비중이 가장 작은 메뉴로 채우고 표시한다
+EXCLUDE_UNPRICED = os.getenv("DIET_EXCLUDE_UNPRICED", "1") != "0"
+MIN_KEEP = {"밥": 5, "국": 40, "주찬": 40, "부찬": 60, "김치": 3}
+_NOT_PRODUCT_RE = re.compile(r"(육수|국물|뜨물|소금물|설탕물|전분물|다시물|반죽)$|^(끓는|찬|따뜻한|얼음|생수)?물(\(|$)|^얼음$|^(쌀)?밥$")
+_NOT_PRODUCT_EXCEPT = ("스톡", "시판", "농축", "분말", "액상", "티백", "큐브", "통조림", "레토르트", "소스")
+
+
+def _not_product(name: str, iid: str) -> bool:
+    """식품코드가 없는 조리 중간물(육수·국물 등) — 상품으로 사지 않으므로 가격이 없어도 된다"""
+    if not str(iid).startswith("Recipe_NAME:"):
+        return False
+    try:
+        from mapping.normalize import is_not_product        # 매핑 파이프라인과 같은 규칙 (있으면)
+        return bool(is_not_product(name, None))
+    except Exception:
+        n = re.sub(r"\(.*?\)", "", str(name)).strip() or str(name)
+        return not any(e in name for e in _NOT_PRODUCT_EXCEPT) and bool(_NOT_PRODUCT_RE.search(n))
+
 
 def supplier_prices(force: bool = False) -> tuple[dict | None, str | None, str | None]:
     """{식재료ID: g당 가격}, 가격 기준일, 오류 — 10분 동안 기억"""
@@ -317,7 +338,7 @@ def supplier_prices(force: bool = False) -> tuple[dict | None, str | None, str |
         return None, None, str(e)[:200]
 
 
-def apply_supplier_prices(pool: dict) -> dict:
+def apply_supplier_prices(pool: dict, exclude_unpriced: bool | None = None) -> dict:
     """pool.json 메뉴의 cost(·_raw.cost)를 공급사 가격으로 바꾼다 — apply_sodium_adjustment(배식 비율) 전에 부른다."""
     if os.getenv("DIET_PRICE_SOURCE", "supplier") == "legacy":
         PRICE_INFO.update({"source": "legacy", "date": None, "n_prices": 0, "error": "DIET_PRICE_SOURCE=legacy"})
@@ -332,27 +353,51 @@ def apply_supplier_prices(pool: dict) -> dict:
             ings, ids = m.get("ingredients") or {}, m.get("ingredient_ids") or {}
             if not ings:
                 continue
-            cost, lack = 0.0, []
+            cost, lack, lack_g, tot_g = 0.0, [], 0.0, 0.0
             for name, g in ings.items():
-                p = prices.get(ids.get(name, ""))
-                if p is None:
-                    lack.append(name)
-                else:
+                iid = ids.get(name, "")
+                tot_g += float(g or 0)
+                p = prices.get(iid)
+                if p is not None:
                     cost += float(g or 0) * p
+                elif not _not_product(name, iid):
+                    lack.append(name)
+                    lack_g += float(g or 0)
             m["cost"] = round(cost)
             if isinstance(m.get("_raw"), dict):
                 m["_raw"]["cost"] = round(cost)
             m["cost_complete"], m["cost_missing"] = not lack, lack
+            m["cost_missing_share"] = round(lack_g / tot_g, 4) if tot_g else 0.0
             n_menu += 1
             n_full += not lack
+    excluded = {}
+    if exclude_unpriced is None:
+        exclude_unpriced = EXCLUDE_UNPRICED
+    if exclude_unpriced:
+        from .problem import WHITELIST
+        for cat, ms in pool.items():
+            keep = [m for m in ms if m.get("cost_complete", True) or m["menu_name"] in WHITELIST]
+            need = MIN_KEEP.get(cat, 0) - len(keep)
+            short = 0
+            if need > 0:                          # 후보가 너무 적으면 가격 없는 재료 비중이 작은 메뉴로 채움
+                rest = sorted((m for m in ms if m not in keep), key=lambda m: (m.get("cost_missing_share", 1), len(m.get("cost_missing") or [])))
+                fill = rest[:need]
+                for m in fill:
+                    m["cost_incomplete_kept"] = True
+                keep += fill
+                short = len(fill)
+            excluded[cat] = {"before": len(ms), "after": len(keep), "kept_incomplete": short}
+            pool[cat] = keep
     PRICE_INFO.update({"source": "supplier", "date": day, "n_prices": len(prices), "error": None,
-                       "menus": n_menu, "menus_full": n_full})
+                       "menus": n_menu, "menus_full": n_full, "exclude_unpriced": bool(exclude_unpriced), "excluded": excluded})
     return pool
 
 
-def load_pool(pool_scores: dict | None = None) -> dict:
+def load_pool(pool_scores: dict | None = None, exclude_unpriced: bool | None = None) -> dict:
+    """exclude_unpriced=False: 이미 만든 식단을 다시 계산할 때 — 그 식단의 메뉴가 후보에서 빠지면
+    records_to_chrom 이 다른 메뉴로 바꿔 버리므로 가격 없는 메뉴도 남긴다."""
     pool = json.load(open(ensure_pool(), encoding="utf-8"))
-    pool = apply_supplier_prices(pool)          # [2026-11-28] 공급사 가격으로 재료비 (배식 비율 전)
+    pool = apply_supplier_prices(pool, exclude_unpriced)    # [2026-11-28] 공급사 가격으로 재료비 (배식 비율 전)
     pool = apply_sodium_adjustment(pool, verbose=False)
     if pool_scores:
         for ms in pool.values():
@@ -485,6 +530,7 @@ def cost_coverage(menus: list, budget_per_meal: float, top: int = 40) -> dict:
             "menus_total": len(seen), "menus_priced": priced,
             "n_missing": len(rows), "missing": rows[:top], "no_recipe": [],
             "price_source": "supplier", "price_date": PRICE_INFO.get("date"),
+            "excluded": PRICE_INFO.get("excluded") if PRICE_INFO.get("exclude_unpriced") else None,
             "price_label": f"공급사 최저가 (현대그린푸드·사조푸디스트, {PRICE_INFO.get('date') or '날짜 미상'} 기준)"}
 
 
@@ -853,7 +899,7 @@ def redo_personalization(menu: list, residents, assessments, settings, inventory
         agent_json = apply_agents(profiles, progress, refiner, prev, agent_mode=agent_mode)
         _sync_meta(profiles, meta)
         pref = preference or {}
-        pool = load_pool(pref.get("pool_scores"))
+        pool = load_pool(pref.get("pool_scores"), exclude_unpriced=False)   # 고친 식단의 메뉴가 빠지지 않게
         inv = inventory_from_rows((inventory or {}).get("items"), (inventory or {}).get("start_date"))
         inv_model = InventoryModel(pool, inv, len(profiles)) if inv else None
         problem = MealPlanProblem(pool, BaseStandard(), budget_of(budget_per_meal), inventory=inv_model, harmony=harmony_table(pool))

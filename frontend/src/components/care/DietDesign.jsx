@@ -167,8 +167,19 @@ const pct = (a, b) => (b ? Math.round((100 * a) / b) : null)
 
 // [2026-11-26] 가격 없는 식재료를 먼저 보여 준다 — 값을 채워 넣지 않으므로 이 재료들은 비용 0원으로 계산된다
 function CostCoverage({ c }) {
-  if (!c || c.error || !c.n_missing) return null
-  return (
+  if (!c || c.error) return null
+  const ex = c.excluded ? Object.entries(c.excluded).filter(([k]) => k !== '간식') : []
+  const nEx = ex.reduce((a, [, v]) => a + (v.before - v.after), 0)
+  const kept = ex.reduce((a, [, v]) => a + (v.kept_incomplete || 0), 0)
+  const exLine = nEx > 0 && (
+    <p className="mb-3 rounded-xl bg-navy-50 px-4 py-2 text-xs text-navy-800">
+      가격 없는 재료가 든 메뉴 <b>{nEx.toLocaleString()}개</b>를 후보에서 뺐습니다
+      <span className="text-muted"> · 남은 후보 {ex.map(([k, v]) => `${k} ${v.after.toLocaleString()}`).join(' · ')}
+        {kept ? ` · 후보가 모자라 가격 없는 재료가 적은 메뉴 ${kept}개를 남김` : ''} · 육수·국물 같은 조리 중간물은 가격이 없어도 후보에 남깁니다</span>
+    </p>
+  )
+  if (!c.n_missing) return exLine || null
+  return (<>{exLine}
     <div className="mb-4 rounded-xl bg-amber-50 px-4 py-3 text-sm">
       <p className="font-bold text-amber-900">
         가격 없는 식재료 {c.n_missing.toLocaleString()}개
@@ -195,7 +206,7 @@ function CostCoverage({ c }) {
         {c.n_missing > c.missing.length ? `많이 나온 순서로 ${c.missing.length}개만 표시 · ` : ''}가격 출처: {c.price_label || c.price_source}
       </p>
     </div>
-  )
+  </>)
 }
 
 function Stat({ label, value, unit, sub, tone }) {

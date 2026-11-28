@@ -401,7 +401,7 @@ if __name__ == "__main__":
     from .pipeline import BUDGET_PER_MEAL, harmony_table, load_pool, records_to_chrom
     from .problem import MealPlanProblem
     src = json.load(open(sys.argv[1] if len(sys.argv) > 1 else "tests/llm_review_sample.json", encoding="utf-8"))
-    pool = load_pool()
+    pool = load_pool(exclude_unpriced=False)      # 기존 식단 메뉴가 후보에서 빠지지 않게
     prob = MealPlanProblem(pool, BaseStandard(), BUDGET_PER_MEAL, harmony=harmony_table(pool))
     ch = records_to_chrom(prob, src["menu"])
     print("설정:", LS.status())
