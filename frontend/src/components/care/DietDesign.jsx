@@ -1259,12 +1259,13 @@ function PurchaseTab({ run }) {
 
   const exportWeek = () => {
     const rows = [
-      ...w.식재료.filter((r) => r['구매량(g)'] > 0).map((r) => ({ 구분: '식재료', 품목: r.식재료명, 상품명: r.상품명, 규격: r['규격(g)'], 필요: r['필요량(g)'], 재고: r['재고사용(g)'], 구매: r['구매량(g)'], 수량: r.수량, 단가: r.단가, 금액: r.금액 })),
+      ...w.식재료.filter((r) => r['구매량(g)'] > 0).map((r) => ({ 구분: '식재료', 품목: r.식재료명, 공급사: r.공급사, 상품코드: r.상품코드, 상품명: r.상품명, 규격표기: r.규격표기, 규격: r['규격(g)'], 필요: r['필요량(g)'], 재고: r['재고사용(g)'], 구매: r['구매량(g)'], 수량: r.수량, 단가: r.단가, 금액: r.금액 })),
       ...w.제품.map((r) => ({ 구분: '고령친화식품', 품목: r.제품, 상품명: `${r.업체 || ''} ${r.제품}`.trim(), 규격: r['포장(g)'], 필요: r['필요량(g)'], 재고: 0, 구매: r['필요량(g)'], 수량: r.수량, 단가: r.단가, 금액: r.금액 })),
     ]
     downloadCsv(`발주_${w.주차}주차_${w.기간 || w.일차}.csv`, rows, [
       { label: '주차', get: () => w.주차 }, { label: '입고일', get: () => w.입고일 || '' }, { label: '구분', get: (r) => r.구분 },
-      { label: '품목', get: (r) => r.품목 }, { label: '상품명', get: (r) => r.상품명 }, { label: '규격(g)', get: (r) => r.규격 },
+      { label: '품목', get: (r) => r.품목 }, { label: '공급사', get: (r) => r.공급사 || '' }, { label: '상품코드', get: (r) => r.상품코드 || '' },
+      { label: '상품명', get: (r) => r.상품명 }, { label: '규격', get: (r) => r.규격표기 || '' }, { label: '포장(g)', get: (r) => r.규격 },
       { label: '필요량(g)', get: (r) => r.필요 }, { label: '재고사용(g)', get: (r) => r.재고 }, { label: '구매량(g)', get: (r) => r.구매 },
       { label: '수량', get: (r) => r.수량 }, { label: '단가(원)', get: (r) => r.단가 }, { label: '금액(원)', get: (r) => r.금액 },
     ])
@@ -1288,13 +1289,19 @@ function PurchaseTab({ run }) {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <Stat label="예상 발주 금액" value={total ? Math.round(total).toLocaleString() : '–'} unit="원"
             sub={t.단가미등록_품목 ? `단가 미등록 ${t.단가미등록_품목}품목 제외` : '전체 단가 반영'} tone="bg-navy-50" />
-          <Stat label="식재료" value={t.식재료_품목} unit="품목" sub={`${won(t.식재료_금액)}${t.단가미등록_품목 ? ` · 미등록 ${t['단가미등록_구매량(kg)']}kg` : ''}`} />
+          <Stat label="식재료" value={t.식재료_품목} unit="품목" sub={`${won(t.식재료_금액)}${t.단가미등록_품목 ? ` · 미등록 ${t['단가미등록_구매량(kg)']}kg` : ''}`
+            + (t.공급사별_금액 && Object.keys(t.공급사별_금액).length ? ` · ${Object.entries(t.공급사별_금액).map(([k, v]) => `${k.replace('푸디스트', '').replace('그린푸드', '')} ${won(v)}`).join(' · ')}` : '')} />
           <Stat label="고령친화식품" value={t.제품_팩} unit="팩" sub={`${won(t.제품_금액)} · 부가세 별도`} />
           <Stat label="재고 사용" value={t['재고사용(kg)']} unit="kg" sub="이번 주에 쓰는 기존 재고" />
         </div>
+        {pu.price_source && (
+          <p className={`mt-3 text-xs rounded-xl px-3 py-2 ${pu.price_kind === 'supplier' ? 'bg-navy-50 text-navy-800' : 'bg-amber-50 text-amber-800'}`}>
+            가격: {pu.price_source}{pu.price_kind === 'supplier' ? ' · 같은 식재료는 두 공급사 중 g당 가장 싼 상품으로 발주합니다. 매핑된 상품이 없는 식재료는 단가 미등록으로 둡니다.' : ''}
+          </p>
+        )}
         {!pu.price_count && (
           <p className="mt-3 text-xs rounded-xl bg-amber-50 text-amber-800 px-3 py-2">
-            식재료 단가가 아직 등록되지 않아 구매량만 표시됩니다. 식재료 상품·단가(ingredient_prices.json)를 넣으면 상품명·수량·금액이 함께 나옵니다.
+            식재료 단가를 불러오지 못해 구매량만 표시됩니다.
           </p>
         )}
       </Section>
@@ -1311,7 +1318,11 @@ function PurchaseTab({ run }) {
           { key: '필요량(g)', label: '필요량', right: true, render: (r) => kg(r['필요량(g)']) },
           { key: '재고사용(g)', label: '재고 사용', right: true, render: (r) => (r['재고사용(g)'] ? <span className="text-emerald-700">{kg(r['재고사용(g)'])}</span> : '–') },
           { key: '구매량(g)', label: '구매량', right: true, render: (r) => <b>{kg(r['구매량(g)'])}</b> },
-          { key: '상품명', label: '구매 상품', render: (r) => r.상품명 ? <span>{r.상품명}<span className="text-muted"> · {kg(r['규격(g)'])}</span></span> : <span className="text-muted">단가 미등록</span> },
+          { key: '상품명', label: '구매 상품', render: (r) => r.상품명 ? (
+            <span>
+              {r.공급사 && <span className={`badge mr-1.5 ${r.공급사.startsWith('현대') ? 'bg-emerald-50 text-emerald-700' : 'bg-sky-50 text-sky-700'}`}>{r.공급사.replace('푸디스트', '').replace('그린푸드', '')}</span>}
+              {r.상품명}<span className="text-muted"> · {r.규격표기 || kg(r['규격(g)'])}</span>
+            </span>) : <span className="text-muted">단가 미등록</span> },
           { key: '수량', label: '수량', right: true, render: (r) => (r.수량 ? `${r.수량}개` : '–') },
           { key: '단가', label: '단가', right: true, render: (r) => won(r.단가) },
           { key: '금액', label: '금액', right: true, render: (r) => (r.금액 ? won(r.금액) : '–') },
