@@ -37,7 +37,10 @@ NUTRIENTS = ["energy", "protein", "fat", "sugar", "sat_fat",
 # ══════════════════════════════════════════════════════════════
 # [2026-10-28] 목적함수 4개 (모두 0~1, 작을수록 좋음)
 #   f1 영양   목표 영양소 충족 여부 — 끼니·일일 기준 위반 정도
-#   f2 비용   급식 예산 초과 + 재고 미활용 (유통기한 가중)
+#   f2 비용   [2026-11-28] 예산 사용률 + 예산 초과 + 재고 미활용 (유통기한 가중)
+#            사용률 r = 28일 재료비 ÷ (끼니당 식단가 × 84끼)
+#            = 0.5 × min(r, 1) + 2 × max(0, r − 1) + 재고
+#            예산 안에서도 더 싼 식단이 낫고(0~0.5), 예산을 넘으면 가파르게 나빠진다 (예전: 초과분만 → 예산 안이면 늘 0)
 #   f3 다양성 28일간 메뉴 반복·편중
 #            = 0.4 × 편중(1 − 다양성: 국·주찬·부찬의 정규화 엔트로피, 후보 수로 낼 수 있는 최대 종류 수 기준) + 0.5 × 14일 안 반복(가까울수록 무겁게) + 0.1 × 한 그릇 음식 주간 상한 초과
 #   f4 조화   한 끼 내부 음식 조합·수용 적합성
@@ -51,6 +54,7 @@ F4_W        = {"harmony": 0.5, "preference": 0.2, "rules": 0.3}
 F4_W_NO_HAR = {"harmony": 0.0, "preference": 0.4, "rules": 0.6}
 F4_RULES_W  = {"side_dup": 1.0, "one_dish_meal": 1.0, "texture": 1.0}
 _MEAL_T     = np.tile(np.arange(3), N_DAYS)
+F2_W        = {"use": 0.5, "over": 2.0}    # f2 = use × min(r, 1) + over × max(0, r − 1)
 
 
 class MealPlanProblem(Problem):
@@ -128,7 +132,9 @@ class MealPlanProblem(Problem):
         """[보고용] f3·f4 구성 요소"""
         menus = self.effective_menus(chrom)
         parts = self._pattern_parts(chrom, menus)
-        out = {"f3": {"편중(1-Simpson)": round(1 - self._menu_diversity(menus) / 100, 4),
+        r = sum(m.get("cost", 0) or 0 for m in menus) / self.budget if self.budget else 0.0
+        out = {"f2": {"예산 사용률": round(r, 4), "예산 초과": round(max(0.0, r - 1), 4)},
+               "f3": {"편중(1-Simpson)": round(1 - self._menu_diversity(menus) / 100, 4),
                       "14일 반복": round(parts["carry_over"], 4), "한그릇 주간 초과": round(parts["one_dish_week"], 4)},
                "f4": {"시설 선호(섭취율)": round(sum(m.get("preference_score", 0.7) for m in menus) / len(menus), 4),
                       "부찬 중복": round(parts["side_dup"], 4), "한그릇 2개 이상": round(parts["one_dish_meal"], 4),
@@ -140,11 +146,12 @@ class MealPlanProblem(Problem):
         return out
 
     def _cost_inventory(self, chrom, menus):
-        over = max(0.0, sum(m["cost"] for m in menus) - self.budget) / self.budget
+        r = sum(m["cost"] for m in menus) / self.budget if self.budget else 0.0
+        f = F2_W["use"] * min(r, 1.0) + F2_W["over"] * max(0.0, r - 1.0)
         if self.inventory is None or not self.inv_weight:
-            return over
+            return f
         U = self.inventory.daily_usage_chrom(chrom, DAILY_SLOTS, N_SLOTS)
-        return over + self.inv_weight * self.inventory.unused_score(U)
+        return f + self.inv_weight * self.inventory.unused_score(U)
 
     def _nutrition_core(self, menus, detail: dict | None = None, base: bool = False) -> float:
         """[2026-11-24] f1 계산의 단일 원천 — 최적화 점수(f1)와 분해표(nutrition_breakdown)가 같은 식을 쓴다.
